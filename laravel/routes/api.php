@@ -3,7 +3,9 @@
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\AvailableLaboratoryController;
 use App\Http\Controllers\Api\V1\DoctorController;
+use App\Http\Controllers\Api\V1\LaboratoryAreaController;
 use App\Http\Controllers\Api\V1\PatientController;
+use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +24,24 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::middleware('saas')->group(function (): void {
+        Route::get('/sample-types', [SampleTypeController::class, 'index']);
+        Route::post('/sample-types', [SampleTypeController::class, 'store']);
+        Route::get('/sample-types/active', [SampleTypeController::class, 'active']);
+        Route::get('/sample-types/{sampleType}', [SampleTypeController::class, 'show'])
+            ->whereNumber('sampleType');
+        Route::patch('/sample-types/{sampleType}', [SampleTypeController::class, 'update'])
+            ->whereNumber('sampleType');
+        Route::patch('/sample-types/{sampleType}/status', [SampleTypeController::class, 'updateStatus'])
+            ->whereNumber('sampleType');
+        Route::get('/laboratory-areas', [LaboratoryAreaController::class, 'index']);
+        Route::post('/laboratory-areas', [LaboratoryAreaController::class, 'store']);
+        Route::get('/laboratory-areas/active', [LaboratoryAreaController::class, 'active']);
+        Route::get('/laboratory-areas/{area}', [LaboratoryAreaController::class, 'show'])
+            ->whereNumber('area');
+        Route::patch('/laboratory-areas/{area}', [LaboratoryAreaController::class, 'update'])
+            ->whereNumber('area');
+        Route::patch('/laboratory-areas/{area}/status', [LaboratoryAreaController::class, 'updateStatus'])
+            ->whereNumber('area');
         Route::get('/doctors', [DoctorController::class, 'index']);
         Route::post('/doctors', [DoctorController::class, 'store']);
         Route::get('/doctors/{doctor}', [DoctorController::class, 'show'])
