@@ -1,0 +1,64 @@
+import type { ReactNode } from "react";
+import clsx from "clsx";
+import sponsorsStyles from "./styles.module.css";
+
+type SponsorItem = {
+  link: string;
+  imageUrl: string;
+  description: ReactNode;
+};
+
+const SponsorList: SponsorItem[] = [
+  {
+    link: "https://sistava.com/?utm_source=laradock&utm_medium=sponsor_banner&utm_campaign=landing_page",
+    imageUrl: "/img/sponsors/sistava-logo.png",
+    description: (
+      <>
+        <b>Hire <a href="https://sistava.com/?utm_source=laradock&utm_medium=sponsor_banner&utm_campaign=landing_page" target="_blank" style={{ color: '#a47ee6' }}>AI Employees</a> to Run Your Business</b>
+      </>
+    ),
+  },
+];
+
+function Sponsor({ link, imageUrl, description }: SponsorItem) {
+  return (
+    <div className={clsx("col col--12")}>
+      <div className="text--center">
+        <a href={link} target="_blank" rel="noopener noreferrer">
+          <img 
+            src={imageUrl} 
+            className={sponsorsStyles.sponsorImg} 
+            role="img"
+            style={{ 
+              maxWidth: '100%',
+              minWidth: '350px',
+              height: 'auto'
+            }} 
+          />
+        </a>
+      </div>
+      <div className="text--center padding-horiz--md">
+        
+        <p style={{ 
+          fontSize: 'clamp(1rem, 2vw, 1.2em)',
+          lineHeight: 1.5,
+          margin: '1rem 0'
+        }}>{description}</p>
+      </div>
+    </div>
+  );
+}
+
+export default function SponsorsPage(): ReactNode {
+  return (
+    <section className={sponsorsStyles.sponsors}>
+      <div className="container">
+        <div className="row">
+          {SponsorList.map((props, idx) => (
+            <Sponsor key={idx} {...props} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}

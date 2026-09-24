@@ -1,0 +1,16 @@
+services:
+  workspace:
+    links: !reset []
+    ports: !reset []
+
+  php-fpm:
+    depends_on: !override
+      - workspace
+    links: !reset []
+
+  nginx:
+    ports: !override
+      - "${NGINX_HOST_HTTP_PORT}:80"
+
+  postgres:
+    ports: !reset []
