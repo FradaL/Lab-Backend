@@ -1,0 +1,5 @@
+Generate a local key pair before enabling workspace SSH:
+
+ssh-keygen -t ed25519 -N '' -f workspace/insecure_id_rsa
+
+The generated private and public keys are intentionally ignored by Git.

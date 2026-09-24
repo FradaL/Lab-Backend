@@ -15,7 +15,13 @@ Workspace access, host-specific tuning, and scheduling.
 
 ## Access the workspace over SSH
 
-Reach the Workspace at `localhost:2222` by setting `WORKSPACE_INSTALL_WORKSPACE_SSH=true` in your `.env` and rebuilding the workspace.
+Generate a local key pair first; the private key is intentionally not versioned:
+
+```bash
+ssh-keygen -t ed25519 -N '' -f workspace/insecure_id_rsa
+```
+
+Then reach the Workspace at `localhost:2222` by setting `WORKSPACE_INSTALL_WORKSPACE_SSH=true` in your `.env` and rebuilding the workspace.
 
 To change the forwarded port, add it to your `.env` (the default lives in `workspace/defaults.env`):
 

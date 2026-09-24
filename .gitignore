@@ -16,6 +16,8 @@
 laradock/data/
 laradock/logs/
 laravel/storage/api-docs/
+laradock/workspace/insecure_id_rsa
+laradock/workspace/insecure_id_rsa.pub
 
 # Editor and operating system files
 .idea/

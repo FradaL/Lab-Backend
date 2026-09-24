@@ -1093,8 +1093,14 @@ There's no dedicated `./laradock` shortcut for this (only for opening an interac
 
 Useful for pointing an IDE's remote interpreter (PhpStorm, VS Code Remote-SSH) or a deploy tool at the container over SSH instead of Docker's own exec.
 
-1. In `.env`, set `WORKSPACE_INSTALL_WORKSPACE_SSH` to `true`.
-2. Rebuild:
+1. Generate a local key pair (the private key is intentionally not versioned):
+
+```bash
+ssh-keygen -t ed25519 -N '' -f workspace/insecure_id_rsa
+```
+
+2. In `.env`, set `WORKSPACE_INSTALL_WORKSPACE_SSH` to `true`.
+3. Rebuild:
 
 <Tabs groupId="interface">
 <TabItem value="cli" label="Laradock CLI">
@@ -1113,13 +1119,13 @@ docker compose build workspace
 </TabItem>
 </Tabs>
 
-3. Connect to `localhost` on `WORKSPACE_SSH_PORT` (`2222` by default) as `root`, using the bundled `workspace/insecure_id_rsa` key:
+4. Connect to `localhost` on `WORKSPACE_SSH_PORT` (`2222` by default) as `root`, using the local `workspace/insecure_id_rsa` key:
 
 ```bash
 ssh -p 2222 -i workspace/insecure_id_rsa root@localhost
 ```
 
-That key is called "insecure" for a reason, it ships in the repo and is the same for every Laradock install. Fine for a purely local dev container reachable only from your own machine; if the port is ever exposed beyond `localhost` (a shared dev server, a cloud sandbox), replace `workspace/insecure_id_rsa`/`.pub` with your own key pair before rebuilding, or don't enable SSH access at all and use `./laradock workspace`/`docker compose exec` instead.
+Keep the private key local and never commit it. If the port is ever exposed beyond `localhost` (a shared dev server or cloud sandbox), restrict access appropriately or don't enable SSH access at all; use `./laradock workspace`/`docker compose exec` instead.
 
 ## Docker CLI inside the Workspace (Docker-in-Docker)
 
