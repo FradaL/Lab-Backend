@@ -23,7 +23,6 @@ PHP y Composer no son necesarios en el host: se ejecutan dentro del contenedor `
 Desde la raíz del repositorio:
 
 ```bash
-cp laravel/.env.example laravel/.env
 cp laradock/.env.example laradock/.env
 cd laradock
 docker compose build workspace php-fpm nginx postgres
