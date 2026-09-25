@@ -59,7 +59,7 @@ return [
              */
             'docs' => 'docs',
 
-            'oauth2_callback' => null,
+            'oauth2_callback' => 'api/oauth2-callback',
 
             /*
              * Middleware allows to prevent unexpected access to API documentation
