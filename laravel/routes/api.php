@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\AvailableLaboratoryController;
 use App\Http\Controllers\Api\V1\DoctorController;
 use App\Http\Controllers\Api\V1\LaboratoryAreaController;
+use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
@@ -24,6 +25,7 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::middleware('saas')->group(function (): void {
+        Route::get('/laboratory-exams', [LaboratoryExamController::class, 'index']);
         Route::get('/sample-types', [SampleTypeController::class, 'index']);
         Route::post('/sample-types', [SampleTypeController::class, 'store']);
         Route::get('/sample-types/active', [SampleTypeController::class, 'active']);

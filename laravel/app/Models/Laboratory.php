@@ -77,6 +77,14 @@ class Laboratory extends Model
     }
 
     /**
+     * @return HasMany<LaboratoryExam, $this>
+     */
+    public function laboratoryExams(): HasMany
+    {
+        return $this->hasMany(LaboratoryExam::class);
+    }
+
+    /**
      * @return HasMany<Subscription, $this>
      */
     public function subscriptions(): HasMany
