@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\DoctorController;
 use App\Http\Controllers\Api\V1\LaboratoryAreaController;
 use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Http\Controllers\Api\V1\PatientController;
+use App\Http\Controllers\Api\V1\PriceListController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
 use Illuminate\Support\Facades\Route;
@@ -25,7 +26,27 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::middleware('saas')->group(function (): void {
+        Route::get('/price-lists', [PriceListController::class, 'index']);
+        Route::post('/price-lists', [PriceListController::class, 'store']);
+        Route::get('/price-lists/active', [PriceListController::class, 'active']);
+        Route::get('/price-lists/{priceList}', [PriceListController::class, 'show'])
+            ->whereNumber('priceList');
+
+        Route::patch('/price-lists/{priceList}', [PriceListController::class, 'update'])
+            ->whereNumber('priceList');
+        Route::patch('/price-lists/{priceList}/status', [PriceListController::class, 'updateStatus'])
+            ->whereNumber('priceList');
+        Route::patch('/price-lists/{priceList}/default', [PriceListController::class, 'setDefault'])
+            ->whereNumber('priceList');
         Route::get('/laboratory-exams', [LaboratoryExamController::class, 'index']);
+        Route::post('/laboratory-exams', [LaboratoryExamController::class, 'store']);
+        Route::get('/laboratory-exams/active', [LaboratoryExamController::class, 'active']);
+        Route::get('/laboratory-exams/{laboratoryExam}', [LaboratoryExamController::class, 'show'])
+            ->whereNumber('laboratoryExam');
+        Route::patch('/laboratory-exams/{laboratoryExam}', [LaboratoryExamController::class, 'update'])
+            ->whereNumber('laboratoryExam');
+        Route::patch('/laboratory-exams/{laboratoryExam}/status', [LaboratoryExamController::class, 'updateStatus'])
+            ->whereNumber('laboratoryExam');
         Route::get('/sample-types', [SampleTypeController::class, 'index']);
         Route::post('/sample-types', [SampleTypeController::class, 'store']);
         Route::get('/sample-types/active', [SampleTypeController::class, 'active']);

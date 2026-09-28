@@ -85,6 +85,88 @@ use OpenApi\Attributes as OA;
     ],
     type: 'object',
 )]
+#[OA\Schema(
+    schema: 'CreateLaboratoryExamInput',
+    required: ['laboratory_area_id', 'sample_type_id', 'code', 'name'],
+    properties: [
+        new OA\Property(property: 'laboratory_area_id', type: 'integer', format: 'int64', minimum: 1, example: 4),
+        new OA\Property(property: 'sample_type_id', type: 'integer', format: 'int64', minimum: 1, example: 8),
+        new OA\Property(property: 'code', type: 'string', maxLength: 30, example: 'HEM-001'),
+        new OA\Property(property: 'name', type: 'string', maxLength: 150, example: 'Hematología completa'),
+        new OA\Property(property: 'description', type: ['string', 'null'], example: 'Hematología completa automatizada.'),
+        new OA\Property(property: 'turnaround_time_minutes', type: ['integer', 'null'], minimum: 0, example: 120),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'UpdateLaboratoryExamInput',
+    properties: [
+        new OA\Property(property: 'laboratory_area_id', description: 'Area activa disponible en el laboratorio actual.', type: 'integer', format: 'int64', minimum: 1, example: 4),
+        new OA\Property(property: 'sample_type_id', description: 'Tipo de muestra activo disponible en el laboratorio actual.', type: 'integer', format: 'int64', minimum: 1, example: 8),
+        new OA\Property(property: 'code', type: 'string', maxLength: 30, example: 'HEM-002'),
+        new OA\Property(property: 'name', type: 'string', maxLength: 150, example: 'Hematología completa actualizada'),
+        new OA\Property(property: 'description', type: ['string', 'null'], example: 'Descripción actualizada.'),
+        new OA\Property(property: 'turnaround_time_minutes', type: ['integer', 'null'], minimum: 0, example: 90),
+    ],
+    type: 'object',
+    additionalProperties: false,
+    minProperties: 1,
+)]
+#[OA\Schema(
+    schema: 'UpdateLaboratoryExamStatusInput',
+    required: ['status'],
+    properties: [
+        new OA\Property(property: 'status', type: 'string', enum: ['active', 'inactive'], example: 'inactive'),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'ActiveLaboratoryExam',
+    required: ['id', 'code', 'name', 'laboratory_area', 'sample_type'],
+    properties: [
+        new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 123),
+        new OA\Property(property: 'code', type: 'string', maxLength: 30, example: 'HEM-001'),
+        new OA\Property(property: 'name', type: 'string', maxLength: 150, example: 'Hematología completa'),
+        new OA\Property(
+            property: 'laboratory_area',
+            required: ['id', 'code', 'name'],
+            properties: [
+                new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 4),
+                new OA\Property(property: 'code', type: 'string', maxLength: 30, example: 'HEM'),
+                new OA\Property(property: 'name', type: 'string', maxLength: 100, example: 'Hematología'),
+            ],
+            type: 'object',
+        ),
+        new OA\Property(
+            property: 'sample_type',
+            required: ['id', 'name'],
+            properties: [
+                new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 8),
+                new OA\Property(property: 'name', type: 'string', maxLength: 100, example: 'Sangre total'),
+            ],
+            type: 'object',
+        ),
+    ],
+    type: 'object',
+)]
+#[OA\Schema(
+    schema: 'ActiveLaboratoryExamCollection',
+    required: ['data'],
+    properties: [
+        new OA\Property(property: 'data', type: 'array', items: new OA\Items(ref: '#/components/schemas/ActiveLaboratoryExam')),
+    ],
+    type: 'object',
+)]
+#[OA\Schema(
+    schema: 'LaboratoryExamResponse',
+    required: ['data'],
+    properties: [
+        new OA\Property(property: 'data', ref: '#/components/schemas/LaboratoryExamListItem'),
+    ],
+    type: 'object',
+)]
 final class LaboratoryExamDocumentation
 {
     // OpenAPI components for Laboratory Exam endpoints.
