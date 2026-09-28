@@ -75,7 +75,7 @@ class AvailableLaboratoriesTest extends TestCase
         $otherLaboratory = Laboratory::factory()->create(['name' => 'Other Laboratory']);
 
         $user->laboratories()->attach($ownLaboratory, ['is_active' => true]);
-        $otherUser->laboratories()->attach($otherLaboratory, ['is_active' => true]);
+        $otherUser->laboratories()->attach($otherLaboratory, ['is_active' => true, 'is_default' => true]);
 
         $this->actingAs($user, 'web')
             ->getJson('/api/v1/auth/laboratories')

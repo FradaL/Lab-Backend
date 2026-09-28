@@ -42,9 +42,10 @@ class SaasFoundationModelTest extends TestCase
 
     public function test_membership_exposes_active_state_and_belongs_to_user_and_laboratory(): void
     {
-        $membership = LaboratoryUser::factory()->create(['is_active' => false]);
+        $membership = LaboratoryUser::factory()->asDefault()->create(['is_active' => false]);
 
         $this->assertFalse($membership->is_active);
+        $this->assertTrue($membership->is_default);
         $this->assertInstanceOf(User::class, $membership->user);
         $this->assertInstanceOf(Laboratory::class, $membership->laboratory);
 
@@ -52,6 +53,17 @@ class SaasFoundationModelTest extends TestCase
 
         $this->assertInstanceOf(LaboratoryUser::class, $laboratory->pivot);
         $this->assertFalse($laboratory->pivot->is_active);
+        $this->assertTrue($laboratory->pivot->is_default);
+    }
+
+    public function test_user_cannot_have_more_than_one_default_laboratory(): void
+    {
+        $user = User::factory()->create();
+        LaboratoryUser::factory()->asDefault()->create(['user_id' => $user->id]);
+
+        $this->expectException(QueryException::class);
+
+        LaboratoryUser::factory()->asDefault()->create(['user_id' => $user->id]);
     }
 
     public function test_membership_cannot_be_duplicated_for_the_same_user_and_laboratory(): void

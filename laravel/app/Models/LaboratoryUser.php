@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 
-#[Fillable(['laboratory_id', 'user_id', 'is_active'])]
+#[Fillable(['laboratory_id', 'user_id', 'is_active', 'is_default'])]
 class LaboratoryUser extends Pivot
 {
     /** @use HasFactory<LaboratoryUserFactory> */
@@ -43,6 +43,7 @@ class LaboratoryUser extends Pivot
     {
         return [
             'is_active' => 'boolean',
+            'is_default' => 'boolean',
         ];
     }
 }

@@ -27,7 +27,7 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(Laboratory::class)
             ->using(LaboratoryUser::class)
-            ->withPivot(['id', 'is_active'])
+            ->withPivot(['id', 'is_active', 'is_default'])
             ->withTimestamps();
     }
 

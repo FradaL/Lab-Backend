@@ -60,13 +60,14 @@ use OpenApi\Attributes as OA;
 )]
 #[OA\Schema(
     schema: 'AvailableLaboratory',
-    required: ['id', 'name', 'legal_name', 'timezone', 'currency'],
+    required: ['id', 'name', 'legal_name', 'timezone', 'currency', 'is_default'],
     properties: [
         new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 1),
         new OA\Property(property: 'name', type: 'string', example: 'Laboratorio Demo Donqer'),
         new OA\Property(property: 'legal_name', type: ['string', 'null'], example: 'Laboratorio Demo Donqer, S.A.'),
         new OA\Property(property: 'timezone', type: 'string', example: 'America/Guatemala'),
         new OA\Property(property: 'currency', type: 'string', example: 'GTQ'),
+        new OA\Property(property: 'is_default', type: 'boolean', example: true),
     ],
     type: 'object',
 )]

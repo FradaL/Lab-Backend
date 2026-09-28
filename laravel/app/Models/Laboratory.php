@@ -32,7 +32,7 @@ class Laboratory extends Model
     {
         return $this->belongsToMany(User::class)
             ->using(LaboratoryUser::class)
-            ->withPivot(['id', 'is_active'])
+            ->withPivot(['id', 'is_active', 'is_default'])
             ->withTimestamps();
     }
 

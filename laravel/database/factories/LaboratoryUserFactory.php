@@ -23,6 +23,14 @@ class LaboratoryUserFactory extends Factory
             'laboratory_id' => Laboratory::factory(),
             'user_id' => User::factory(),
             'is_active' => true,
+            'is_default' => false,
         ];
+    }
+
+    public function asDefault(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_default' => true,
+        ]);
     }
 }

@@ -18,6 +18,7 @@ class LaboratoryResource extends JsonResource
             'legal_name' => $this->legal_name,
             'timezone' => $this->timezone,
             'currency' => $this->currency,
+            'is_default' => $this->pivot->is_default,
         ];
     }
 }
