@@ -358,7 +358,7 @@ class PriceListActiveTest extends TestCase
     public function test_active_route_numeric_detail_controller_and_openapi_contracts_are_exact(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists'))
+            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/exams') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/available-exams'))
             ->values();
         $this->assertCount(7, $routes);
         $this->assertSame([
@@ -404,7 +404,7 @@ class PriceListActiveTest extends TestCase
             ->sum(fn (array $path): int => count(array_intersect_key($path, array_flip(['get', 'post', 'patch', 'delete']))));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(7, $priceListOperations);
+        $this->assertSame(10, $priceListOperations);
         $this->assertSame(6, $examOperations);
         $this->assertCount(0, collect($operation['parameters'])->where('in', 'query'));
         $this->assertArrayNotHasKey('requestBody', $operation);

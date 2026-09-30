@@ -483,7 +483,7 @@ class PriceListShowTest extends TestCase
     public function test_route_controller_and_openapi_contracts_are_exact(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists'))
+            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/exams') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/available-exams'))
             ->values();
         $show = $routes->first(fn ($route): bool => str_ends_with($route->getActionName(), '@show'));
 
@@ -510,7 +510,7 @@ class PriceListShowTest extends TestCase
         $pathParameter = collect($operation['parameters'])->firstWhere('in', 'path');
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(7, $priceListOperations);
+        $this->assertSame(10, $priceListOperations);
         $this->assertSame(6, $examOperations);
         $this->assertSame('priceList', $pathParameter['name']);
         $this->assertTrue($pathParameter['required']);

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'laboratory_id',
@@ -29,6 +30,14 @@ class LaboratoryExam extends Model
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_INACTIVE = 'inactive';
+
+    /**
+     * @return HasMany<PriceListExam, $this>
+     */
+    public function priceListExams(): HasMany
+    {
+        return $this->hasMany(PriceListExam::class);
+    }
 
     /**
      * @return BelongsTo<LaboratoryArea, $this>

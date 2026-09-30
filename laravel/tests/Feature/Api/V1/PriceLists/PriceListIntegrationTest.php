@@ -372,7 +372,7 @@ class PriceListIntegrationTest extends TestCase
     public function test_routes_malformed_ids_controller_and_openapi_are_closed_and_exact(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists'))
+            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/exams') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/available-exams'))
             ->values();
         $this->assertCount(7, $routes);
         $this->assertSame([
@@ -422,7 +422,7 @@ class PriceListIntegrationTest extends TestCase
             $this->assertSame($operations, array_values(array_intersect(array_keys($document['paths'][$path]), $operations)));
         }
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(7, $this->operationCount($document, '/api/v1/price-lists'));
+        $this->assertSame(10, $this->operationCount($document, '/api/v1/price-lists'));
         $this->assertSame(6, $this->operationCount($document, '/api/v1/laboratory-exams'));
         $this->assertSame(
             ['id', 'name', 'description', 'currency', 'is_default', 'status', 'created_at', 'updated_at'],

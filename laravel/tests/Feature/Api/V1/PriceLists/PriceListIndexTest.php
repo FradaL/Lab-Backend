@@ -552,7 +552,7 @@ class PriceListIndexTest extends TestCase
     public function test_runtime_and_openapi_match_the_index_contract_after_store_is_added(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists'))
+            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/exams') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/available-exams'))
             ->values();
         $indexRoute = $routes->first(fn ($route): bool => in_array('GET', $route->methods(), true));
 
@@ -572,7 +572,7 @@ class PriceListIndexTest extends TestCase
 
         $this->assertSame('3.1.0', $document['openapi']);
         $priceListOperationCount = collect($document['paths'])
-            ->filter(fn (array $path, string $name): bool => str_starts_with($name, '/api/v1/price-lists'))
+            ->filter(fn (array $path, string $name): bool => str_starts_with($name, '/api/v1/price-lists') && ! str_starts_with($name, '/api/v1/price-lists/{priceList}/exams') && ! str_starts_with($name, '/api/v1/price-lists/{priceList}/available-exams'))
             ->sum(fn (array $path): int => count(array_intersect_key($path, array_flip(['get', 'post', 'patch', 'delete']))));
         $this->assertSame(7, $priceListOperationCount);
         $this->assertCount(8, $queryParameters);

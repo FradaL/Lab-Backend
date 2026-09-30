@@ -530,7 +530,7 @@ class PriceListUpdateTest extends TestCase
     public function test_runtime_controller_and_openapi_contract_are_exact(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists'))
+            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/exams') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/available-exams'))
             ->values();
         $patch = $routes->first(fn ($route): bool => str_ends_with($route->getActionName(), '@update'));
 
@@ -565,7 +565,7 @@ class PriceListUpdateTest extends TestCase
         $examOperations = collect($document['paths'])
             ->filter(fn (array $path, string $name): bool => str_starts_with($name, '/api/v1/laboratory-exams'))
             ->sum(fn (array $path): int => count(array_intersect_key($path, array_flip(['get', 'post', 'patch', 'delete']))));
-        $this->assertSame(7, $priceListOperations);
+        $this->assertSame(10, $priceListOperations);
         $this->assertSame(6, $examOperations);
     }
 

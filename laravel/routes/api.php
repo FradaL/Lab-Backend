@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\LaboratoryAreaController;
 use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PriceListController;
+use App\Http\Controllers\Api\V1\PriceListExamController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,16 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/price-lists', [PriceListController::class, 'index']);
         Route::post('/price-lists', [PriceListController::class, 'store']);
         Route::get('/price-lists/active', [PriceListController::class, 'active']);
+        Route::get('/price-lists/{priceList}/available-exams', [PriceListExamController::class, 'availableExams'])
+            ->whereNumber('priceList');
+        Route::get('/price-lists/{priceList}/exams', [PriceListExamController::class, 'index'])
+            ->whereNumber('priceList');
+        Route::put('/price-lists/{priceList}/exams/bulk', [PriceListExamController::class, 'bulkUpsert'])
+            ->whereNumber('priceList');
+        Route::put('/price-lists/{priceList}/exams/{laboratoryExam}', [PriceListExamController::class, 'upsert'])
+            ->whereNumber(['priceList', 'laboratoryExam']);
+        Route::patch('/price-lists/{priceList}/exams/{laboratoryExam}/status', [PriceListExamController::class, 'updateStatus'])
+            ->whereNumber(['priceList', 'laboratoryExam']);
         Route::get('/price-lists/{priceList}', [PriceListController::class, 'show'])
             ->whereNumber('priceList');
 

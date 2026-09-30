@@ -472,7 +472,7 @@ class PriceListStoreTest extends TestCase
     public function test_runtime_openapi_and_controller_match_store_contract(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists'))
+            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/price-lists') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/exams') && ! str_starts_with($route->uri(), 'api/v1/price-lists/{priceList}/available-exams'))
             ->values();
         $methods = $routes->map(fn ($route): array => $route->methods())->all();
 
@@ -511,7 +511,7 @@ class PriceListStoreTest extends TestCase
         $this->assertSame([201, 400, 401, 403, 404, 422], array_keys($operation['responses']));
 
         $priceListOperationCount = collect($document['paths'])
-            ->filter(fn (array $path, string $name): bool => str_starts_with($name, '/api/v1/price-lists'))
+            ->filter(fn (array $path, string $name): bool => str_starts_with($name, '/api/v1/price-lists') && ! str_starts_with($name, '/api/v1/price-lists/{priceList}/exams') && ! str_starts_with($name, '/api/v1/price-lists/{priceList}/available-exams'))
             ->sum(fn (array $path): int => count(array_intersect_key($path, array_flip(['get', 'post', 'patch', 'delete']))));
         $laboratoryExamOperationCount = collect($document['paths'])
             ->filter(fn (array $path, string $name): bool => str_starts_with($name, '/api/v1/laboratory-exams'))

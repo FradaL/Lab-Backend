@@ -93,6 +93,14 @@ class Laboratory extends Model
     }
 
     /**
+     * @return HasMany<PriceListExam, $this>
+     */
+    public function priceListExams(): HasMany
+    {
+        return $this->hasMany(PriceListExam::class);
+    }
+
+    /**
      * @return HasMany<Subscription, $this>
      */
     public function subscriptions(): HasMany

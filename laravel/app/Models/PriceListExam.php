@@ -3,37 +3,40 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToLaboratory;
-use Database\Factories\PriceListFactory;
+use Database\Factories\PriceListExamFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'laboratory_id',
-    'name',
-    'description',
-    'currency',
-    'is_default',
+    'price_list_id',
+    'laboratory_exam_id',
+    'price',
     'status',
 ])]
-class PriceList extends Model
+class PriceListExam extends Model
 {
     use BelongsToLaboratory;
 
-    /** @use HasFactory<PriceListFactory> */
+    /** @use HasFactory<PriceListExamFactory> */
     use HasFactory;
 
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_INACTIVE = 'inactive';
 
-    /**
-     * @return HasMany<PriceListExam, $this>
-     */
-    public function priceListExams(): HasMany
+    /** @return BelongsTo<PriceList, $this> */
+    public function priceList(): BelongsTo
     {
-        return $this->hasMany(PriceListExam::class);
+        return $this->belongsTo(PriceList::class);
+    }
+
+    /** @return BelongsTo<LaboratoryExam, $this> */
+    public function laboratoryExam(): BelongsTo
+    {
+        return $this->belongsTo(LaboratoryExam::class);
     }
 
     /**
@@ -44,7 +47,7 @@ class PriceList extends Model
     protected function casts(): array
     {
         return [
-            'is_default' => 'boolean',
+            'price' => 'decimal:2',
         ];
     }
 }
