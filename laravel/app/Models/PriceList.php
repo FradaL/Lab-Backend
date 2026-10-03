@@ -37,6 +37,14 @@ class PriceList extends Model
     }
 
     /**
+     * @return HasMany<CommercialClientPriceList, $this>
+     */
+    public function commercialClientAssignments(): HasMany
+    {
+        return $this->hasMany(CommercialClientPriceList::class);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

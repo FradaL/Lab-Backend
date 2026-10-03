@@ -2,12 +2,15 @@
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\AvailableLaboratoryController;
+use App\Http\Controllers\Api\V1\CommercialClientController;
+use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
 use App\Http\Controllers\Api\V1\DoctorController;
 use App\Http\Controllers\Api\V1\LaboratoryAreaController;
 use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PriceListController;
 use App\Http\Controllers\Api\V1\PriceListExamController;
+use App\Http\Controllers\Api\V1\PricingResolutionController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
 use Illuminate\Support\Facades\Route;
@@ -27,6 +30,22 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::middleware('saas')->group(function (): void {
+        Route::post('/pricing/resolve-price-list', [PricingResolutionController::class, 'resolvePriceList']);
+        Route::get('/commercial-clients', [CommercialClientController::class, 'index']);
+        Route::post('/commercial-clients', [CommercialClientController::class, 'store']);
+        Route::get('/commercial-clients/active', [CommercialClientController::class, 'active']);
+        Route::post('/commercial-clients/{commercialClient}/price-list-assignments', [CommercialClientPriceListController::class, 'store'])
+            ->whereNumber('commercialClient');
+        Route::patch('/commercial-clients/{commercialClient}/price-list-assignments/{assignment}', [CommercialClientPriceListController::class, 'update'])
+            ->whereNumber(['commercialClient', 'assignment']);
+        Route::patch('/commercial-clients/{commercialClient}/price-list-assignments/{assignment}/status', [CommercialClientPriceListController::class, 'updateStatus'])
+            ->whereNumber(['commercialClient', 'assignment']);
+        Route::get('/commercial-clients/{commercialClient}', [CommercialClientController::class, 'show'])
+            ->whereNumber('commercialClient');
+        Route::patch('/commercial-clients/{commercialClient}', [CommercialClientController::class, 'update'])
+            ->whereNumber('commercialClient');
+        Route::patch('/commercial-clients/{commercialClient}/status', [CommercialClientController::class, 'updateStatus'])
+            ->whereNumber('commercialClient');
         Route::get('/price-lists', [PriceListController::class, 'index']);
         Route::post('/price-lists', [PriceListController::class, 'store']);
         Route::get('/price-lists/active', [PriceListController::class, 'active']);

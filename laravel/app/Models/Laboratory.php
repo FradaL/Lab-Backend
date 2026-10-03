@@ -101,6 +101,22 @@ class Laboratory extends Model
     }
 
     /**
+     * @return HasMany<CommercialClient, $this>
+     */
+    public function commercialClients(): HasMany
+    {
+        return $this->hasMany(CommercialClient::class);
+    }
+
+    /**
+     * @return HasMany<CommercialClientPriceList, $this>
+     */
+    public function commercialClientPriceLists(): HasMany
+    {
+        return $this->hasMany(CommercialClientPriceList::class);
+    }
+
+    /**
      * @return HasMany<Subscription, $this>
      */
     public function subscriptions(): HasMany
