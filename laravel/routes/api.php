@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
 use App\Http\Controllers\Api\V1\DoctorController;
 use App\Http\Controllers\Api\V1\LaboratoryAreaController;
 use App\Http\Controllers\Api\V1\LaboratoryExamController;
+use App\Http\Controllers\Api\V1\LaboratoryOrderController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PriceListController;
 use App\Http\Controllers\Api\V1\PriceListExamController;
@@ -30,6 +31,11 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::middleware('saas')->group(function (): void {
+        Route::post('/laboratory-orders', [LaboratoryOrderController::class, 'store']);
+        Route::patch('/laboratory-orders/{laboratoryOrder}/status', [LaboratoryOrderController::class, 'updateStatus'])
+            ->whereNumber('laboratoryOrder');
+        Route::get('/laboratory-orders/{laboratoryOrder}', [LaboratoryOrderController::class, 'show'])
+            ->whereNumber('laboratoryOrder');
         Route::post('/pricing/resolve-price-list', [PricingResolutionController::class, 'resolvePriceList']);
         Route::get('/commercial-clients', [CommercialClientController::class, 'index']);
         Route::post('/commercial-clients', [CommercialClientController::class, 'store']);

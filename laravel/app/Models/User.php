@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -29,6 +30,12 @@ class User extends Authenticatable
             ->using(LaboratoryUser::class)
             ->withPivot(['id', 'is_active', 'is_default'])
             ->withTimestamps();
+    }
+
+    /** @return HasMany<LaboratoryOrder, $this> */
+    public function createdLaboratoryOrders(): HasMany
+    {
+        return $this->hasMany(LaboratoryOrder::class, 'created_by');
     }
 
     /**
