@@ -38,6 +38,10 @@ Route::prefix('v1')->group(function (): void {
             ->whereNumber('laboratoryOrder');
         Route::delete('/laboratory-orders/{laboratoryOrder}/exams/{laboratoryOrderExam}', [LaboratoryOrderController::class, 'removeExam'])
             ->whereNumber(['laboratoryOrder', 'laboratoryOrderExam']);
+        Route::put('/laboratory-orders/{laboratoryOrder}/discount', [LaboratoryOrderController::class, 'updateDiscount'])
+            ->whereNumber('laboratoryOrder');
+        Route::delete('/laboratory-orders/{laboratoryOrder}/discount', [LaboratoryOrderController::class, 'removeDiscount'])
+            ->whereNumber('laboratoryOrder');
         Route::patch('/laboratory-orders/{laboratoryOrder}/status', [LaboratoryOrderController::class, 'updateStatus'])
             ->whereNumber('laboratoryOrder');
         Route::get('/laboratory-orders/{laboratoryOrder}', [LaboratoryOrderController::class, 'show'])

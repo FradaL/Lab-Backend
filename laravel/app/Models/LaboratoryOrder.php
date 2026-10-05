@@ -16,13 +16,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'patient_id',
     'doctor_id',
     'commercial_client_id',
+    'commercial_client_name',
+    'commercial_client_type',
     'price_list_id',
+    'price_list_name',
     'code',
     'ordered_at',
     'status',
     'notes',
     'subtotal',
     'discount',
+    'discount_type',
+    'discount_value',
     'taxes',
     'total',
     'currency',
@@ -42,6 +47,10 @@ class LaboratoryOrder extends Model
     public const STATUS_COMPLETED = 'completed';
 
     public const STATUS_CANCELLED = 'cancelled';
+
+    public const DISCOUNT_TYPE_PERCENTAGE = 'percentage';
+
+    public const DISCOUNT_TYPE_AMOUNT = 'amount';
 
     /** @var list<string> */
     public const STATUSES = [
@@ -114,6 +123,7 @@ class LaboratoryOrder extends Model
             'ordered_at' => 'datetime',
             'subtotal' => 'decimal:2',
             'discount' => 'decimal:2',
+            'discount_value' => 'decimal:2',
             'taxes' => 'decimal:2',
             'total' => 'decimal:2',
         ];

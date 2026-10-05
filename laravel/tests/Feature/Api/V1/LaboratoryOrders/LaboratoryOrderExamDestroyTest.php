@@ -82,7 +82,7 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
         );
     }
 
-    public function test_last_line_is_physically_deleted_without_mutating_order(): void
+    public function test_last_line_is_physically_deleted_and_order_economics_become_zero(): void
     {
         [$user, $laboratory, $order, $exam, $priceList] = $this->activeContext([
             'subtotal' => '100.00',
@@ -91,14 +91,27 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
             'total' => '105.00',
         ]);
         $line = $this->line($laboratory, $order, $exam, $priceList);
-        $originalOrder = $order->fresh()->getRawOriginal();
-
         $response = $this->request($user, $laboratory, $order, $line)->assertNoContent();
 
         $this->assertSame('', $response->getContent());
         $this->assertDatabaseCount('laboratory_order_exams', 0);
-        $this->assertSame($originalOrder, $order->fresh()->getRawOriginal());
+        $order->refresh();
+        $this->assertSame('0.00', $order->subtotal);
+        $this->assertSame('0.00', $order->discount);
+        $this->assertSame('0.00', $order->taxes);
+        $this->assertSame('0.00', $order->total);
+        $this->assertNull($order->discount_type);
+        $this->assertNull($order->discount_value);
         $this->assertSame(LaboratoryOrder::STATUS_PENDING, $order->status);
+
+        $this->actingAs($user, 'web')
+            ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
+            ->getJson("/api/v1/laboratory-orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('data.subtotal', '0.00')
+            ->assertJsonPath('data.discount', '0.00')
+            ->assertJsonPath('data.taxes', '0.00')
+            ->assertJsonPath('data.total', '0.00');
     }
 
     public function test_second_delete_of_same_line_returns_404(): void
@@ -264,7 +277,7 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
         $this->assertSame($originalOrder, $order->fresh()->getRawOriginal());
     }
 
-    public function test_delete_query_is_nested_and_does_not_revalidate_catalogs_or_recalculate(): void
+    public function test_delete_query_is_nested_recalculates_once_and_does_not_revalidate_catalogs(): void
     {
         [$user, $laboratory, $order, $exam, $priceList] = $this->activeContext();
         $line = $this->line($laboratory, $order, $exam, $priceList);
@@ -283,7 +296,10 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
         $this->assertStringContainsString('"laboratory_id"', $lineSelect);
         $this->assertStringContainsString('"laboratory_order_id"', $lineSelect);
         $this->assertStringContainsString('"id"', $lineSelect);
-        $this->assertFalse(collect($queries)->contains(fn (string $sql): bool => str_starts_with($sql, 'update "laboratory_orders"')));
+        $this->assertLessThanOrEqual(
+            1,
+            collect($queries)->filter(fn (string $sql): bool => str_starts_with($sql, 'update "laboratory_orders"'))->count(),
+        );
         $this->assertFalse(collect($queries)->contains(fn (string $sql): bool => str_contains($sql, 'sum(')));
     }
 
@@ -299,7 +315,7 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
         $this->assertSame('[0-9]+', $route->wheres['laboratoryOrder']);
         $this->assertSame('[0-9]+', $route->wheres['laboratoryOrderExam']);
         $this->assertSame([
-            'addExam', 'listExams', 'removeExam', 'show', 'store', 'updateStatus',
+            'addExam', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus',
         ], collect((new ReflectionClass(LaboratoryOrderController::class))
             ->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === LaboratoryOrderController::class)
@@ -319,7 +335,7 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
         )));
 
         $this->assertSame(['delete'], array_keys($path));
-        $this->assertSame(62, $operationCount);
+        $this->assertSame(64, $operationCount);
         $this->assertArrayNotHasKey('requestBody', $operation);
         $this->assertSame([204, 400, 401, 403, 404, 422], array_keys($operation['responses']));
         $this->assertStringContainsString('no el identificador del examen', strtolower($operation['description']));

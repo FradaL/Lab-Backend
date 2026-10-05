@@ -32,8 +32,13 @@ final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
 
         $this->assertSame('ok', $results['transition']);
         $this->assertContains($results['delete'], ['ok', 'validation']);
-        $this->assertSame(LaboratoryOrder::STATUS_IN_PROCESS, $order->fresh()->status);
+        $order->refresh();
+        $this->assertSame(LaboratoryOrder::STATUS_IN_PROCESS, $order->status);
         $this->assertSame($results['delete'] === 'ok' ? 0 : 1, DB::table('laboratory_order_exams')->count());
+        $this->assertSame($results['delete'] === 'ok' ? '0.00' : '35.00', $order->subtotal);
+        $this->assertSame($order->subtotal, $order->total);
+        $this->assertSame('0.00', $order->discount);
+        $this->assertSame('0.00', $order->taxes);
         $this->assertNotContains('error', $results);
 
         DB::table('laboratory_order_exams')->where('laboratory_order_id', $order->id)->delete();
@@ -56,7 +61,12 @@ final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
             'id' => $duplicate->id,
             'laboratory_exam_id' => $line->laboratory_exam_id,
         ]);
-        $this->assertSame(LaboratoryOrder::STATUS_PENDING, $order->fresh()->status);
+        $order->refresh();
+        $this->assertSame(LaboratoryOrder::STATUS_PENDING, $order->status);
+        $this->assertSame('40.00', $order->subtotal);
+        $this->assertSame('0.00', $order->discount);
+        $this->assertSame('0.00', $order->taxes);
+        $this->assertSame('40.00', $order->total);
 
         DB::table('laboratory_order_exams')->where('laboratory_order_id', $order->id)->delete();
     }
@@ -86,6 +96,8 @@ final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
         $line = LaboratoryOrderExam::factory()->for($laboratory)->create($attributes);
 
         if (! $withDuplicate) {
+            $order->update(['subtotal' => '35.00', 'total' => '35.00']);
+
             return [$laboratory, $order, $line];
         }
 
@@ -93,6 +105,7 @@ final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
             $attributes,
             ['unit_price' => '40.00', 'exam_name' => 'Independent snapshot'],
         ));
+        $order->update(['subtotal' => '75.00', 'total' => '75.00']);
 
         return [$laboratory, $order, $line, $duplicate];
     }

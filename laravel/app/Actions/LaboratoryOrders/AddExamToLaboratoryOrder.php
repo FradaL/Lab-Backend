@@ -8,11 +8,16 @@ use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
+use App\Services\LaboratoryOrders\RecalculateLaboratoryOrderEconomics;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 final class AddExamToLaboratoryOrder
 {
+    public function __construct(
+        private readonly RecalculateLaboratoryOrderEconomics $recalculateEconomics,
+    ) {}
+
     public function execute(
         Laboratory $laboratory,
         int $laboratoryOrderId,
@@ -74,7 +79,7 @@ final class AddExamToLaboratoryOrder
                 ]);
             }
 
-            return $order->orderExams()->create([
+            $orderExam = $order->orderExams()->create([
                 'laboratory_id' => $laboratory->id,
                 'laboratory_exam_id' => $exam->id,
                 'price_list_id' => $order->price_list_id,
@@ -83,6 +88,10 @@ final class AddExamToLaboratoryOrder
                 'exam_name' => $exam->name,
                 'price_list_name' => $priceList->name,
             ]);
+
+            $this->recalculateEconomics->execute($laboratory, $order);
+
+            return $orderExam;
         });
     }
 }

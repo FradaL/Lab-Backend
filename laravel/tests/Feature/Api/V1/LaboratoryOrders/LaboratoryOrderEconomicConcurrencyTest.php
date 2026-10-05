@@ -3,74 +3,65 @@
 namespace Tests\Feature\Api\V1\LaboratoryOrders;
 
 use App\Actions\LaboratoryOrders\AddExamToLaboratoryOrder;
-use App\Actions\LaboratoryOrders\TransitionLaboratoryOrderStatus;
+use App\Actions\LaboratoryOrders\RemoveExamFromLaboratoryOrder;
 use App\Models\Laboratory;
 use App\Models\LaboratoryExam;
 use App\Models\LaboratoryOrder;
+use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 use Throwable;
 
-final class LaboratoryOrderExamConcurrencyTest extends TestCase
+final class LaboratoryOrderEconomicConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
 
-    public function test_status_transition_and_add_serialize_on_the_same_order_lock(): void
+    public function test_concurrent_deletes_of_different_lines_leave_consistent_economics(): void
     {
         $this->requirePostgreSqlConcurrencySupport();
         [$laboratory, $order, $exam] = $this->context();
+        $first = $this->line($laboratory, $order, $exam, '35.00');
+        $second = $this->line($laboratory, $order, $exam, '40.00');
+        $remaining = $this->line($laboratory, $order, $exam, '20.00');
+        $order->update(['subtotal' => '95.00', 'total' => '95.00']);
 
         $results = $this->runConcurrently($laboratory, $order, $exam, [
-            'add' => 'add',
-            'transition' => 'transition',
-        ]);
-
-        $this->assertSame('ok', $results['transition']);
-        $this->assertContains($results['add'], ['ok', 'validation']);
-        $order->refresh();
-        $this->assertSame(LaboratoryOrder::STATUS_IN_PROCESS, $order->status);
-        $this->assertSame($results['add'] === 'ok' ? 1 : 0, DB::table('laboratory_order_exams')->count());
-        $this->assertSame($results['add'] === 'ok' ? '35.00' : '0.00', $order->subtotal);
-        $this->assertSame($order->subtotal, $order->total);
-        $this->assertSame('0.00', $order->discount);
-        $this->assertSame('0.00', $order->taxes);
-        $this->assertNotContains('error', $results);
-
-        DB::table('laboratory_order_exams')->where('laboratory_order_id', $order->id)->delete();
-        DB::table('laboratory_orders')->where('id', $order->id)->update(['status' => LaboratoryOrder::STATUS_PENDING]);
-    }
-
-    public function test_two_concurrent_identical_adds_create_two_distinct_lines(): void
-    {
-        $this->requirePostgreSqlConcurrencySupport();
-        [$laboratory, $order, $exam] = $this->context();
-
-        $results = $this->runConcurrently($laboratory, $order, $exam, [
-            'add-a' => 'add',
-            'add-b' => 'add',
+            'delete-a' => ['action' => 'delete', 'line_id' => $first->id],
+            'delete-b' => ['action' => 'delete', 'line_id' => $second->id],
         ]);
 
         $this->assertSame(['ok', 'ok'], array_values($results));
-        $lines = DB::table('laboratory_order_exams')->where('laboratory_order_id', $order->id)->get();
-        $this->assertCount(2, $lines);
-        $this->assertCount(2, $lines->pluck('id')->unique());
-        $this->assertSame([$exam->id], $lines->pluck('laboratory_exam_id')->unique()->values()->all());
-        $order->refresh();
-        $this->assertSame(LaboratoryOrder::STATUS_PENDING, $order->status);
-        $this->assertSame('70.00', $order->subtotal);
-        $this->assertSame('0.00', $order->discount);
-        $this->assertSame('0.00', $order->taxes);
-        $this->assertSame('70.00', $order->total);
+        $this->assertSame([$remaining->id], LaboratoryOrderExam::query()->pluck('id')->all());
+        $this->assertConsistentEconomics($order, '20.00');
+
+        DB::table('laboratory_order_exams')->where('laboratory_order_id', $order->id)->delete();
+    }
+
+    public function test_concurrent_add_and_delete_leave_composition_and_economics_consistent(): void
+    {
+        $this->requirePostgreSqlConcurrencySupport();
+        [$laboratory, $order, $exam] = $this->context(addPrice: '35.00');
+        $deleted = $this->line($laboratory, $order, $exam, '20.00');
+        $order->update(['subtotal' => '20.00', 'total' => '20.00']);
+
+        $results = $this->runConcurrently($laboratory, $order, $exam, [
+            'add' => ['action' => 'add'],
+            'delete' => ['action' => 'delete', 'line_id' => $deleted->id],
+        ]);
+
+        $this->assertSame(['ok', 'ok'], array_values($results));
+        $this->assertDatabaseMissing('laboratory_order_exams', ['id' => $deleted->id]);
+        $this->assertSame(['35.00'], LaboratoryOrderExam::query()->pluck('unit_price')->all());
+        $this->assertConsistentEconomics($order, '35.00');
 
         DB::table('laboratory_order_exams')->where('laboratory_order_id', $order->id)->delete();
     }
 
     /** @return array{Laboratory, LaboratoryOrder, LaboratoryExam} */
-    private function context(): array
+    private function context(string $addPrice = '35.00'): array
     {
         $laboratory = Laboratory::factory()->create();
         $priceList = PriceList::factory()->for($laboratory)->create([
@@ -88,15 +79,29 @@ final class LaboratoryOrderExamConcurrencyTest extends TestCase
         PriceListExam::factory()->for($laboratory)->create([
             'price_list_id' => $priceList->id,
             'laboratory_exam_id' => $exam->id,
-            'price' => '35.00',
+            'price' => $addPrice,
             'status' => PriceListExam::STATUS_ACTIVE,
         ]);
 
         return [$laboratory, $order, $exam];
     }
 
+    private function line(
+        Laboratory $laboratory,
+        LaboratoryOrder $order,
+        LaboratoryExam $exam,
+        string $price,
+    ): LaboratoryOrderExam {
+        return LaboratoryOrderExam::factory()->for($laboratory)->create([
+            'laboratory_order_id' => $order->id,
+            'laboratory_exam_id' => $exam->id,
+            'price_list_id' => $order->price_list_id,
+            'unit_price' => $price,
+        ]);
+    }
+
     /**
-     * @param  array<string, string>  $jobs
+     * @param  array<string, array{action: string, line_id?: int}>  $jobs
      * @return array<string, string>
      */
     private function runConcurrently(
@@ -105,7 +110,7 @@ final class LaboratoryOrderExamConcurrencyTest extends TestCase
         LaboratoryExam $exam,
         array $jobs,
     ): array {
-        $directory = sys_get_temp_dir().'/donqer-order-exam-concurrency-'.bin2hex(random_bytes(8));
+        $directory = sys_get_temp_dir().'/donqer-order-economic-concurrency-'.bin2hex(random_bytes(8));
         mkdir($directory, 0700, true);
         $gate = $directory.'/go';
         $children = [];
@@ -125,22 +130,12 @@ final class LaboratoryOrderExamConcurrencyTest extends TestCase
                     DB::reconnect();
                     try {
                         $currentLaboratory = Laboratory::query()->findOrFail($laboratory->id);
-                        if ($job === 'transition') {
-                            app(TransitionLaboratoryOrderStatus::class)->execute(
-                                $currentLaboratory,
-                                $order->id,
-                                LaboratoryOrder::STATUS_IN_PROCESS,
-                            );
+                        if ($job['action'] === 'add') {
+                            app(AddExamToLaboratoryOrder::class)->execute($currentLaboratory, $order->id, $exam->id);
                         } else {
-                            app(AddExamToLaboratoryOrder::class)->execute(
-                                $currentLaboratory,
-                                $order->id,
-                                $exam->id,
-                            );
+                            app(RemoveExamFromLaboratoryOrder::class)->execute($currentLaboratory, $order->id, $job['line_id']);
                         }
                         $result = 'ok';
-                    } catch (ValidationException) {
-                        $result = 'validation';
                     } catch (Throwable $exception) {
                         $result = 'error:'.$exception::class.':'.$exception->getMessage();
                     }
@@ -175,6 +170,15 @@ final class LaboratoryOrderExamConcurrencyTest extends TestCase
                 rmdir($directory);
             }
         }
+    }
+
+    private function assertConsistentEconomics(LaboratoryOrder $order, string $subtotal): void
+    {
+        $order->refresh();
+        $this->assertSame($subtotal, $order->subtotal);
+        $this->assertSame('0.00', $order->discount);
+        $this->assertSame('0.00', $order->taxes);
+        $this->assertSame($subtotal, $order->total);
     }
 
     private function requirePostgreSqlConcurrencySupport(): void

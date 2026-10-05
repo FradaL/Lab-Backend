@@ -291,8 +291,9 @@ final class LaboratoryOrderStatusTest extends TestCase
         }
         $this->assertSame([
             'id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor',
-            'commercial_client', 'price_list', 'branch', 'subtotal', 'discount',
-            'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at',
+            'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type',
+            'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by',
+            'created_at', 'updated_at',
         ], array_keys($response->json('data')));
     }
 
@@ -336,14 +337,14 @@ final class LaboratoryOrderStatusTest extends TestCase
             ->values();
         $statusRoute = $routes->first(fn ($route): bool => in_array('PATCH', $route->methods(), true));
 
-        $this->assertCount(6, $routes);
+        $this->assertCount(8, $routes);
         $this->assertNotNull($statusRoute);
         $this->assertSame('api/v1/laboratory-orders/{laboratoryOrder}/status', $statusRoute->uri());
         $this->assertSame(['PATCH'], $statusRoute->methods());
         $this->assertContains('saas', $statusRoute->middleware());
         $this->assertSame('[0-9]+', $statusRoute->wheres['laboratoryOrder']);
         $this->assertSame([
-            'addExam', 'listExams', 'removeExam', 'show', 'store', 'updateStatus',
+            'addExam', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus',
         ], collect((new ReflectionClass(LaboratoryOrderController::class))
             ->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === LaboratoryOrderController::class)
@@ -358,8 +359,8 @@ final class LaboratoryOrderStatusTest extends TestCase
             array_flip(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']),
         )));
 
-        $this->assertSame(62, $operationCount);
-        $this->assertCount(70, Route::getRoutes()->getRoutes());
+        $this->assertSame(64, $operationCount);
+        $this->assertCount(72, Route::getRoutes()->getRoutes());
         $this->assertSame(['status'], $schema['required']);
         $this->assertSame(['status'], array_keys($schema['properties']));
         $this->assertFalse($schema['additionalProperties']);

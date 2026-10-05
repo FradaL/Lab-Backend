@@ -39,6 +39,8 @@ class LaboratoryOrderPersistenceTest extends TestCase
                 'ordered_at' => '2026-10-03 14:35:27',
                 'notes' => 'Persistencia clínica y comercial.',
                 'subtotal' => '123456.78',
+                'discount_type' => LaboratoryOrder::DISCOUNT_TYPE_AMOUNT,
+                'discount_value' => '456.78',
                 'discount' => '456.78',
                 'taxes' => '120.00',
                 'total' => '123120.00',
@@ -50,6 +52,8 @@ class LaboratoryOrderPersistenceTest extends TestCase
         $this->assertSame('2026-10-03 14:35:27', $order->ordered_at->format('Y-m-d H:i:s'));
         $this->assertSame(LaboratoryOrder::STATUS_PENDING, $order->status);
         $this->assertSame('123456.78', $order->subtotal);
+        $this->assertSame(LaboratoryOrder::DISCOUNT_TYPE_AMOUNT, $order->discount_type);
+        $this->assertSame('456.78', $order->discount_value);
         $this->assertSame('456.78', $order->discount);
         $this->assertSame('120.00', $order->taxes);
         $this->assertSame('123120.00', $order->total);
@@ -92,6 +96,11 @@ class LaboratoryOrderPersistenceTest extends TestCase
             'created_by',
             'created_at',
             'updated_at',
+            'commercial_client_name',
+            'commercial_client_type',
+            'price_list_name',
+            'discount_type',
+            'discount_value',
         ], Schema::getColumnListing('laboratory_orders'));
     }
 
@@ -261,6 +270,8 @@ class LaboratoryOrderPersistenceTest extends TestCase
 
         $this->assertSame(LaboratoryOrder::STATUS_PENDING, $order->status);
         $this->assertSame('0.00', $order->subtotal);
+        $this->assertNull($order->discount_type);
+        $this->assertNull($order->discount_value);
         $this->assertSame('0.00', $order->discount);
         $this->assertSame('0.00', $order->taxes);
         $this->assertSame('0.00', $order->total);
@@ -356,6 +367,8 @@ class LaboratoryOrderPersistenceTest extends TestCase
             'status' => LaboratoryOrder::STATUS_PENDING,
             'notes' => null,
             'subtotal' => '1.20',
+            'discount_type' => LaboratoryOrder::DISCOUNT_TYPE_PERCENTAGE,
+            'discount_value' => '10.00',
             'discount' => '0.10',
             'taxes' => '0.05',
             'total' => '1.15',
@@ -371,13 +384,18 @@ class LaboratoryOrderPersistenceTest extends TestCase
             'patient_id',
             'doctor_id',
             'commercial_client_id',
+            'commercial_client_name',
+            'commercial_client_type',
             'price_list_id',
+            'price_list_name',
             'code',
             'ordered_at',
             'status',
             'notes',
             'subtotal',
             'discount',
+            'discount_type',
+            'discount_value',
             'taxes',
             'total',
             'currency',
@@ -387,6 +405,7 @@ class LaboratoryOrderPersistenceTest extends TestCase
         $this->assertNull($order->getAttribute('created_at'));
         $this->assertNull($order->getAttribute('updated_at'));
         $this->assertSame('1.20', $order->subtotal);
+        $this->assertSame('10.00', $order->discount_value);
         $this->assertSame('0.10', $order->discount);
         $this->assertNotContains(SoftDeletes::class, class_uses_recursive(LaboratoryOrder::class));
         $this->assertSame([], $order->getGlobalScopes());
@@ -413,14 +432,21 @@ class LaboratoryOrderPersistenceTest extends TestCase
             && $order->laboratory_id === $order->doctor->laboratory_id
             && $order->laboratory_id === $order->commercialClient->laboratory_id
             && $order->laboratory_id === $order->priceList->laboratory_id
+            && $order->commercial_client_name === $order->commercialClient->name
+            && $order->commercial_client_type === $order->commercialClient->type
+            && $order->price_list_name === $order->priceList->name
             && $order->currency === $order->priceList->currency
             && $order->status === LaboratoryOrder::STATUS_PENDING
             && $order->subtotal === '0.00'
+            && $order->discount_type === null
+            && $order->discount_value === null
             && $order->discount === '0.00'
             && $order->taxes === '0.00'
             && $order->total === '0.00'
         ));
         $this->assertNull($particular->commercial_client_id);
+        $this->assertNull($particular->commercial_client_name);
+        $this->assertNull($particular->commercial_client_type);
         $this->assertNull($withoutDoctor->doctor_id);
         $this->assertSame('USD', $usdOrder->currency);
     }
@@ -485,12 +511,17 @@ class LaboratoryOrderPersistenceTest extends TestCase
             'patient_id' => $patient->id,
             'doctor_id' => $doctor?->id,
             'commercial_client_id' => $client?->id,
+            'commercial_client_name' => $client?->name,
+            'commercial_client_type' => $client?->type,
             'price_list_id' => $priceList->id,
+            'price_list_name' => $priceList->name,
             'code' => 'ORD-BASE-001',
             'ordered_at' => '2026-10-03 09:15:42',
             'status' => LaboratoryOrder::STATUS_PENDING,
             'notes' => null,
             'subtotal' => '0.00',
+            'discount_type' => null,
+            'discount_value' => null,
             'discount' => '0.00',
             'taxes' => '0.00',
             'total' => '0.00',

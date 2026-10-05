@@ -105,6 +105,28 @@ use OpenApi\Attributes as OA;
     additionalProperties: false,
 )]
 #[OA\Schema(
+    schema: 'UpdateLaboratoryOrderDiscountInput',
+    required: ['type', 'value'],
+    properties: [
+        new OA\Property(
+            property: 'type',
+            type: 'string',
+            enum: ['percentage', 'amount'],
+            example: 'percentage',
+        ),
+        new OA\Property(
+            property: 'value',
+            description: 'Decimal positivo con máximo dos posiciones; porcentaje hasta 100.00 y monto dentro de NUMERIC(12,2).',
+            oneOf: [
+                new OA\Schema(type: 'string', pattern: '^\\d+(?:\\.\\d{1,2})?$', example: '10.00'),
+                new OA\Schema(type: 'integer', minimum: 1, example: 10),
+            ],
+        ),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
     schema: 'LaboratoryOrderPatient',
     required: ['id', 'first_names', 'last_names'],
     properties: [
@@ -129,8 +151,8 @@ use OpenApi\Attributes as OA;
     required: ['id', 'name', 'type'],
     properties: [
         new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 8),
-        new OA\Property(property: 'name', type: 'string', example: 'Seguro XYZ'),
-        new OA\Property(property: 'type', type: 'string', enum: ['insurance', 'company', 'agreement', 'other'], example: 'insurance'),
+        new OA\Property(property: 'name', description: 'Nombre histórico capturado al crear la orden.', type: 'string', example: 'Seguro XYZ'),
+        new OA\Property(property: 'type', description: 'Tipo histórico capturado al crear la orden.', type: 'string', enum: ['insurance', 'company', 'agreement', 'other'], example: 'insurance'),
     ],
     type: 'object',
 )]
@@ -139,8 +161,8 @@ use OpenApi\Attributes as OA;
     required: ['id', 'name', 'currency'],
     properties: [
         new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 3),
-        new OA\Property(property: 'name', type: 'string', example: 'Tarifa aseguradoras'),
-        new OA\Property(property: 'currency', type: 'string', pattern: '^[A-Z]{3}$', example: 'GTQ'),
+        new OA\Property(property: 'name', description: 'Nombre histórico capturado al crear la orden.', type: 'string', example: 'Tarifa aseguradoras'),
+        new OA\Property(property: 'currency', description: 'Moneda histórica capturada al crear la orden.', type: 'string', pattern: '^[A-Z]{3}$', example: 'GTQ'),
     ],
     type: 'object',
 )]
@@ -164,7 +186,7 @@ use OpenApi\Attributes as OA;
 )]
 #[OA\Schema(
     schema: 'LaboratoryOrder',
-    required: ['id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor', 'commercial_client', 'price_list', 'branch', 'subtotal', 'discount', 'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at'],
+    required: ['id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor', 'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type', 'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at'],
     properties: [
         new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 123),
         new OA\Property(property: 'code', type: 'string', maxLength: 45, pattern: '^ORD-[0-9A-HJKMNP-TV-Z]{26}$', example: 'ORD-01K6PW1VC7QFM4R6FY0WYQ0B6W'),
@@ -177,7 +199,9 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'price_list', ref: '#/components/schemas/LaboratoryOrderPriceList'),
         new OA\Property(property: 'branch', ref: '#/components/schemas/LaboratoryOrderBranch'),
         new OA\Property(property: 'subtotal', type: 'string', pattern: '^\\d+\\.\\d{2}$', example: '0.00'),
-        new OA\Property(property: 'discount', type: 'string', pattern: '^\\d+\\.\\d{2}$', example: '0.00'),
+        new OA\Property(property: 'discount_type', description: 'Forma persistida en que se definió el descuento global; null indica que no hay intención de descuento conocida.', type: ['string', 'null'], enum: ['percentage', 'amount', null], example: 'percentage'),
+        new OA\Property(property: 'discount_value', description: 'Valor original persistido: porcentaje expresado como 10.00 para 10%, o monto en la moneda de la orden.', type: ['string', 'null'], pattern: '^\\d+\\.\\d{2}$', example: '10.00'),
+        new OA\Property(property: 'discount', description: 'Monto monetario resultante del descuento aplicado.', type: 'string', pattern: '^\\d+\\.\\d{2}$', example: '20.00'),
         new OA\Property(property: 'taxes', type: 'string', pattern: '^\\d+\\.\\d{2}$', example: '0.00'),
         new OA\Property(property: 'total', type: 'string', pattern: '^\\d+\\.\\d{2}$', example: '0.00'),
         new OA\Property(property: 'currency', type: 'string', pattern: '^[A-Z]{3}$', example: 'GTQ'),

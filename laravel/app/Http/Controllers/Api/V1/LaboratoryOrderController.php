@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\LaboratoryOrders\AddExamToLaboratoryOrder;
 use App\Actions\LaboratoryOrders\CreateLaboratoryOrder;
 use App\Actions\LaboratoryOrders\RemoveExamFromLaboratoryOrder;
+use App\Actions\LaboratoryOrders\RemoveLaboratoryOrderDiscount;
+use App\Actions\LaboratoryOrders\SetLaboratoryOrderDiscount;
 use App\Actions\LaboratoryOrders\TransitionLaboratoryOrderStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LaboratoryOrder\AddExamToLaboratoryOrderRequest;
 use App\Http\Requests\Api\V1\LaboratoryOrder\ListLaboratoryOrderExamsRequest;
 use App\Http\Requests\Api\V1\LaboratoryOrder\ShowLaboratoryOrderRequest;
 use App\Http\Requests\Api\V1\LaboratoryOrder\StoreLaboratoryOrderRequest;
+use App\Http\Requests\Api\V1\LaboratoryOrder\UpdateLaboratoryOrderDiscountRequest;
 use App\Http\Requests\Api\V1\LaboratoryOrder\UpdateLaboratoryOrderStatusRequest;
 use App\Http\Resources\Api\V1\LaboratoryOrderExamResource;
 use App\Http\Resources\Api\V1\LaboratoryOrderResource;
@@ -215,6 +218,134 @@ final class LaboratoryOrderController extends Controller
         return response()->noContent();
     }
 
+    #[OA\Put(
+        path: '/api/v1/laboratory-orders/{laboratoryOrder}/discount',
+        operationId: 'laboratoryOrdersSetDiscount',
+        summary: 'Configurar el descuento global de una orden pendiente',
+        description: 'Reemplaza la intención de descuento y recalcula la economía usando los precios snapshot de las líneas. El body sólo acepta type y value; percentage acepta valores mayores que 0 y hasta 100, amount acepta montos positivos dentro de NUMERIC(12,2).',
+        security: [['sanctumCookie' => []]],
+        tags: ['Laboratory Orders'],
+        parameters: [
+            new OA\Parameter(
+                name: 'laboratoryOrder',
+                description: 'Identificador de la orden dentro del laboratorio actual.',
+                in: 'path',
+                required: true,
+                schema: new OA\Schema(type: 'integer', format: 'int64', minimum: 1),
+            ),
+            new OA\Parameter(ref: '#/components/parameters/LaboratoryContextHeader'),
+        ],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(ref: '#/components/schemas/UpdateLaboratoryOrderDiscountInput'),
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Descuento aplicado y economía recalculada.', content: new OA\JsonContent(ref: '#/components/schemas/LaboratoryOrderResponse')),
+            new OA\Response(ref: '#/components/responses/LaboratoryContextRequired', response: 400),
+            new OA\Response(response: 401, description: 'La solicitud no tiene una sesión autenticada.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(
+                response: 403,
+                description: 'El usuario no tiene acceso al laboratorio o el laboratorio no tiene acceso vigente al SaaS.',
+                content: new OA\JsonContent(oneOf: [
+                    new OA\Schema(ref: '#/components/schemas/LaboratoryContextError'),
+                    new OA\Schema(ref: '#/components/schemas/SubscriptionAccessError'),
+                ]),
+            ),
+            new OA\Response(response: 404, description: 'La orden no existe o no pertenece al laboratorio actual.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(response: 422, description: 'El payload o el estado operativo de la orden no son válidos.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
+        ],
+    )]
+    public function updateDiscount(
+        Request $request,
+        CurrentLaboratory $currentLaboratory,
+        int $laboratoryOrder,
+        UpdateLaboratoryOrderDiscountRequest $discountRequest,
+        SetLaboratoryOrderDiscount $setDiscount,
+    ): LaboratoryOrderResource {
+        $laboratory = $currentLaboratory->get();
+        $exists = LaboratoryOrder::forLaboratory($laboratory)
+            ->whereKey($laboratoryOrder)
+            ->exists();
+
+        if (! $exists) {
+            abort(404, 'Resource not found.');
+        }
+
+        $discount = $discountRequest->validated($request);
+        $order = $setDiscount->execute(
+            $laboratory,
+            $laboratoryOrder,
+            $discount['type'],
+            $discount['value'],
+        );
+
+        return LaboratoryOrderResource::make($order);
+    }
+
+    #[OA\Delete(
+        path: '/api/v1/laboratory-orders/{laboratoryOrder}/discount',
+        operationId: 'laboratoryOrdersRemoveDiscount',
+        summary: 'Quitar el descuento global de una orden pendiente',
+        description: 'Limpia la intención de descuento y recalcula la economía usando los precios snapshot de las líneas. La operación es idempotente; una orden inexistente o de otro laboratorio produce el mismo 404 neutral.',
+        security: [['sanctumCookie' => []]],
+        tags: ['Laboratory Orders'],
+        parameters: [
+            new OA\Parameter(
+                name: 'laboratoryOrder',
+                description: 'Identificador de la orden dentro del laboratorio actual.',
+                in: 'path',
+                required: true,
+                schema: new OA\Schema(type: 'integer', format: 'int64', minimum: 1),
+            ),
+            new OA\Parameter(ref: '#/components/parameters/LaboratoryContextHeader'),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Descuento eliminado y economía recalculada.', content: new OA\JsonContent(ref: '#/components/schemas/LaboratoryOrderResponse')),
+            new OA\Response(ref: '#/components/responses/LaboratoryContextRequired', response: 400),
+            new OA\Response(response: 401, description: 'La solicitud no tiene una sesión autenticada.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(
+                response: 403,
+                description: 'El usuario no tiene acceso al laboratorio o el laboratorio no tiene acceso vigente al SaaS.',
+                content: new OA\JsonContent(oneOf: [
+                    new OA\Schema(ref: '#/components/schemas/LaboratoryContextError'),
+                    new OA\Schema(ref: '#/components/schemas/SubscriptionAccessError'),
+                ]),
+            ),
+            new OA\Response(response: 404, description: 'La orden no existe o no pertenece al laboratorio actual.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(response: 422, description: 'La orden no está pendiente o el body contiene campos no permitidos.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
+        ],
+    )]
+    public function removeDiscount(
+        Request $request,
+        CurrentLaboratory $currentLaboratory,
+        int $laboratoryOrder,
+        RemoveLaboratoryOrderDiscount $removeDiscount,
+    ): LaboratoryOrderResource {
+        $laboratory = $currentLaboratory->get();
+        $exists = LaboratoryOrder::forLaboratory($laboratory)
+            ->whereKey($laboratoryOrder)
+            ->exists();
+
+        if (! $exists) {
+            abort(404, 'Resource not found.');
+        }
+
+        $rawBody = trim($request->getContent());
+        $decodedBody = $rawBody === '' ? null : json_decode($rawBody);
+        $emptyJsonBody = $decodedBody === []
+            || ($decodedBody instanceof \stdClass && get_object_vars($decodedBody) === []);
+
+        if (($rawBody !== '' && ! $emptyJsonBody) || $request->all() !== []) {
+            throw ValidationException::withMessages([
+                'body' => ['Esta operación no acepta campos de entrada.'],
+            ]);
+        }
+
+        $order = $removeDiscount->execute($laboratory, $laboratoryOrder);
+
+        return LaboratoryOrderResource::make($order);
+    }
+
     #[OA\Patch(
         path: '/api/v1/laboratory-orders/{laboratoryOrder}/status',
         operationId: 'laboratoryOrdersUpdateStatus',
@@ -278,7 +409,7 @@ final class LaboratoryOrderController extends Controller
         path: '/api/v1/laboratory-orders/{laboratoryOrder}',
         operationId: 'laboratoryOrdersShow',
         summary: 'Consultar orden de laboratorio',
-        description: 'Devuelve una orden únicamente cuando pertenece al laboratorio validado por el pipeline SaaS. Un identificador inexistente o perteneciente a otro laboratorio produce el mismo 404 neutral. Las referencias históricas se muestran aunque sus catálogos estén inactivos.',
+        description: 'Devuelve una orden únicamente cuando pertenece al laboratorio validado por el pipeline SaaS. Un identificador inexistente o perteneciente a otro laboratorio produce el mismo 404 neutral. El nombre y tipo del cliente comercial, el nombre de la lista y la moneda provienen del contexto histórico capturado en la orden, incluso si los catálogos actuales cambiaron o están inactivos.',
         security: [['sanctumCookie' => []]],
         tags: ['Laboratory Orders'],
         parameters: [
@@ -318,8 +449,6 @@ final class LaboratoryOrderController extends Controller
             ->with([
                 'patient',
                 'doctor',
-                'commercialClient',
-                'priceList',
                 'branch',
                 'createdBy',
             ])
@@ -337,7 +466,7 @@ final class LaboratoryOrderController extends Controller
         path: '/api/v1/laboratory-orders',
         operationId: 'laboratoryOrdersStore',
         summary: 'Crear orden de laboratorio',
-        description: 'Crea una orden pendiente en el laboratorio actual. La lista de precios es una selección explícita; ordered_at se interpreta como fecha y hora local conforme al contrato Y-m-d H:i:s y se persiste sin conversión de zona horaria.',
+        description: 'Crea una orden pendiente en el laboratorio actual. La lista de precios es una selección explícita y el servidor captura el nombre/tipo del cliente comercial, el nombre de la lista y su moneda como contexto histórico. ordered_at se interpreta como fecha y hora local conforme al contrato Y-m-d H:i:s y se persiste sin conversión de zona horaria.',
         security: [['sanctumCookie' => []]],
         tags: ['Laboratory Orders'],
         parameters: [

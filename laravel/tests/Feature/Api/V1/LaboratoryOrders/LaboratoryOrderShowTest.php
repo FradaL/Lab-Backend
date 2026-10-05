@@ -35,8 +35,9 @@ final class LaboratoryOrderShowTest extends TestCase
 
         $this->assertSame([
             'id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor',
-            'commercial_client', 'price_list', 'branch', 'subtotal', 'discount',
-            'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at',
+            'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type',
+            'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by',
+            'created_at', 'updated_at',
         ], array_keys($response->json('data')));
         $this->assertSame(['id', 'first_names', 'last_names'], array_keys($response->json('data.patient')));
         $this->assertSame(['id', 'first_names', 'last_names'], array_keys($response->json('data.doctor')));
@@ -56,6 +57,8 @@ final class LaboratoryOrderShowTest extends TestCase
             ->assertJsonPath('data.price_list.id', $order->price_list_id)
             ->assertJsonPath('data.branch.id', $order->branch_id)
             ->assertJsonPath('data.subtotal', $order->subtotal)
+            ->assertJsonPath('data.discount_type', $order->discount_type)
+            ->assertJsonPath('data.discount_value', $order->discount_value)
             ->assertJsonPath('data.discount', $order->discount)
             ->assertJsonPath('data.taxes', $order->taxes)
             ->assertJsonPath('data.total', $order->total)
@@ -153,7 +156,7 @@ final class LaboratoryOrderShowTest extends TestCase
             ->assertJsonPath('data.created_by.name', 'Creador Histórico');
     }
 
-    public function test_order_currency_is_historical_while_nested_price_list_is_current(): void
+    public function test_order_and_nested_price_list_currency_are_the_same_historical_snapshot(): void
     {
         [$user, $laboratory, $order] = $this->orderContext();
         $order->priceList()->update(['currency' => 'USD']);
@@ -161,7 +164,7 @@ final class LaboratoryOrderShowTest extends TestCase
         $this->request($user, $laboratory, $order)
             ->assertOk()
             ->assertJsonPath('data.currency', 'GTQ')
-            ->assertJsonPath('data.price_list.currency', 'USD');
+            ->assertJsonPath('data.price_list.currency', 'GTQ');
     }
 
     public function test_persisted_price_list_wins_over_current_commercial_assignment(): void
@@ -205,11 +208,17 @@ final class LaboratoryOrderShowTest extends TestCase
         ];
     }
 
-    public function test_persisted_economic_values_are_returned_without_calculation(): void
-    {
+    #[DataProvider('persistedDiscountIntentProvider')]
+    public function test_persisted_economic_values_are_returned_without_calculation(
+        ?string $type,
+        ?string $value,
+        string $discount,
+    ): void {
         [$user, $laboratory, $order] = $this->orderContext(orderAttributes: [
             'subtotal' => '150.00',
-            'discount' => '10.00',
+            'discount_type' => $type,
+            'discount_value' => $value,
+            'discount' => $discount,
             'taxes' => '5.00',
             'total' => '145.00',
         ]);
@@ -217,9 +226,21 @@ final class LaboratoryOrderShowTest extends TestCase
         $this->request($user, $laboratory, $order)
             ->assertOk()
             ->assertJsonPath('data.subtotal', '150.00')
-            ->assertJsonPath('data.discount', '10.00')
+            ->assertJsonPath('data.discount_type', $type)
+            ->assertJsonPath('data.discount_value', $value)
+            ->assertJsonPath('data.discount', $discount)
             ->assertJsonPath('data.taxes', '5.00')
             ->assertJsonPath('data.total', '145.00');
+    }
+
+    /** @return array<string, array{?string, ?string, string}> */
+    public static function persistedDiscountIntentProvider(): array
+    {
+        return [
+            'legacy amount with unknown intent' => [null, null, '10.00'],
+            'percentage intent' => [LaboratoryOrder::DISCOUNT_TYPE_PERCENTAGE, '10.00', '10.00'],
+            'amount intent' => [LaboratoryOrder::DISCOUNT_TYPE_AMOUNT, '25.00', '25.00'],
+        ];
     }
 
     public function test_show_is_read_only_and_does_not_touch_any_timestamp(): void
@@ -254,12 +275,12 @@ final class LaboratoryOrderShowTest extends TestCase
 
         $this->request($user, $laboratory, $order)->assertOk();
 
-        foreach (['laboratory_orders', 'patients', 'doctors', 'commercial_clients', 'price_lists', 'branches', 'users'] as $table) {
+        foreach (['laboratory_orders', 'patients', 'doctors', 'branches', 'users'] as $table) {
             $this->assertCount(1, collect($queries)->filter(
                 fn (string $sql): bool => str_contains($sql, "from \"{$table}\""),
             ), "Expected exactly one read from {$table}.");
         }
-        foreach (['commercial_client_price_lists', 'price_list_exams', 'laboratory_order_exams'] as $table) {
+        foreach (['commercial_clients', 'price_lists', 'commercial_client_price_lists', 'price_list_exams', 'laboratory_order_exams'] as $table) {
             $this->assertFalse(collect($queries)->contains(fn (string $sql): bool => str_contains($sql, $table)));
         }
         $this->assertFalse(collect($queries)->contains(
@@ -285,20 +306,20 @@ final class LaboratoryOrderShowTest extends TestCase
             ->assertJsonPath('code', 'SUBSCRIPTION_REQUIRED');
     }
 
-    public function test_route_controller_and_openapi_expose_exactly_three_be09_operations(): void
+    public function test_route_controller_and_openapi_expose_the_laboratory_order_contract(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
             ->values();
 
-        $this->assertCount(6, $routes);
-        $this->assertSame([['POST'], ['GET', 'HEAD'], ['POST'], ['DELETE'], ['PATCH'], ['GET', 'HEAD']], $routes->map(fn ($route): array => $route->methods())->all());
+        $this->assertCount(8, $routes);
+        $this->assertSame([['POST'], ['GET', 'HEAD'], ['POST'], ['DELETE'], ['PUT'], ['DELETE'], ['PATCH'], ['GET', 'HEAD']], $routes->map(fn ($route): array => $route->methods())->all());
         foreach ($routes as $route) {
             $this->assertContains('saas', $route->middleware());
         }
         $showRoute = $routes->first(fn ($route): bool => in_array('GET', $route->methods(), true));
         $this->assertSame('[0-9]+', $showRoute->wheres['laboratoryOrder']);
-        $this->assertSame(['addExam', 'listExams', 'removeExam', 'show', 'store', 'updateStatus'], collect((new ReflectionClass(LaboratoryOrderController::class))
+        $this->assertSame(['addExam', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus'], collect((new ReflectionClass(LaboratoryOrderController::class))
             ->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === LaboratoryOrderController::class)
             ->pluck('name')->sort()->values()->all());
@@ -313,8 +334,8 @@ final class LaboratoryOrderShowTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(62, $operationCount);
-        $this->assertCount(70, Route::getRoutes()->getRoutes());
+        $this->assertSame(64, $operationCount);
+        $this->assertCount(72, Route::getRoutes()->getRoutes());
         $this->assertSame(['get'], array_keys($path));
         $parameter = collect($operation['parameters'])->firstWhere('name', 'laboratoryOrder');
         $this->assertSame('path', $parameter['in']);

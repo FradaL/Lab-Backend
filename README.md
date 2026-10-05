@@ -239,6 +239,58 @@ PATCH  /api/v1/doctors/{doctor}
 PATCH  /api/v1/doctors/{doctor}/status
 ```
 
+## Módulo Laboratory Orders
+
+Las órdenes pertenecen al laboratorio activo y sus rutas usan el middleware `saas`. El backend crea los snapshots comerciales al crear la orden y snapshots de examen/precio al agregar cada línea. Las líneas repetidas se conservan como líneas independientes; cambios posteriores al catálogo no revalorizan snapshots existentes.
+
+```text
+POST   /api/v1/laboratory-orders
+GET    /api/v1/laboratory-orders/{laboratoryOrder}
+PATCH  /api/v1/laboratory-orders/{laboratoryOrder}/status
+GET    /api/v1/laboratory-orders/{laboratoryOrder}/exams
+POST   /api/v1/laboratory-orders/{laboratoryOrder}/exams
+DELETE /api/v1/laboratory-orders/{laboratoryOrder}/exams/{laboratoryOrderExam}
+PUT    /api/v1/laboratory-orders/{laboratoryOrder}/discount
+DELETE /api/v1/laboratory-orders/{laboratoryOrder}/discount
+```
+
+Todas estas rutas requieren sesión Sanctum y `X-Laboratory-ID`. Las órdenes y líneas fuera del tenant responden con `404` neutral. La economía y la intención de descuento son administradas por el servidor; Store no acepta importes económicos.
+
+### Economía de la orden
+
+La economía se calcula desde los precios `unit_price` guardados en cada línea:
+
+- `subtotal`: suma exacta de los snapshots de precio.
+- `discount_type` y `discount_value`: intención opcional del descuento global (`percentage` o `amount`).
+- `discount`: importe resultante; un monto fijo se limita al subtotal sin alterar la intención guardada.
+- `taxes`: actualmente `0.00`.
+- `total`: subtotal menos descuento más impuestos.
+
+Los importes se persisten como `NUMERIC(12,2)` y el cálculo usa centavos enteros con redondeo HALF_UP. No se recalculan líneas históricas contra el catálogo. Crear o quitar una línea, o cambiar el descuento, recalcula subtotal y totales dentro de una transacción y bajo el lock de la orden.
+
+ADD/DELETE de exámenes y PUT/DELETE de descuento sólo se permiten mientras la orden está `pending`. Después de avanzar de estado, la composición y el descuento quedan congelados; las lecturas de la orden y sus líneas siguen disponibles.
+
+Para configurar o reemplazar el descuento global, el PUT acepta exactamente:
+
+```json
+{
+  "type": "percentage",
+  "value": "10.00"
+}
+```
+
+`type` acepta `percentage` o `amount`; `value` debe ser mayor que cero y tener como máximo dos decimales. Los porcentajes no pueden superar 100. Para quitar la intención completa, utilizar DELETE. Ambos endpoints devuelven `200` con el recurso actualizado de la orden; los exámenes se consultan por separado mediante `/exams`.
+
+Para ejecutar regresiones del módulo desde `laradock/`:
+
+```bash
+docker compose exec workspace php artisan test tests/Feature/Api/V1/LaboratoryOrders
+docker compose exec workspace php artisan test tests/Unit/Services/LaboratoryOrders
+docker compose exec workspace php artisan l5-swagger:generate
+```
+
+Las pruebas de concurrencia que validan `FOR UPDATE` deben ejecutarse contra PostgreSQL real; SQLite no emula locking de filas.
+
 ## Acceso local
 
 - Backend: http://localhost:8081

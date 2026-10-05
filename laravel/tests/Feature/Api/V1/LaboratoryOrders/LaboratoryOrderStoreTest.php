@@ -40,12 +40,17 @@ final class LaboratoryOrderStoreTest extends TestCase
         $this->assertSame($patient->id, $order->patient_id);
         $this->assertSame($doctor->id, $order->doctor_id);
         $this->assertSame($client->id, $order->commercial_client_id);
+        $this->assertSame($client->name, $order->commercial_client_name);
+        $this->assertSame($client->type, $order->commercial_client_type);
         $this->assertSame($priceList->id, $order->price_list_id);
+        $this->assertSame($priceList->name, $order->price_list_name);
         $this->assertSame($user->id, $order->created_by);
         $this->assertSame(LaboratoryOrder::STATUS_PENDING, $order->status);
         $this->assertSame('2026-10-03 14:30:00', $order->ordered_at->format('Y-m-d H:i:s'));
         $this->assertSame('Observaciones opcionales', $order->notes);
         $this->assertSame('0.00', $order->subtotal);
+        $this->assertNull($order->discount_type);
+        $this->assertNull($order->discount_value);
         $this->assertSame('0.00', $order->discount);
         $this->assertSame('0.00', $order->taxes);
         $this->assertSame('0.00', $order->total);
@@ -55,8 +60,9 @@ final class LaboratoryOrderStoreTest extends TestCase
 
         $this->assertSame([
             'id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor',
-            'commercial_client', 'price_list', 'branch', 'subtotal', 'discount',
-            'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at',
+            'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type',
+            'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by',
+            'created_at', 'updated_at',
         ], array_keys($response->json('data')));
         $this->assertSame(['id', 'first_names', 'last_names'], array_keys($response->json('data.patient')));
         $this->assertSame(['id', 'first_names', 'last_names'], array_keys($response->json('data.doctor')));
@@ -74,6 +80,11 @@ final class LaboratoryOrderStoreTest extends TestCase
             ->assertJsonPath('data.created_by.id', $user->id)
             ->assertJsonPath('data.ordered_at', '2026-10-03 14:30:00')
             ->assertJsonPath('data.subtotal', '0.00')
+            ->assertJsonPath('data.discount_type', null)
+            ->assertJsonPath('data.discount_value', null)
+            ->assertJsonPath('data.discount', '0.00')
+            ->assertJsonPath('data.taxes', '0.00')
+            ->assertJsonPath('data.total', '0.00')
             ->assertJsonPath('data.currency', $priceList->currency)
             ->assertJsonMissingPath('data.laboratory_id')
             ->assertJsonMissingPath('data.branch_id')
@@ -101,6 +112,8 @@ final class LaboratoryOrderStoreTest extends TestCase
         $order = LaboratoryOrder::query()->sole();
         $this->assertNull($order->doctor_id);
         $this->assertNull($order->commercial_client_id);
+        $this->assertNull($order->commercial_client_name);
+        $this->assertNull($order->commercial_client_type);
         $response
             ->assertJsonPath('data.doctor', null)
             ->assertJsonPath('data.commercial_client', null)
@@ -272,10 +285,12 @@ final class LaboratoryOrderStoreTest extends TestCase
     public static function unknownFieldProvider(): array
     {
         return collect([
-            'id', 'laboratory_id', 'code', 'status', 'subtotal', 'discount',
+            'id', 'laboratory_id', 'code', 'status', 'subtotal', 'discount_type',
+            'discount_value', 'discount',
             'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at',
             'exam_ids', 'exams', 'order_exams', 'items', 'discount_percentage',
             'tax_percentage', 'doctor_name', 'patient_name', 'commercial_client_name',
+            'commercial_client_type',
             'price_list_name', 'branch_name', 'foo',
         ])->mapWithKeys(fn (string $field): array => [$field => [$field]])->all();
     }
@@ -426,12 +441,12 @@ final class LaboratoryOrderStoreTest extends TestCase
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
             ->values();
 
-        $this->assertCount(6, $routes);
-        $this->assertSame([['POST'], ['GET', 'HEAD'], ['POST'], ['DELETE'], ['PATCH'], ['GET', 'HEAD']], $routes->map(fn ($route): array => $route->methods())->all());
+        $this->assertCount(8, $routes);
+        $this->assertSame([['POST'], ['GET', 'HEAD'], ['POST'], ['DELETE'], ['PUT'], ['DELETE'], ['PATCH'], ['GET', 'HEAD']], $routes->map(fn ($route): array => $route->methods())->all());
         foreach ($routes as $route) {
             $this->assertContains('saas', $route->middleware());
         }
-        $this->assertSame(['addExam', 'listExams', 'removeExam', 'show', 'store', 'updateStatus'], collect((new ReflectionClass(LaboratoryOrderController::class))
+        $this->assertSame(['addExam', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus'], collect((new ReflectionClass(LaboratoryOrderController::class))
             ->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === LaboratoryOrderController::class)
             ->pluck('name')->sort()->values()->all());
@@ -440,16 +455,19 @@ final class LaboratoryOrderStoreTest extends TestCase
         $document = json_decode(file_get_contents(storage_path('api-docs/api-docs.json')), true, flags: JSON_THROW_ON_ERROR);
         $operation = $document['paths']['/api/v1/laboratory-orders']['post'];
         $input = $document['components']['schemas']['CreateLaboratoryOrderInput'];
+        $commercialClientOutput = $document['components']['schemas']['LaboratoryOrderCommercialClient'];
+        $priceListOutput = $document['components']['schemas']['LaboratoryOrderPriceList'];
+        $orderOutput = $document['components']['schemas']['LaboratoryOrder'];
         $operationCount = collect($document['paths'])->sum(fn (array $path): int => count(array_intersect_key(
             $path,
             array_flip(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']),
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(62, $operationCount);
+        $this->assertSame(64, $operationCount);
         // The test bootstrap omits Laravel's generated storage route; the real
         // CLI inventory is asserted separately and contains one additional route.
-        $this->assertCount(70, Route::getRoutes()->getRoutes());
+        $this->assertCount(72, Route::getRoutes()->getRoutes());
         $this->assertSame([
             'branch_id', 'patient_id', 'doctor_id', 'commercial_client_id',
             'price_list_id', 'ordered_at', 'notes',
@@ -459,6 +477,17 @@ final class LaboratoryOrderStoreTest extends TestCase
         $this->assertSame(['integer', 'null'], $input['properties']['doctor_id']['type']);
         $this->assertSame(['integer', 'null'], $input['properties']['commercial_client_id']['type']);
         $this->assertSame(['string', 'null'], $input['properties']['notes']['type']);
+        $this->assertStringContainsString('histórico', $commercialClientOutput['properties']['name']['description']);
+        $this->assertStringContainsString('histórico', $commercialClientOutput['properties']['type']['description']);
+        $this->assertStringContainsString('histórico', $priceListOutput['properties']['name']['description']);
+        $this->assertStringContainsString('histórica', $priceListOutput['properties']['currency']['description']);
+        $this->assertContains('discount_type', $orderOutput['required']);
+        $this->assertContains('discount_value', $orderOutput['required']);
+        $this->assertSame(['string', 'null'], $orderOutput['properties']['discount_type']['type']);
+        $this->assertSame(['percentage', 'amount', null], $orderOutput['properties']['discount_type']['enum']);
+        $this->assertSame(['string', 'null'], $orderOutput['properties']['discount_value']['type']);
+        $this->assertStringContainsString('10.00 para 10%', $orderOutput['properties']['discount_value']['description']);
+        $this->assertStringContainsString('Monto monetario resultante', $orderOutput['properties']['discount']['description']);
         $this->assertSame('#/components/schemas/CreateLaboratoryOrderInput', $operation['requestBody']['content']['application/json']['schema']['$ref']);
         $this->assertSame('#/components/schemas/LaboratoryOrderResponse', $operation['responses']['201']['content']['application/json']['schema']['$ref']);
         $this->assertSame([201, 400, 401, 403, 422], array_keys($operation['responses']));

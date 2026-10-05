@@ -41,8 +41,6 @@ final class TransitionLaboratoryOrderStatus
         return $order->load([
             'patient',
             'doctor',
-            'commercialClient',
-            'priceList',
             'branch',
             'createdBy',
         ]);

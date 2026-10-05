@@ -81,13 +81,18 @@ final class CreateLaboratoryOrder
             'patient_id' => $patient->getKey(),
             'doctor_id' => $doctor?->getKey(),
             'commercial_client_id' => $commercialClient?->getKey(),
+            'commercial_client_name' => $commercialClient?->name,
+            'commercial_client_type' => $commercialClient?->type,
             'price_list_id' => $priceList->getKey(),
+            'price_list_name' => $priceList->name,
             'code' => 'ORD-'.Str::ulid(),
             'ordered_at' => $attributes['ordered_at'],
             'status' => LaboratoryOrder::STATUS_PENDING,
             'notes' => $attributes['notes'],
             'subtotal' => '0.00',
             'discount' => '0.00',
+            'discount_type' => null,
+            'discount_value' => null,
             'taxes' => '0.00',
             'total' => '0.00',
             'currency' => $priceList->currency,
@@ -97,8 +102,6 @@ final class CreateLaboratoryOrder
         $order->setRelation('branch', $branch);
         $order->setRelation('patient', $patient);
         $order->setRelation('doctor', $doctor);
-        $order->setRelation('commercialClient', $commercialClient);
-        $order->setRelation('priceList', $priceList);
         $order->setRelation('createdBy', $creator);
 
         return $order;

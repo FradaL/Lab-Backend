@@ -4,12 +4,11 @@ namespace App\Actions\LaboratoryOrders;
 
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
-use App\Models\LaboratoryOrderExam;
 use App\Services\LaboratoryOrders\RecalculateLaboratoryOrderEconomics;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
-final class RemoveExamFromLaboratoryOrder
+final class SetLaboratoryOrderDiscount
 {
     public function __construct(
         private readonly RecalculateLaboratoryOrderEconomics $recalculateEconomics,
@@ -18,9 +17,10 @@ final class RemoveExamFromLaboratoryOrder
     public function execute(
         Laboratory $laboratory,
         int $laboratoryOrderId,
-        int $laboratoryOrderExamId,
-    ): void {
-        DB::transaction(function () use ($laboratory, $laboratoryOrderId, $laboratoryOrderExamId): void {
+        string $type,
+        string $value,
+    ): LaboratoryOrder {
+        $order = DB::transaction(function () use ($laboratory, $laboratoryOrderId, $type, $value): LaboratoryOrder {
             $order = LaboratoryOrder::forLaboratory($laboratory)
                 ->whereKey($laboratoryOrderId)
                 ->lockForUpdate()
@@ -32,22 +32,19 @@ final class RemoveExamFromLaboratoryOrder
 
             if ($order->status !== LaboratoryOrder::STATUS_PENDING) {
                 throw ValidationException::withMessages([
-                    'status' => ['Sólo se pueden eliminar exámenes de órdenes pendientes.'],
+                    'status' => ['Sólo se puede modificar el descuento de órdenes pendientes.'],
                 ]);
             }
 
-            $orderExam = LaboratoryOrderExam::forLaboratory($laboratory)
-                ->where('laboratory_order_id', $order->id)
-                ->whereKey($laboratoryOrderExamId)
-                ->first();
-
-            if ($orderExam === null) {
-                abort(404, 'Resource not found.');
-            }
-
-            $orderExam->delete();
+            $order->discount_type = $type;
+            $order->discount_value = $value;
+            $order->save();
 
             $this->recalculateEconomics->execute($laboratory, $order);
+
+            return $order;
         });
+
+        return $order->load(['patient', 'doctor', 'branch', 'createdBy']);
     }
 }

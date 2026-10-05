@@ -30,8 +30,6 @@ final class LaboratoryOrderExamStoreTest extends TestCase
     public function test_pending_order_accepts_exam_with_exact_server_owned_snapshots_and_resource(): void
     {
         [$user, $laboratory, $order, $exam, $priceList] = $this->activeContext();
-        $originalOrder = $order->fresh()->getRawOriginal();
-
         $response = $this->request($user, $laboratory, $order, ['laboratory_exam_id' => $exam->id])
             ->assertCreated();
 
@@ -44,7 +42,13 @@ final class LaboratoryOrderExamStoreTest extends TestCase
         $this->assertSame('GLU', $line->exam_code);
         $this->assertSame('Glucosa', $line->exam_name);
         $this->assertSame('Precio particular', $line->price_list_name);
-        $this->assertSame($originalOrder, $order->fresh()->getRawOriginal());
+        $order->refresh();
+        $this->assertSame('35.00', $order->subtotal);
+        $this->assertSame('0.00', $order->discount);
+        $this->assertSame('0.00', $order->taxes);
+        $this->assertSame('35.00', $order->total);
+        $this->assertNull($order->discount_type);
+        $this->assertNull($order->discount_value);
 
         $this->assertSame(
             ['id', 'exam', 'price_list', 'unit_price', 'created_at', 'updated_at'],
@@ -65,6 +69,15 @@ final class LaboratoryOrderExamStoreTest extends TestCase
             ->assertJsonMissingPath('data.subtotal')
             ->assertJsonMissingPath('data.currency')
             ->assertJsonMissingPath('data.status');
+
+        $this->actingAs($user, 'web')
+            ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
+            ->getJson("/api/v1/laboratory-orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('data.subtotal', '35.00')
+            ->assertJsonPath('data.discount', '0.00')
+            ->assertJsonPath('data.taxes', '0.00')
+            ->assertJsonPath('data.total', '35.00');
     }
 
     public function test_same_exam_three_times_creates_distinct_lines_with_independent_snapshots(): void
@@ -290,7 +303,7 @@ final class LaboratoryOrderExamStoreTest extends TestCase
         $this->assertSame($originalOrder, $order->fresh()->getRawOriginal());
     }
 
-    public function test_add_queries_only_authoritative_models_and_performs_no_economic_or_order_write(): void
+    public function test_add_queries_authoritative_models_and_recalculates_economics_without_sql_sum(): void
     {
         [$user, $laboratory, $order, $exam] = $this->activeContext([
             'subtotal' => '100.00',
@@ -309,12 +322,16 @@ final class LaboratoryOrderExamStoreTest extends TestCase
             $this->assertFalse(collect($queries)->contains(fn (string $sql): bool => str_contains($sql, $table)));
         }
         $this->assertFalse(collect($queries)->contains(fn (string $sql): bool => str_contains($sql, 'sum(')));
-        $this->assertFalse(collect($queries)->contains(fn (string $sql): bool => str_starts_with($sql, 'update "laboratory_orders"')));
+        $lineQueries = collect($queries)->filter(fn (string $sql): bool => str_contains($sql, 'from "laboratory_order_exams"'));
+        $this->assertCount(1, $lineQueries);
+        $this->assertStringContainsString('"laboratory_id"', $lineQueries->sole());
+        $this->assertStringContainsString('"laboratory_order_id"', $lineQueries->sole());
+        $this->assertCount(1, collect($queries)->filter(fn (string $sql): bool => str_starts_with($sql, 'update "laboratory_orders"')));
         $order->refresh();
-        $this->assertSame('100.00', $order->subtotal);
-        $this->assertSame('5.00', $order->discount);
-        $this->assertSame('10.00', $order->taxes);
-        $this->assertSame('105.00', $order->total);
+        $this->assertSame('35.00', $order->subtotal);
+        $this->assertSame('0.00', $order->discount);
+        $this->assertSame('0.00', $order->taxes);
+        $this->assertSame('35.00', $order->total);
         $this->assertSame(LaboratoryOrder::STATUS_PENDING, $order->status);
     }
 
@@ -330,7 +347,7 @@ final class LaboratoryOrderExamStoreTest extends TestCase
         $this->assertContains('saas', $route->middleware());
         $this->assertSame('[0-9]+', $route->wheres['laboratoryOrder']);
         $this->assertSame([
-            'addExam', 'listExams', 'removeExam', 'show', 'store', 'updateStatus',
+            'addExam', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus',
         ], collect((new ReflectionClass(LaboratoryOrderController::class))
             ->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === LaboratoryOrderController::class)
@@ -347,7 +364,7 @@ final class LaboratoryOrderExamStoreTest extends TestCase
         )));
 
         $this->assertSame(['get', 'post'], array_keys($path));
-        $this->assertSame(62, $operationCount);
+        $this->assertSame(64, $operationCount);
         $this->assertSame(['laboratory_exam_id'], $schema['required']);
         $this->assertSame(['laboratory_exam_id'], array_keys($schema['properties']));
         $this->assertFalse($schema['additionalProperties']);

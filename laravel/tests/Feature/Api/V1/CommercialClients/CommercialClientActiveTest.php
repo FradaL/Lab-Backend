@@ -321,7 +321,7 @@ class CommercialClientActiveTest extends TestCase
         $this->assertSame(['insurance', 'company', 'agreement', 'other'], $schema['properties']['type']['enum']);
         $this->assertSame(['data'], $collection['required']);
         $this->assertSame('#/components/schemas/ActiveCommercialClient', $collection['properties']['data']['items']['$ref']);
-        $this->assertCount(62, $operations);
+        $this->assertCount(64, $operations);
         $this->assertCount(6, $operations->filter(
             fn (array $item): bool => in_array('Commercial Clients', $item['tags'] ?? [], true),
         ));
