@@ -50,6 +50,12 @@ class PriceList extends Model
         return $this->hasMany(LaboratoryOrder::class);
     }
 
+    /** @return HasMany<LaboratoryOrderExam, $this> */
+    public function orderExams(): HasMany
+    {
+        return $this->hasMany(LaboratoryOrderExam::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *

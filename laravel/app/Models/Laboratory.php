@@ -124,6 +124,12 @@ class Laboratory extends Model
         return $this->hasMany(LaboratoryOrder::class);
     }
 
+    /** @return HasMany<LaboratoryOrderExam, $this> */
+    public function orderExams(): HasMany
+    {
+        return $this->hasMany(LaboratoryOrderExam::class);
+    }
+
     /**
      * @return HasMany<Subscription, $this>
      */

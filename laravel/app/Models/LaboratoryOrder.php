@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'laboratory_id',
@@ -98,6 +99,12 @@ class LaboratoryOrder extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** @return HasMany<LaboratoryOrderExam, $this> */
+    public function orderExams(): HasMany
+    {
+        return $this->hasMany(LaboratoryOrderExam::class);
     }
 
     /** @return array<string, string> */

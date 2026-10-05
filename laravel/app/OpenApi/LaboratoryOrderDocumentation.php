@@ -9,6 +9,72 @@ use OpenApi\Attributes as OA;
     description: 'Creación de órdenes de laboratorio.',
 )]
 #[OA\Schema(
+    schema: 'AddLaboratoryOrderExamInput',
+    required: ['laboratory_exam_id'],
+    properties: [
+        new OA\Property(property: 'laboratory_exam_id', type: 'integer', format: 'int64', minimum: 1, example: 15),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'LaboratoryOrderExamSnapshot',
+    required: ['id', 'code', 'name'],
+    properties: [
+        new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 15),
+        new OA\Property(property: 'code', description: 'Código capturado al agregar la línea.', type: 'string', example: 'GLU'),
+        new OA\Property(property: 'name', description: 'Nombre capturado al agregar la línea.', type: 'string', example: 'Glucosa'),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'LaboratoryOrderExamPriceListSnapshot',
+    required: ['id', 'name'],
+    properties: [
+        new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 5),
+        new OA\Property(property: 'name', description: 'Nombre de la lista capturado al agregar la línea.', type: 'string', example: 'Precio particular'),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'LaboratoryOrderExam',
+    required: ['id', 'exam', 'price_list', 'unit_price', 'created_at', 'updated_at'],
+    properties: [
+        new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 501),
+        new OA\Property(property: 'exam', ref: '#/components/schemas/LaboratoryOrderExamSnapshot'),
+        new OA\Property(property: 'price_list', ref: '#/components/schemas/LaboratoryOrderExamPriceListSnapshot'),
+        new OA\Property(property: 'unit_price', description: 'Precio capturado al agregar la línea.', type: 'string', pattern: '^\d+\.\d{2}$', example: '35.00'),
+        new OA\Property(property: 'created_at', type: 'string', format: 'date-time'),
+        new OA\Property(property: 'updated_at', type: 'string', format: 'date-time'),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'LaboratoryOrderExamResponse',
+    required: ['data'],
+    properties: [
+        new OA\Property(property: 'data', ref: '#/components/schemas/LaboratoryOrderExam'),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'LaboratoryOrderExamCollectionResponse',
+    required: ['data'],
+    properties: [
+        new OA\Property(
+            property: 'data',
+            type: 'array',
+            items: new OA\Items(ref: '#/components/schemas/LaboratoryOrderExam'),
+        ),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
     schema: 'CreateLaboratoryOrderInput',
     required: ['branch_id', 'patient_id', 'doctor_id', 'commercial_client_id', 'price_list_id', 'ordered_at', 'notes'],
     properties: [

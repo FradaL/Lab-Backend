@@ -39,6 +39,12 @@ class LaboratoryExam extends Model
         return $this->hasMany(PriceListExam::class);
     }
 
+    /** @return HasMany<LaboratoryOrderExam, $this> */
+    public function orderExams(): HasMany
+    {
+        return $this->hasMany(LaboratoryOrderExam::class);
+    }
+
     /**
      * @return BelongsTo<LaboratoryArea, $this>
      */

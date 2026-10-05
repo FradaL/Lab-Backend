@@ -32,6 +32,12 @@ Route::prefix('v1')->group(function (): void {
 
     Route::middleware('saas')->group(function (): void {
         Route::post('/laboratory-orders', [LaboratoryOrderController::class, 'store']);
+        Route::get('/laboratory-orders/{laboratoryOrder}/exams', [LaboratoryOrderController::class, 'listExams'])
+            ->whereNumber('laboratoryOrder');
+        Route::post('/laboratory-orders/{laboratoryOrder}/exams', [LaboratoryOrderController::class, 'addExam'])
+            ->whereNumber('laboratoryOrder');
+        Route::delete('/laboratory-orders/{laboratoryOrder}/exams/{laboratoryOrderExam}', [LaboratoryOrderController::class, 'removeExam'])
+            ->whereNumber(['laboratoryOrder', 'laboratoryOrderExam']);
         Route::patch('/laboratory-orders/{laboratoryOrder}/status', [LaboratoryOrderController::class, 'updateStatus'])
             ->whereNumber('laboratoryOrder');
         Route::get('/laboratory-orders/{laboratoryOrder}', [LaboratoryOrderController::class, 'show'])

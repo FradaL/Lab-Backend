@@ -93,7 +93,6 @@ class LaboratoryOrderPersistenceTest extends TestCase
             'created_at',
             'updated_at',
         ], Schema::getColumnListing('laboratory_orders'));
-        $this->assertFalse(Schema::hasTable('laboratory_order_exams'));
     }
 
     public function test_scope_isolates_tenants_without_http_context(): void
