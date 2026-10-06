@@ -335,7 +335,7 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
         )));
 
         $this->assertSame(['delete'], array_keys($path));
-        $this->assertSame(65, $operationCount);
+        $this->assertSame(66, $operationCount);
         $this->assertArrayNotHasKey('requestBody', $operation);
         $this->assertSame([204, 400, 401, 403, 404, 422], array_keys($operation['responses']));
         $this->assertStringContainsString('no el identificador del examen', strtolower($operation['description']));

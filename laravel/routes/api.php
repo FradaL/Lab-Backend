@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\AvailableLaboratoryController;
+use App\Http\Controllers\Api\V1\BranchController;
 use App\Http\Controllers\Api\V1\CommercialClientController;
 use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
 use App\Http\Controllers\Api\V1\DoctorController;
@@ -31,6 +32,7 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::middleware('saas')->group(function (): void {
+        Route::get('/branches/active', [BranchController::class, 'active']);
         Route::post('/laboratory-orders', [LaboratoryOrderController::class, 'store']);
         Route::get('/laboratory-orders/{laboratoryOrder}/exams', [LaboratoryOrderController::class, 'listExams'])
             ->whereNumber('laboratoryOrder');

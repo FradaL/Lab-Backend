@@ -429,7 +429,7 @@ class CommercialClientStatusTest extends TestCase
         $operations = collect($document['paths'])->flatMap(
             fn (array $item): array => array_values(array_intersect_key($item, $verbs)),
         );
-        $this->assertCount(65, $operations);
+        $this->assertCount(66, $operations);
         $this->assertCount(6, $operations->filter(
             fn (array $item): bool => in_array('Commercial Clients', $item['tags'] ?? [], true),
         ));
