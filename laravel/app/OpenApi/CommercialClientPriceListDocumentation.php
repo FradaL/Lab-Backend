@@ -80,6 +80,54 @@ use OpenApi\Attributes as OA;
     ],
     type: 'object',
 )]
+#[OA\Schema(
+    schema: 'CommercialClientPriceListIndexItem',
+    allOf: [
+        new OA\Schema(ref: '#/components/schemas/CommercialClientPriceList'),
+        new OA\Schema(
+            required: ['is_effective'],
+            properties: [
+                new OA\Property(
+                    property: 'is_effective',
+                    description: 'Valor derivado, no persistido, calculado respecto de effective_date.',
+                    type: 'boolean',
+                    example: true,
+                ),
+            ],
+            type: 'object',
+        ),
+    ],
+)]
+#[OA\Schema(
+    schema: 'CommercialClientPriceListCollection',
+    required: ['data', 'links', 'meta'],
+    properties: [
+        new OA\Property(property: 'data', type: 'array', items: new OA\Items(ref: '#/components/schemas/CommercialClientPriceListIndexItem')),
+        new OA\Property(
+            property: 'links',
+            required: ['first', 'last', 'prev', 'next'],
+            properties: [
+                new OA\Property(property: 'first', type: 'string', format: 'uri'),
+                new OA\Property(property: 'last', type: 'string', format: 'uri'),
+                new OA\Property(property: 'prev', type: ['string', 'null'], format: 'uri'),
+                new OA\Property(property: 'next', type: ['string', 'null'], format: 'uri'),
+            ],
+            type: 'object',
+        ),
+        new OA\Property(
+            property: 'meta',
+            required: ['current_page', 'last_page', 'per_page', 'total'],
+            properties: [
+                new OA\Property(property: 'current_page', type: 'integer', example: 1),
+                new OA\Property(property: 'last_page', type: 'integer', example: 1),
+                new OA\Property(property: 'per_page', type: 'integer', example: 15),
+                new OA\Property(property: 'total', type: 'integer', example: 1),
+            ],
+            type: 'object',
+        ),
+    ],
+    type: 'object',
+)]
 final class CommercialClientPriceListDocumentation
 {
     // OpenAPI components for commercial client price-list assignments.

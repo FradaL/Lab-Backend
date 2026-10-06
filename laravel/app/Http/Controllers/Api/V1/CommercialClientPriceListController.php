@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\CommercialClientPriceList\IndexCommercialClientPriceListRequest;
 use App\Http\Requests\Api\V1\CommercialClientPriceList\StoreCommercialClientPriceListRequest;
 use App\Http\Requests\Api\V1\CommercialClientPriceList\UpdateCommercialClientPriceListRequest;
 use App\Http\Requests\Api\V1\CommercialClientPriceList\UpdateCommercialClientPriceListStatusRequest;
@@ -12,16 +13,129 @@ use App\Models\CommercialClientPriceList;
 use App\Models\PriceList;
 use App\Tenancy\CurrentLaboratory;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
 
 class CommercialClientPriceListController extends Controller
 {
+    #[OA\Get(
+        path: '/api/v1/commercial-clients/{commercialClient}/price-list-assignments',
+        operationId: 'commercialClientPriceListAssignmentsIndex',
+        summary: 'Listar asignaciones de listas de precios de una entidad comercial',
+        description: 'Devuelve el historial administrativo paginado de asignaciones del cliente, incluidas asignaciones activas, inactivas, históricas y futuras. is_effective se deriva para effective_date y no se persiste. Este endpoint no sustituye al resolver operacional de pricing.',
+        security: [['sanctumCookie' => []]],
+        tags: ['Commercial Client Price List Assignments'],
+        parameters: [
+            new OA\Parameter(
+                name: 'commercialClient',
+                description: 'Identificador de la entidad comercial dentro del laboratorio actual.',
+                in: 'path',
+                required: true,
+                schema: new OA\Schema(type: 'integer', format: 'int64', minimum: 1),
+            ),
+            new OA\Parameter(ref: '#/components/parameters/LaboratoryContextHeader'),
+            new OA\Parameter(name: 'effective_date', description: 'Fecha de referencia inclusiva para calcular is_effective. Por defecto se usa la fecha actual en el timezone configurado por la aplicación.', in: 'query', schema: new OA\Schema(type: 'string', format: 'date')),
+            new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string', enum: ['active', 'inactive'])),
+            new OA\Parameter(name: 'effective', description: 'Filtra por el valor derivado de is_effective.', in: 'query', schema: new OA\Schema(type: 'boolean')),
+            new OA\Parameter(name: 'search', description: 'Búsqueda parcial case-insensitive por nombre de PriceList.', in: 'query', schema: new OA\Schema(type: 'string', maxLength: 150)),
+            new OA\Parameter(name: 'sort', in: 'query', schema: new OA\Schema(type: 'string', default: 'starts_at', enum: ['starts_at', 'ends_at', 'status', 'created_at', 'updated_at', 'price_list_name'])),
+            new OA\Parameter(name: 'direction', in: 'query', schema: new OA\Schema(type: 'string', default: 'desc', enum: ['asc', 'desc'])),
+            new OA\Parameter(name: 'per_page', in: 'query', schema: new OA\Schema(type: 'integer', default: 15, minimum: 1, maximum: 100)),
+            new OA\Parameter(name: 'page', in: 'query', schema: new OA\Schema(type: 'integer', default: 1, minimum: 1)),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Listado administrativo paginado de asignaciones.', content: new OA\JsonContent(ref: '#/components/schemas/CommercialClientPriceListCollection')),
+            new OA\Response(ref: '#/components/responses/LaboratoryContextRequired', response: 400),
+            new OA\Response(response: 401, description: 'La solicitud no tiene una sesión autenticada.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(
+                response: 403,
+                description: 'El usuario no tiene acceso al laboratorio o el laboratorio no tiene acceso vigente al SaaS.',
+                content: new OA\JsonContent(oneOf: [
+                    new OA\Schema(ref: '#/components/schemas/LaboratoryContextError'),
+                    new OA\Schema(ref: '#/components/schemas/SubscriptionAccessError'),
+                ]),
+            ),
+            new OA\Response(response: 404, description: 'La entidad comercial no existe dentro del laboratorio actual.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(response: 422, description: 'Los parámetros de consulta no son válidos.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
+        ],
+    )]
+    public function index(
+        CurrentLaboratory $currentLaboratory,
+        int $commercialClient,
+        Container $container,
+    ): AnonymousResourceCollection {
+        $laboratory = $currentLaboratory->get();
+        $resolvedCommercialClient = CommercialClient::forLaboratory($laboratory)
+            ->whereKey($commercialClient)
+            ->first();
+
+        if ($resolvedCommercialClient === null) {
+            abort(404, 'Resource not found.');
+        }
+
+        /** @var IndexCommercialClientPriceListRequest $indexRequest */
+        $indexRequest = $container->make(IndexCommercialClientPriceListRequest::class);
+        $effectiveDate = $indexRequest->effectiveDate();
+
+        $query = CommercialClientPriceList::forLaboratory($laboratory)
+            ->where('commercial_client_id', $resolvedCommercialClient->getKey())
+            ->with('priceList');
+
+        if (($status = $indexRequest->status()) !== null) {
+            $query->where('status', $status);
+        }
+
+        if (($effective = $indexRequest->effective()) !== null) {
+            $query->when(
+                $effective,
+                fn (Builder $query): Builder => $query->effectiveOn($effectiveDate),
+                fn (Builder $query): Builder => $query->whereNot(
+                    fn (Builder $query): Builder => $query->effectiveOn($effectiveDate),
+                ),
+            );
+        }
+
+        if (($search = $indexRequest->search()) !== null) {
+            $query->whereHas(
+                'priceList',
+                fn (Builder $query): Builder => $query->whereLike('name', '%'.$search.'%'),
+            );
+        }
+
+        if ($indexRequest->sort() === 'price_list_name') {
+            $query->orderBy(
+                PriceList::query()
+                    ->select('name')
+                    ->whereColumn('price_lists.id', 'commercial_client_price_lists.price_list_id')
+                    ->whereColumn('price_lists.laboratory_id', 'commercial_client_price_lists.laboratory_id'),
+                $indexRequest->direction(),
+            );
+        } else {
+            $query->orderBy($query->qualifyColumn($indexRequest->sort()), $indexRequest->direction());
+        }
+
+        $assignments = $query
+            ->orderBy($query->qualifyColumn('id'), $indexRequest->direction())
+            ->paginate($indexRequest->perPage())
+            ->withQueryString();
+
+        $assignments->getCollection()->each(
+            function (CommercialClientPriceList $assignment) use ($resolvedCommercialClient, $effectiveDate): void {
+                $assignment->setRelation('commercialClient', $resolvedCommercialClient);
+                $assignment->setAttribute('is_effective', $assignment->isEffectiveOn($effectiveDate));
+            },
+        );
+
+        return CommercialClientPriceListResource::collection($assignments);
+    }
+
     #[OA\Post(
         path: '/api/v1/commercial-clients/{commercialClient}/price-list-assignments',
         operationId: 'commercialClientPriceListAssignmentsStore',

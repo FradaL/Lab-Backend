@@ -50,6 +50,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/commercial-clients', [CommercialClientController::class, 'index']);
         Route::post('/commercial-clients', [CommercialClientController::class, 'store']);
         Route::get('/commercial-clients/active', [CommercialClientController::class, 'active']);
+        Route::get('/commercial-clients/{commercialClient}/price-list-assignments', [CommercialClientPriceListController::class, 'index'])
+            ->whereNumber('commercialClient');
         Route::post('/commercial-clients/{commercialClient}/price-list-assignments', [CommercialClientPriceListController::class, 'store'])
             ->whereNumber('commercialClient');
         Route::patch('/commercial-clients/{commercialClient}/price-list-assignments/{assignment}', [CommercialClientPriceListController::class, 'update'])

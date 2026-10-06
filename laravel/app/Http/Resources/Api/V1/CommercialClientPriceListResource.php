@@ -25,6 +25,10 @@ class CommercialClientPriceListResource extends JsonResource
             'starts_at' => $this->starts_at?->toDateString(),
             'ends_at' => $this->ends_at?->toDateString(),
             'status' => $this->status,
+            $this->mergeWhen(
+                array_key_exists('is_effective', $this->resource->getAttributes()),
+                ['is_effective' => (bool) $this->resource->getAttribute('is_effective')],
+            ),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

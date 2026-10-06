@@ -332,7 +332,7 @@ class CommercialClientPriceListStoreTest extends TestCase
         $routes = collect(Route::getRoutes()->getRoutes());
         $assignmentRoutes = $routes->filter(fn ($route): bool => str_contains($route->uri(), 'price-list-assignments'));
 
-        $this->assertCount(3, $assignmentRoutes);
+        $this->assertCount(4, $assignmentRoutes);
         $storeRoute = $assignmentRoutes->first(fn ($route): bool => $route->methods() === ['POST']);
         $updateRoute = $assignmentRoutes->first(fn ($route): bool => $route->uri() === 'api/v1/commercial-clients/{commercialClient}/price-list-assignments/{assignment}');
         $statusRoute = $assignmentRoutes->first(fn ($route): bool => str_ends_with($route->uri(), '/status'));
@@ -352,7 +352,7 @@ class CommercialClientPriceListStoreTest extends TestCase
         $methods = collect((new ReflectionClass(CommercialClientPriceListController::class))->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === CommercialClientPriceListController::class)
             ->pluck('name')->all();
-        $this->assertSame(['store', 'update', 'updateStatus'], $methods);
+        $this->assertSame(['index', 'store', 'update', 'updateStatus'], $methods);
 
         $this->artisan('l5-swagger:generate')->assertExitCode(0);
         $document = json_decode(file_get_contents(storage_path('api-docs/api-docs.json')), true, flags: JSON_THROW_ON_ERROR);
@@ -368,8 +368,8 @@ class CommercialClientPriceListStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertCount(64, $operations);
-        $this->assertCount(4, $operations->filter(fn (array $item): bool => in_array('Commercial Client Price List Assignments', $item['tags'] ?? [], true)));
+        $this->assertCount(65, $operations);
+        $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Commercial Client Price List Assignments', $item['tags'] ?? [], true)));
         $this->assertCount(6, $operations->filter(fn (array $item): bool => in_array('Commercial Clients', $item['tags'] ?? [], true)));
         $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Exam Prices', $item['tags'] ?? [], true)));
         $this->assertSame(['price_list_id', 'starts_at'], $schema['required']);
