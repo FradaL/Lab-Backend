@@ -185,6 +185,57 @@ use OpenApi\Attributes as OA;
     type: 'object',
 )]
 #[OA\Schema(
+    schema: 'LaboratoryOrderListItem',
+    required: ['id', 'code', 'ordered_at', 'status', 'branch', 'patient', 'doctor', 'commercial_client', 'exam_count', 'currency', 'total', 'created_by'],
+    properties: [
+        new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 123),
+        new OA\Property(property: 'code', type: 'string', maxLength: 45, pattern: '^ORD-[0-9A-HJKMNP-TV-Z]{26}$', example: 'ORD-01K6PW1VC7QFM4R6FY0WYQ0B6W'),
+        new OA\Property(property: 'ordered_at', type: 'string', example: '2026-10-03 14:30:00'),
+        new OA\Property(property: 'status', type: 'string', enum: ['pending', 'in_process', 'completed', 'cancelled'], example: 'pending'),
+        new OA\Property(property: 'branch', ref: '#/components/schemas/LaboratoryOrderBranch'),
+        new OA\Property(property: 'patient', ref: '#/components/schemas/LaboratoryOrderPatient'),
+        new OA\Property(property: 'doctor', oneOf: [new OA\Schema(ref: '#/components/schemas/LaboratoryOrderDoctor'), new OA\Schema(type: 'null')]),
+        new OA\Property(property: 'commercial_client', oneOf: [new OA\Schema(ref: '#/components/schemas/LaboratoryOrderCommercialClient'), new OA\Schema(type: 'null')]),
+        new OA\Property(property: 'exam_count', description: 'Cantidad de líneas físicas LaboratoryOrderExam, incluidas las solicitudes repetidas.', type: 'integer', minimum: 0, example: 3),
+        new OA\Property(property: 'currency', description: 'Moneda histórica capturada al crear la orden.', type: 'string', pattern: '^[A-Z]{3}$', example: 'GTQ'),
+        new OA\Property(property: 'total', description: 'Total económico persistido de la orden; no se recalcula durante el listado.', type: 'string', pattern: '^\\d+\\.\\d{2}$', example: '175.00'),
+        new OA\Property(property: 'created_by', ref: '#/components/schemas/LaboratoryOrderCreator'),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'LaboratoryOrderListResponse',
+    required: ['data', 'links', 'meta'],
+    properties: [
+        new OA\Property(property: 'data', type: 'array', items: new OA\Items(ref: '#/components/schemas/LaboratoryOrderListItem')),
+        new OA\Property(
+            property: 'links',
+            required: ['first', 'last', 'prev', 'next'],
+            properties: [
+                new OA\Property(property: 'first', type: 'string', format: 'uri'),
+                new OA\Property(property: 'last', type: 'string', format: 'uri'),
+                new OA\Property(property: 'prev', type: ['string', 'null'], format: 'uri'),
+                new OA\Property(property: 'next', type: ['string', 'null'], format: 'uri'),
+            ],
+            type: 'object',
+        ),
+        new OA\Property(
+            property: 'meta',
+            required: ['current_page', 'last_page', 'per_page', 'total'],
+            properties: [
+                new OA\Property(property: 'current_page', type: 'integer', example: 1),
+                new OA\Property(property: 'last_page', type: 'integer', example: 1),
+                new OA\Property(property: 'per_page', type: 'integer', example: 15),
+                new OA\Property(property: 'total', type: 'integer', example: 1),
+            ],
+            type: 'object',
+        ),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
     schema: 'LaboratoryOrder',
     required: ['id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor', 'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type', 'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at'],
     properties: [

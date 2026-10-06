@@ -33,6 +33,7 @@ Route::prefix('v1')->group(function (): void {
 
     Route::middleware('saas')->group(function (): void {
         Route::get('/branches/active', [BranchController::class, 'active']);
+        Route::get('/laboratory-orders', [LaboratoryOrderController::class, 'index']);
         Route::post('/laboratory-orders', [LaboratoryOrderController::class, 'store']);
         Route::get('/laboratory-orders/{laboratoryOrder}/exams', [LaboratoryOrderController::class, 'listExams'])
             ->whereNumber('laboratoryOrder');

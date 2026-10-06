@@ -315,7 +315,7 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
         $this->assertSame('[0-9]+', $route->wheres['laboratoryOrder']);
         $this->assertSame('[0-9]+', $route->wheres['laboratoryOrderExam']);
         $this->assertSame([
-            'addExam', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus',
+            'addExam', 'index', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus',
         ], collect((new ReflectionClass(LaboratoryOrderController::class))
             ->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === LaboratoryOrderController::class)
@@ -335,7 +335,7 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
         )));
 
         $this->assertSame(['delete'], array_keys($path));
-        $this->assertSame(66, $operationCount);
+        $this->assertSame(67, $operationCount);
         $this->assertArrayNotHasKey('requestBody', $operation);
         $this->assertSame([204, 400, 401, 403, 404, 422], array_keys($operation['responses']));
         $this->assertStringContainsString('no el identificador del examen', strtolower($operation['description']));

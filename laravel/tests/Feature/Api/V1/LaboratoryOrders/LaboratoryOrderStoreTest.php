@@ -441,12 +441,12 @@ final class LaboratoryOrderStoreTest extends TestCase
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
             ->values();
 
-        $this->assertCount(8, $routes);
-        $this->assertSame([['POST'], ['GET', 'HEAD'], ['POST'], ['DELETE'], ['PUT'], ['DELETE'], ['PATCH'], ['GET', 'HEAD']], $routes->map(fn ($route): array => $route->methods())->all());
+        $this->assertCount(9, $routes);
+        $this->assertSame([['GET', 'HEAD'], ['POST'], ['GET', 'HEAD'], ['POST'], ['DELETE'], ['PUT'], ['DELETE'], ['PATCH'], ['GET', 'HEAD']], $routes->map(fn ($route): array => $route->methods())->all());
         foreach ($routes as $route) {
             $this->assertContains('saas', $route->middleware());
         }
-        $this->assertSame(['addExam', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus'], collect((new ReflectionClass(LaboratoryOrderController::class))
+        $this->assertSame(['addExam', 'index', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus'], collect((new ReflectionClass(LaboratoryOrderController::class))
             ->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === LaboratoryOrderController::class)
             ->pluck('name')->sort()->values()->all());
@@ -464,10 +464,10 @@ final class LaboratoryOrderStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(66, $operationCount);
+        $this->assertSame(67, $operationCount);
         // The test bootstrap omits Laravel's generated storage route; the real
         // CLI inventory is asserted separately and contains one additional route.
-        $this->assertCount(74, Route::getRoutes()->getRoutes());
+        $this->assertCount(75, Route::getRoutes()->getRoutes());
         $this->assertSame([
             'branch_id', 'patient_id', 'doctor_id', 'commercial_client_id',
             'price_list_id', 'ordered_at', 'notes',

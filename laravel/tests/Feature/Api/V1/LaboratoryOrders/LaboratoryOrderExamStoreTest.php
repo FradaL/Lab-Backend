@@ -347,7 +347,7 @@ final class LaboratoryOrderExamStoreTest extends TestCase
         $this->assertContains('saas', $route->middleware());
         $this->assertSame('[0-9]+', $route->wheres['laboratoryOrder']);
         $this->assertSame([
-            'addExam', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus',
+            'addExam', 'index', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus',
         ], collect((new ReflectionClass(LaboratoryOrderController::class))
             ->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === LaboratoryOrderController::class)
@@ -364,7 +364,7 @@ final class LaboratoryOrderExamStoreTest extends TestCase
         )));
 
         $this->assertSame(['get', 'post'], array_keys($path));
-        $this->assertSame(66, $operationCount);
+        $this->assertSame(67, $operationCount);
         $this->assertSame(['laboratory_exam_id'], $schema['required']);
         $this->assertSame(['laboratory_exam_id'], array_keys($schema['properties']));
         $this->assertFalse($schema['additionalProperties']);

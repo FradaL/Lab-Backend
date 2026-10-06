@@ -10,17 +10,20 @@ use App\Actions\LaboratoryOrders\SetLaboratoryOrderDiscount;
 use App\Actions\LaboratoryOrders\TransitionLaboratoryOrderStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LaboratoryOrder\AddExamToLaboratoryOrderRequest;
+use App\Http\Requests\Api\V1\LaboratoryOrder\IndexLaboratoryOrderRequest;
 use App\Http\Requests\Api\V1\LaboratoryOrder\ListLaboratoryOrderExamsRequest;
 use App\Http\Requests\Api\V1\LaboratoryOrder\ShowLaboratoryOrderRequest;
 use App\Http\Requests\Api\V1\LaboratoryOrder\StoreLaboratoryOrderRequest;
 use App\Http\Requests\Api\V1\LaboratoryOrder\UpdateLaboratoryOrderDiscountRequest;
 use App\Http\Requests\Api\V1\LaboratoryOrder\UpdateLaboratoryOrderStatusRequest;
 use App\Http\Resources\Api\V1\LaboratoryOrderExamResource;
+use App\Http\Resources\Api\V1\LaboratoryOrderListResource;
 use App\Http\Resources\Api\V1\LaboratoryOrderResource;
 use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
 use App\Models\User;
 use App\Tenancy\CurrentLaboratory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -30,6 +33,144 @@ use OpenApi\Attributes as OA;
 
 final class LaboratoryOrderController extends Controller
 {
+    #[OA\Get(
+        path: '/api/v1/laboratory-orders',
+        operationId: 'laboratoryOrdersIndex',
+        summary: 'Listar órdenes de laboratorio',
+        description: 'Devuelve una bandeja paginada y resumida de las órdenes del laboratorio actual, ordenada por ordered_at descendente e id descendente. Permite buscar parcialmente, sin distinguir mayúsculas, por código de orden o por todos los términos del nombre y apellido del paciente, y combinar filtros operativos exactos. El conteo representa líneas físicas de examen y los valores comerciales y económicos proceden de snapshots persistidos.',
+        security: [['sanctumCookie' => []]],
+        tags: ['Laboratory Orders'],
+        parameters: [
+            new OA\Parameter(ref: '#/components/parameters/LaboratoryContextHeader'),
+            new OA\Parameter(name: 'page', in: 'query', schema: new OA\Schema(type: 'integer', default: 1, minimum: 1)),
+            new OA\Parameter(name: 'per_page', in: 'query', schema: new OA\Schema(type: 'integer', default: 15, minimum: 1, maximum: 100)),
+            new OA\Parameter(
+                name: 'search',
+                description: 'Texto parcial para el código completo de la orden o términos del nombre y apellido del paciente. Los términos del paciente se combinan con AND; los espacios se normalizan y %, _ y \\ se interpretan literalmente.',
+                in: 'query',
+                schema: new OA\Schema(type: 'string', maxLength: 150, nullable: true),
+            ),
+            new OA\Parameter(name: 'date_from', description: 'Primer día incluido según ordered_at, en formato YYYY-MM-DD.', in: 'query', schema: new OA\Schema(type: 'string', format: 'date')),
+            new OA\Parameter(name: 'date_to', description: 'Último día incluido según ordered_at, en formato YYYY-MM-DD.', in: 'query', schema: new OA\Schema(type: 'string', format: 'date')),
+            new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string', enum: LaboratoryOrder::STATUSES)),
+            new OA\Parameter(name: 'branch_id', description: 'Sucursal del laboratorio actual, incluso si está inactiva.', in: 'query', schema: new OA\Schema(type: 'integer', format: 'int64', minimum: 1)),
+            new OA\Parameter(name: 'doctor_id', description: 'Médico del laboratorio actual, incluso si está inactivo.', in: 'query', schema: new OA\Schema(type: 'integer', format: 'int64', minimum: 1)),
+            new OA\Parameter(name: 'commercial_client_id', description: 'Entidad comercial del laboratorio actual, incluso si está inactiva. Puede combinarse con commercial_context=client, pero contradice commercial_context=particular.', in: 'query', schema: new OA\Schema(type: 'integer', format: 'int64', minimum: 1)),
+            new OA\Parameter(
+                name: 'commercial_context',
+                description: 'particular selecciona órdenes sin entidad comercial; client selecciona órdenes con entidad comercial.',
+                in: 'query',
+                schema: new OA\Schema(type: ['string', 'null'], enum: [
+                    IndexLaboratoryOrderRequest::COMMERCIAL_CONTEXT_PARTICULAR,
+                    IndexLaboratoryOrderRequest::COMMERCIAL_CONTEXT_CLIENT,
+                ]),
+            ),
+            new OA\Parameter(name: 'price_list_id', description: 'Lista de precios del laboratorio actual, incluso si está inactiva.', in: 'query', schema: new OA\Schema(type: 'integer', format: 'int64', minimum: 1)),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Listado paginado de órdenes.', content: new OA\JsonContent(ref: '#/components/schemas/LaboratoryOrderListResponse')),
+            new OA\Response(ref: '#/components/responses/LaboratoryContextRequired', response: 400),
+            new OA\Response(response: 401, description: 'La solicitud no tiene una sesión autenticada.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(
+                response: 403,
+                description: 'El usuario no tiene acceso al laboratorio o el laboratorio no tiene acceso vigente al SaaS.',
+                content: new OA\JsonContent(oneOf: [
+                    new OA\Schema(ref: '#/components/schemas/LaboratoryContextError'),
+                    new OA\Schema(ref: '#/components/schemas/SubscriptionAccessError'),
+                ]),
+            ),
+            new OA\Response(response: 404, description: 'El laboratorio solicitado no existe.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(response: 422, description: 'Los parámetros de consulta no son válidos.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
+        ],
+    )]
+    public function index(
+        IndexLaboratoryOrderRequest $request,
+        CurrentLaboratory $currentLaboratory,
+    ): AnonymousResourceCollection {
+        $query = LaboratoryOrder::forLaboratory($currentLaboratory->get())
+            ->select([
+                'id',
+                'branch_id',
+                'patient_id',
+                'doctor_id',
+                'commercial_client_id',
+                'commercial_client_name',
+                'commercial_client_type',
+                'code',
+                'ordered_at',
+                'status',
+                'currency',
+                'total',
+                'created_by',
+            ])
+            ->with([
+                'branch:id,name',
+                'patient:id,first_names,last_names',
+                'doctor:id,first_names,last_names',
+                'createdBy:id,name',
+            ])
+            ->withCount('orderExams');
+
+        if (($search = $request->search()) !== null) {
+            $tokens = preg_split('/\s+/u', $search, flags: PREG_SPLIT_NO_EMPTY) ?: [];
+
+            $query->where(function (Builder $query) use ($search, $tokens): void {
+                $this->whereLiteralContains($query, 'code', $search);
+                $query->orWhereHas('patient', function (Builder $patientQuery) use ($tokens): void {
+                    foreach ($tokens as $token) {
+                        $patientQuery->where(function (Builder $tokenQuery) use ($token): void {
+                            $this->whereLiteralContains($tokenQuery, 'first_names', $token);
+                            $this->whereLiteralContains($tokenQuery, 'last_names', $token, 'or');
+                        });
+                    }
+                });
+            });
+        }
+
+        if (($dateFrom = $request->dateFrom()) !== null) {
+            $query->where('ordered_at', '>=', $dateFrom);
+        }
+
+        if (($dateToExclusive = $request->dateToExclusive()) !== null) {
+            $query->where('ordered_at', '<', $dateToExclusive);
+        }
+
+        foreach ($request->exactFilters() as $column => $value) {
+            $query->where($column, $value);
+        }
+
+        match ($request->commercialContext()) {
+            IndexLaboratoryOrderRequest::COMMERCIAL_CONTEXT_PARTICULAR => $query->whereNull('commercial_client_id'),
+            IndexLaboratoryOrderRequest::COMMERCIAL_CONTEXT_CLIENT => $query->whereNotNull('commercial_client_id'),
+            default => null,
+        };
+
+        $orders = $query
+            ->orderByDesc('ordered_at')
+            ->orderByDesc('id')
+            ->paginate($request->perPage())
+            ->withQueryString();
+
+        return LaboratoryOrderListResource::collection($orders);
+    }
+
+    private function whereLiteralContains(
+        Builder $query,
+        string $column,
+        string $value,
+        string $boolean = 'and',
+    ): void {
+        $operator = $query->getConnection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+        $wrappedColumn = $query->getQuery()->getGrammar()->wrap($column);
+        $escapedValue = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value);
+
+        $query->whereRaw(
+            "{$wrappedColumn} {$operator} ? ESCAPE '!'",
+            ["%{$escapedValue}%"],
+            $boolean,
+        );
+    }
+
     #[OA\Get(
         path: '/api/v1/laboratory-orders/{laboratoryOrder}/exams',
         operationId: 'laboratoryOrdersListExams',

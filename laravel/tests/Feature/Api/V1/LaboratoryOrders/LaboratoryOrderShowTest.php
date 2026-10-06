@@ -312,14 +312,14 @@ final class LaboratoryOrderShowTest extends TestCase
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
             ->values();
 
-        $this->assertCount(8, $routes);
-        $this->assertSame([['POST'], ['GET', 'HEAD'], ['POST'], ['DELETE'], ['PUT'], ['DELETE'], ['PATCH'], ['GET', 'HEAD']], $routes->map(fn ($route): array => $route->methods())->all());
+        $this->assertCount(9, $routes);
+        $this->assertSame([['GET', 'HEAD'], ['POST'], ['GET', 'HEAD'], ['POST'], ['DELETE'], ['PUT'], ['DELETE'], ['PATCH'], ['GET', 'HEAD']], $routes->map(fn ($route): array => $route->methods())->all());
         foreach ($routes as $route) {
             $this->assertContains('saas', $route->middleware());
         }
-        $showRoute = $routes->first(fn ($route): bool => in_array('GET', $route->methods(), true));
+        $showRoute = $routes->first(fn ($route): bool => str_contains($route->uri(), '{laboratoryOrder}'));
         $this->assertSame('[0-9]+', $showRoute->wheres['laboratoryOrder']);
-        $this->assertSame(['addExam', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus'], collect((new ReflectionClass(LaboratoryOrderController::class))
+        $this->assertSame(['addExam', 'index', 'listExams', 'removeDiscount', 'removeExam', 'show', 'store', 'updateDiscount', 'updateStatus'], collect((new ReflectionClass(LaboratoryOrderController::class))
             ->getMethods(ReflectionMethod::IS_PUBLIC))
             ->filter(fn (ReflectionMethod $method): bool => $method->getDeclaringClass()->getName() === LaboratoryOrderController::class)
             ->pluck('name')->sort()->values()->all());
@@ -334,8 +334,8 @@ final class LaboratoryOrderShowTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(66, $operationCount);
-        $this->assertCount(74, Route::getRoutes()->getRoutes());
+        $this->assertSame(67, $operationCount);
+        $this->assertCount(75, Route::getRoutes()->getRoutes());
         $this->assertSame(['get'], array_keys($path));
         $parameter = collect($operation['parameters'])->firstWhere('name', 'laboratoryOrder');
         $this->assertSame('path', $parameter['in']);
