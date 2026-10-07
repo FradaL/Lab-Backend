@@ -56,6 +56,21 @@ class SaasFoundationSeeder extends Seeder
             ],
         );
 
+        Branch::query()->updateOrCreate(
+            [
+                'laboratory_id' => $laboratory->id,
+                'code' => 'ZONE10',
+            ],
+            [
+                'name' => 'Sucursal Zona 10',
+                'phone' => '+50222000010',
+                'email' => 'zona10@donqerlab.test',
+                'address' => 'Zona 10, Ciudad de Guatemala',
+                'is_main' => false,
+                'status' => 'active',
+            ],
+        );
+
         Subscription::query()->updateOrCreate(
             [
                 'plan_id' => $plan->id,

@@ -130,13 +130,17 @@ class SaasFoundationModelTest extends TestCase
         $this->assertDatabaseCount('users', 2);
         $this->assertDatabaseCount('plans', 1);
         $this->assertDatabaseCount('laboratories', 1);
-        $this->assertDatabaseCount('branches', 1);
+        $this->assertDatabaseCount('branches', 2);
         $this->assertDatabaseCount('subscriptions', 1);
         $this->assertDatabaseCount('laboratory_user', 2);
 
         $this->assertDatabaseHas('branches', [
             'code' => 'MAIN',
             'is_main' => true,
+        ]);
+        $this->assertDatabaseHas('branches', [
+            'code' => 'ZONE10',
+            'is_main' => false,
         ]);
         $this->assertDatabaseHas('laboratory_user', ['is_active' => true]);
     }

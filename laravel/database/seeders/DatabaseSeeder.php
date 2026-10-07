@@ -15,8 +15,13 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             SaasFoundationSeeder::class,
             LaboratoryAreaSeeder::class,
+            SampleTypeSeeder::class,
+            LaboratoryExamSeeder::class,
             PatientSeeder::class,
             DoctorSeeder::class,
+            PriceListSeeder::class,
+            CommercialClientSeeder::class,
+            LaboratoryOrderSeeder::class,
         ]);
     }
 }
