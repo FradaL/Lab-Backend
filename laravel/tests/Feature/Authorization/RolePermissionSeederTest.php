@@ -68,7 +68,8 @@ class RolePermissionSeederTest extends TestCase
             'model_type' => User::class,
         ]);
         $this->assertTrue($admin->hasExactRoles(['administrator']));
-        $this->assertTrue($reception->hasExactRoles(['receptionist']));
+        $this->assertTrue($reception->hasExactRoles(['receptionist', 'cashier']));
+        $this->assertTrue($reception->can('orders.manage_discount'));
     }
 
     public function test_seeded_permission_matrix_matches_ratified_capabilities(): void

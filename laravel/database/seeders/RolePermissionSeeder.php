@@ -58,9 +58,9 @@ class RolePermissionSeeder extends Seeder
         setPermissionsTeamId($laboratory->getKey());
 
         foreach ([
-            'admin@donqerlab.test' => 'administrator',
-            'reception@donqerlab.test' => 'receptionist',
-        ] as $email => $roleName) {
+            'admin@donqerlab.test' => ['administrator'],
+            'reception@donqerlab.test' => ['receptionist', 'cashier'],
+        ] as $email => $roleNames) {
             $user = User::query()->where('email', $email)->first();
             $hasActiveMembership = $user?->laboratories()
                 ->whereKey($laboratory->getKey())
@@ -68,9 +68,12 @@ class RolePermissionSeeder extends Seeder
                 ->exists() ?? false;
 
             if ($user !== null && $hasActiveMembership) {
-                $role = Role::findByName($roleName, RbacCatalog::GUARD);
+                $roles = array_map(
+                    fn (string $roleName): Role => Role::findByName($roleName, RbacCatalog::GUARD),
+                    $roleNames,
+                );
                 $user->unsetRelation('roles')->unsetRelation('permissions');
-                $user->syncRoles($role);
+                $user->syncRoles($roles);
                 $user->unsetRelation('roles')->unsetRelation('permissions');
             }
         }

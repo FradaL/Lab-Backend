@@ -289,7 +289,10 @@ final class CurrentAuthorizationTest extends TestCase
         $this->createSubscription($laboratory);
         $this->seed(RolePermissionSeeder::class);
         $allPermissions = RbacCatalog::PERMISSIONS;
-        $receptionPermissions = RbacCatalog::rolePermissions()['receptionist'];
+        $receptionPermissions = array_values(array_unique(array_merge(
+            RbacCatalog::rolePermissions()['receptionist'],
+            RbacCatalog::rolePermissions()['cashier'],
+        )));
         sort($allPermissions);
         sort($receptionPermissions);
 
@@ -297,7 +300,7 @@ final class CurrentAuthorizationTest extends TestCase
             ->assertJsonPath('data.roles', ['administrator'])
             ->assertJsonPath('data.permissions', $allPermissions);
         $this->request($receptionist, $laboratory)->assertOk()
-            ->assertJsonPath('data.roles', ['receptionist'])
+            ->assertJsonPath('data.roles', ['cashier', 'receptionist'])
             ->assertJsonPath('data.permissions', $receptionPermissions);
     }
 
