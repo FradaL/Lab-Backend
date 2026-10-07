@@ -2,19 +2,28 @@
 
 namespace App\Actions\LaboratoryOrders;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\OrderAuditEvents;
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 final class TransitionLaboratoryOrderStatus
 {
+    public function __construct(
+        private readonly AuditWriter $auditWriter,
+    ) {}
+
     public function execute(
         Laboratory $laboratory,
         int $laboratoryOrderId,
         string $targetStatus,
+        ?User $actor = null,
     ): LaboratoryOrder {
-        $order = DB::transaction(function () use ($laboratory, $laboratoryOrderId, $targetStatus): LaboratoryOrder {
+        $order = DB::transaction(function () use ($laboratory, $laboratoryOrderId, $targetStatus, $actor): LaboratoryOrder {
             $lockedOrder = LaboratoryOrder::forLaboratory($laboratory)
                 ->whereKey($laboratoryOrderId)
                 ->lockForUpdate()
@@ -31,8 +40,17 @@ final class TransitionLaboratoryOrderStatus
             }
 
             if ($lockedOrder->status !== $targetStatus) {
+                $oldStatus = $lockedOrder->status;
                 $lockedOrder->status = $targetStatus;
                 $lockedOrder->save();
+
+                $this->auditWriter->record($laboratory, $actor, new AuditEvent(
+                    OrderAuditEvents::STATUS_CHANGED,
+                    OrderAuditEvents::SUBJECT_ORDER,
+                    $lockedOrder->getKey(),
+                    oldValues: ['status' => $oldStatus],
+                    newValues: ['status' => $targetStatus],
+                ));
             }
 
             return $lockedOrder;

@@ -295,7 +295,7 @@ class SampleTypeStoreTest extends TestCase
                 ->assertJsonValidationErrors(['name']);
 
             $this->assertNoDatabaseDetails($response);
-            $this->assertDatabaseCount('sample_types', 1);
+            $this->assertDatabaseCount('sample_types', 0);
         } finally {
             SampleType::flushEventListeners();
         }

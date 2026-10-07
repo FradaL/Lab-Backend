@@ -469,7 +469,7 @@ class CommercialClientStoreTest extends TestCase
             $this->assertNoDatabaseDetails($response);
             $this->assertTrue($inserted);
             if (DB::getDriverName() !== 'pgsql') {
-                $this->assertDatabaseCount('commercial_clients', 1);
+                $this->assertDatabaseCount('commercial_clients', 0);
             }
         } finally {
             CommercialClient::flushEventListeners();

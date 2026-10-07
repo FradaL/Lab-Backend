@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\MasterDataAuditEvents;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\SampleType\ActiveSampleTypeRequest;
 use App\Http\Requests\Api\V1\SampleType\IndexSampleTypeRequest;
@@ -17,6 +20,7 @@ use App\Tenancy\CurrentLaboratory;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
 
@@ -108,14 +112,28 @@ class SampleTypeController extends Controller
     public function store(
         StoreSampleTypeRequest $request,
         CurrentLaboratory $currentLaboratory,
+        AuditWriter $auditWriter,
     ): JsonResponse {
+        $laboratory = $currentLaboratory->get();
+
         try {
-            $sampleType = $currentLaboratory->get()
-                ->sampleTypes()
-                ->create([
+            $sampleType = DB::transaction(function () use ($request, $laboratory, $auditWriter): SampleType {
+                $sampleType = $laboratory->sampleTypes()->create([
                     'name' => $request->validated('name'),
-                ])
-                ->refresh();
+                ]);
+
+                $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                    MasterDataAuditEvents::SAMPLE_TYPE_CREATED,
+                    MasterDataAuditEvents::SUBJECT_SAMPLE_TYPE,
+                    $sampleType->getKey(),
+                    newValues: [
+                        'name' => $sampleType->name,
+                        'status' => SampleType::STATUS_ACTIVE,
+                    ],
+                ));
+
+                return $sampleType;
+            })->refresh();
         } catch (QueryException $exception) {
             $this->convertUniqueConstraintViolation($exception);
         }
@@ -252,16 +270,31 @@ class SampleTypeController extends Controller
         UpdateSampleTypeRequest $request,
         CurrentLaboratory $currentLaboratory,
         int $sampleType,
+        AuditWriter $auditWriter,
     ): SampleTypeDetailResource {
         $sampleType = $this->findSampleType($currentLaboratory, $sampleType);
-        $sampleType->name = $request->validated('name');
+        $laboratory = $currentLaboratory->get();
 
-        if ($sampleType->isDirty()) {
-            try {
+        try {
+            DB::transaction(function () use ($request, $laboratory, $sampleType, $auditWriter): void {
+                $oldName = $sampleType->name;
+                $sampleType->name = $request->validated('name');
+
+                if (! $sampleType->isDirty('name')) {
+                    return;
+                }
+
                 $sampleType->save();
-            } catch (QueryException $exception) {
-                $this->convertUniqueConstraintViolation($exception);
-            }
+                $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                    MasterDataAuditEvents::SAMPLE_TYPE_UPDATED,
+                    MasterDataAuditEvents::SUBJECT_SAMPLE_TYPE,
+                    $sampleType->getKey(),
+                    ['name' => $oldName],
+                    ['name' => $sampleType->name],
+                ));
+            });
+        } catch (QueryException $exception) {
+            $this->convertUniqueConstraintViolation($exception);
         }
 
         return SampleTypeDetailResource::make($sampleType);
@@ -308,13 +341,28 @@ class SampleTypeController extends Controller
         UpdateSampleTypeStatusRequest $request,
         CurrentLaboratory $currentLaboratory,
         int $sampleType,
+        AuditWriter $auditWriter,
     ): SampleTypeDetailResource {
         $sampleType = $this->findSampleType($currentLaboratory, $sampleType);
-        $sampleType->status = $request->validated('status');
+        $laboratory = $currentLaboratory->get();
 
-        if ($sampleType->isDirty('status')) {
+        DB::transaction(function () use ($request, $laboratory, $sampleType, $auditWriter): void {
+            $oldStatus = $sampleType->status;
+            $sampleType->status = $request->validated('status');
+
+            if (! $sampleType->isDirty('status')) {
+                return;
+            }
+
             $sampleType->save();
-        }
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::SAMPLE_TYPE_STATUS_CHANGED,
+                MasterDataAuditEvents::SUBJECT_SAMPLE_TYPE,
+                $sampleType->getKey(),
+                ['status' => $oldStatus],
+                ['status' => $sampleType->status],
+            ));
+        });
 
         return SampleTypeDetailResource::make($sampleType);
     }

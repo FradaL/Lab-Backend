@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\MasterDataAuditEvents;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\CommercialClient\ActiveCommercialClientRequest;
 use App\Http\Requests\Api\V1\CommercialClient\IndexCommercialClientRequest;
@@ -18,11 +21,15 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
 
 class CommercialClientController extends Controller
 {
+    /** @var list<string> */
+    private const SAFE_AUDIT_FIELDS = ['name', 'type'];
+
     #[OA\Get(
         path: '/api/v1/commercial-clients',
         operationId: 'commercialClientsIndex',
@@ -122,19 +129,29 @@ class CommercialClientController extends Controller
     public function store(
         StoreCommercialClientRequest $request,
         CurrentLaboratory $currentLaboratory,
+        AuditWriter $auditWriter,
     ): JsonResponse {
+        $laboratory = $currentLaboratory->get();
+
         try {
-            $commercialClient = $currentLaboratory->get()
-                ->commercialClients()
-                ->create($request->safe()->only([
-                    'name',
-                    'type',
-                    'tax_id',
-                    'phone',
-                    'email',
-                    'address',
-                    'notes',
+            $commercialClient = DB::transaction(function () use ($request, $laboratory, $auditWriter): CommercialClient {
+                $commercialClient = $laboratory->commercialClients()->create($request->safe()->only([
+                    'name', 'type', 'tax_id', 'phone', 'email', 'address', 'notes',
                 ]));
+
+                $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                    MasterDataAuditEvents::COMMERCIAL_CLIENT_CREATED,
+                    MasterDataAuditEvents::SUBJECT_COMMERCIAL_CLIENT,
+                    $commercialClient->getKey(),
+                    newValues: [
+                        'name' => $commercialClient->name,
+                        'type' => $commercialClient->type,
+                        'status' => CommercialClient::STATUS_ACTIVE,
+                    ],
+                ));
+
+                return $commercialClient;
+            });
         } catch (QueryException $exception) {
             $this->convertUniqueNameConstraintViolation($exception);
         }
@@ -282,6 +299,7 @@ class CommercialClientController extends Controller
         CurrentLaboratory $currentLaboratory,
         int $commercialClient,
         UpdateCommercialClientRequest $updateRequest,
+        AuditWriter $auditWriter,
     ): CommercialClientResource {
         $laboratory = $currentLaboratory->get();
         $resolvedCommercialClient = CommercialClient::forLaboratory($laboratory)
@@ -295,8 +313,26 @@ class CommercialClientController extends Controller
         $attributes = $updateRequest->validated($request, $laboratory, $resolvedCommercialClient);
 
         try {
-            $resolvedCommercialClient->fill($attributes);
-            $resolvedCommercialClient->save();
+            DB::transaction(function () use ($request, $laboratory, $resolvedCommercialClient, $attributes, $auditWriter): void {
+                $resolvedCommercialClient->fill($attributes);
+                $changedFields = array_keys($resolvedCommercialClient->getDirty());
+                sort($changedFields);
+
+                if ($changedFields === []) {
+                    return;
+                }
+
+                [$oldValues, $newValues] = $this->safeAuditDelta($resolvedCommercialClient);
+                $resolvedCommercialClient->save();
+                $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                    MasterDataAuditEvents::COMMERCIAL_CLIENT_UPDATED,
+                    MasterDataAuditEvents::SUBJECT_COMMERCIAL_CLIENT,
+                    $resolvedCommercialClient->getKey(),
+                    $oldValues === [] ? null : $oldValues,
+                    $newValues === [] ? null : $newValues,
+                    ['changed_fields' => $changedFields],
+                ));
+            });
         } catch (QueryException $exception) {
             $this->convertUniqueNameConstraintViolation($exception);
         }
@@ -346,8 +382,10 @@ class CommercialClientController extends Controller
         CurrentLaboratory $currentLaboratory,
         int $commercialClient,
         UpdateCommercialClientStatusRequest $statusRequest,
+        AuditWriter $auditWriter,
     ): CommercialClientResource {
-        $resolvedCommercialClient = CommercialClient::forLaboratory($currentLaboratory->get())
+        $laboratory = $currentLaboratory->get();
+        $resolvedCommercialClient = CommercialClient::forLaboratory($laboratory)
             ->whereKey($commercialClient)
             ->first();
 
@@ -355,8 +393,23 @@ class CommercialClientController extends Controller
             abort(404, 'Resource not found.');
         }
 
-        $resolvedCommercialClient->status = $statusRequest->validated($request)['status'];
-        $resolvedCommercialClient->save();
+        DB::transaction(function () use ($request, $statusRequest, $laboratory, $resolvedCommercialClient, $auditWriter): void {
+            $oldStatus = $resolvedCommercialClient->status;
+            $resolvedCommercialClient->status = $statusRequest->validated($request)['status'];
+
+            if (! $resolvedCommercialClient->isDirty('status')) {
+                return;
+            }
+
+            $resolvedCommercialClient->save();
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::COMMERCIAL_CLIENT_STATUS_CHANGED,
+                MasterDataAuditEvents::SUBJECT_COMMERCIAL_CLIENT,
+                $resolvedCommercialClient->getKey(),
+                ['status' => $oldStatus],
+                ['status' => $resolvedCommercialClient->status],
+            ));
+        });
 
         return CommercialClientResource::make($resolvedCommercialClient);
     }
@@ -379,5 +432,21 @@ class CommercialClientController extends Controller
         }
 
         throw $exception;
+    }
+
+    /** @return array{array<string, mixed>, array<string, mixed>} */
+    private function safeAuditDelta(CommercialClient $commercialClient): array
+    {
+        $oldValues = [];
+        $newValues = [];
+
+        foreach (self::SAFE_AUDIT_FIELDS as $field) {
+            if ($commercialClient->isDirty($field)) {
+                $oldValues[$field] = $commercialClient->getOriginal($field);
+                $newValues[$field] = $commercialClient->getAttribute($field);
+            }
+        }
+
+        return [$oldValues, $newValues];
     }
 }

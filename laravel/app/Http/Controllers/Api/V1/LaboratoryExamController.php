@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\MasterDataAuditEvents;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LaboratoryExam\ActiveLaboratoryExamRequest;
 use App\Http\Requests\Api\V1\LaboratoryExam\IndexLaboratoryExamRequest;
@@ -17,11 +20,22 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
 
 class LaboratoryExamController extends Controller
 {
+    /** @var list<string> */
+    private const AUDITABLE_FIELDS = [
+        'laboratory_area_id',
+        'sample_type_id',
+        'code',
+        'name',
+        'description',
+        'turnaround_time_minutes',
+    ];
+
     #[OA\Get(
         path: '/api/v1/laboratory-exams',
         operationId: 'laboratoryExamsIndex',
@@ -128,18 +142,32 @@ class LaboratoryExamController extends Controller
     public function store(
         StoreLaboratoryExamRequest $request,
         CurrentLaboratory $currentLaboratory,
+        AuditWriter $auditWriter,
     ): JsonResponse {
         $laboratory = $currentLaboratory->get();
 
         try {
-            $createdExam = $laboratory->laboratoryExams()->create([
-                'laboratory_area_id' => $request->validated('laboratory_area_id'),
-                'sample_type_id' => $request->validated('sample_type_id'),
-                'code' => $request->validated('code'),
-                'name' => $request->validated('name'),
-                'description' => $request->validated('description'),
-                'turnaround_time_minutes' => $request->validated('turnaround_time_minutes'),
-            ]);
+            $createdExam = DB::transaction(function () use ($request, $laboratory, $auditWriter): LaboratoryExam {
+                $createdExam = $laboratory->laboratoryExams()->create([
+                    'laboratory_area_id' => $request->validated('laboratory_area_id'),
+                    'sample_type_id' => $request->validated('sample_type_id'),
+                    'code' => $request->validated('code'),
+                    'name' => $request->validated('name'),
+                    'description' => $request->validated('description'),
+                    'turnaround_time_minutes' => $request->validated('turnaround_time_minutes'),
+                ]);
+
+                $newValues = $createdExam->only(self::AUDITABLE_FIELDS);
+                $newValues['status'] = LaboratoryExam::STATUS_ACTIVE;
+                $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                    MasterDataAuditEvents::LABORATORY_EXAM_CREATED,
+                    MasterDataAuditEvents::SUBJECT_LABORATORY_EXAM,
+                    $createdExam->getKey(),
+                    newValues: $newValues,
+                ));
+
+                return $createdExam;
+            });
         } catch (QueryException $exception) {
             $this->convertUniqueCodeConstraintViolation($exception);
         }
@@ -319,6 +347,7 @@ class LaboratoryExamController extends Controller
         CurrentLaboratory $currentLaboratory,
         int $laboratoryExam,
         UpdateLaboratoryExamRequest $updateRequest,
+        AuditWriter $auditWriter,
     ): LaboratoryExamResource {
         $laboratory = $currentLaboratory->get();
         $exam = LaboratoryExam::forLaboratory($laboratory)
@@ -332,8 +361,23 @@ class LaboratoryExamController extends Controller
         $attributes = $updateRequest->validated($request, $laboratory, $exam);
 
         try {
-            $exam->fill($attributes);
-            $exam->save();
+            DB::transaction(function () use ($request, $laboratory, $exam, $attributes, $auditWriter): void {
+                $exam->fill($attributes);
+                [$oldValues, $newValues] = $this->auditDelta($exam);
+
+                if ($oldValues === []) {
+                    return;
+                }
+
+                $exam->save();
+                $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                    MasterDataAuditEvents::LABORATORY_EXAM_UPDATED,
+                    MasterDataAuditEvents::SUBJECT_LABORATORY_EXAM,
+                    $exam->getKey(),
+                    $oldValues,
+                    $newValues,
+                ));
+            });
         } catch (QueryException $exception) {
             $this->convertUniqueCodeConstraintViolation($exception);
         }
@@ -388,8 +432,10 @@ class LaboratoryExamController extends Controller
         CurrentLaboratory $currentLaboratory,
         int $laboratoryExam,
         UpdateLaboratoryExamStatusRequest $statusRequest,
+        AuditWriter $auditWriter,
     ): LaboratoryExamResource {
-        $exam = LaboratoryExam::forLaboratory($currentLaboratory->get())
+        $laboratory = $currentLaboratory->get();
+        $exam = LaboratoryExam::forLaboratory($laboratory)
             ->whereKey($laboratoryExam)
             ->first();
 
@@ -397,13 +443,44 @@ class LaboratoryExamController extends Controller
             abort(404, 'Resource not found.');
         }
 
-        $exam->status = $statusRequest->validated($request)['status'];
-        $exam->save();
+        DB::transaction(function () use ($request, $statusRequest, $laboratory, $exam, $auditWriter): void {
+            $oldStatus = $exam->status;
+            $exam->status = $statusRequest->validated($request)['status'];
+
+            if (! $exam->isDirty('status')) {
+                return;
+            }
+
+            $exam->save();
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::LABORATORY_EXAM_STATUS_CHANGED,
+                MasterDataAuditEvents::SUBJECT_LABORATORY_EXAM,
+                $exam->getKey(),
+                ['status' => $oldStatus],
+                ['status' => $exam->status],
+            ));
+        });
         $exam->load([
             'laboratoryArea:id,code,name',
             'sampleType:id,name',
         ]);
 
         return LaboratoryExamResource::make($exam);
+    }
+
+    /** @return array{array<string, mixed>, array<string, mixed>} */
+    private function auditDelta(LaboratoryExam $exam): array
+    {
+        $oldValues = [];
+        $newValues = [];
+
+        foreach (self::AUDITABLE_FIELDS as $field) {
+            if ($exam->isDirty($field)) {
+                $oldValues[$field] = $exam->getOriginal($field);
+                $newValues[$field] = $exam->getAttribute($field);
+            }
+        }
+
+        return [$oldValues, $newValues];
     }
 }

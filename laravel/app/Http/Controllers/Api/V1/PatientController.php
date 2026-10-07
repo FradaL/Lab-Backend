@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\MasterDataAuditEvents;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Patient\IndexPatientRequest;
 use App\Http\Requests\Api\V1\Patient\StorePatientRequest;
@@ -14,6 +17,7 @@ use App\Tenancy\CurrentLaboratory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use OpenApi\Attributes as OA;
 
 class PatientController extends Controller
@@ -110,11 +114,21 @@ class PatientController extends Controller
     public function store(
         StorePatientRequest $request,
         CurrentLaboratory $currentLaboratory,
+        AuditWriter $auditWriter,
     ): JsonResponse {
-        $patient = $currentLaboratory->get()
-            ->patients()
-            ->create($request->validated())
-            ->refresh();
+        $laboratory = $currentLaboratory->get();
+        $patient = DB::transaction(function () use ($request, $laboratory, $auditWriter): Patient {
+            $patient = $laboratory->patients()->create($request->validated());
+
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::PATIENT_CREATED,
+                MasterDataAuditEvents::SUBJECT_PATIENT,
+                $patient->getKey(),
+                newValues: ['status' => Patient::STATUS_ACTIVE],
+            ));
+
+            return $patient;
+        })->refresh();
 
         return PatientResource::make($patient)
             ->response()
@@ -205,11 +219,29 @@ class PatientController extends Controller
         UpdatePatientRequest $request,
         CurrentLaboratory $currentLaboratory,
         int $patient,
+        AuditWriter $auditWriter,
     ): PatientDetailResource {
-        $patient = Patient::forLaboratory($currentLaboratory->get())
+        $laboratory = $currentLaboratory->get();
+        $patient = Patient::forLaboratory($laboratory)
             ->findOrFail($patient);
 
-        $patient->update($request->validated());
+        DB::transaction(function () use ($request, $laboratory, $patient, $auditWriter): void {
+            $patient->fill($request->validated());
+            $changedFields = array_keys($patient->getDirty());
+            sort($changedFields);
+
+            if ($changedFields === []) {
+                return;
+            }
+
+            $patient->save();
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::PATIENT_UPDATED,
+                MasterDataAuditEvents::SUBJECT_PATIENT,
+                $patient->getKey(),
+                metadata: ['changed_fields' => $changedFields],
+            ));
+        });
 
         return PatientDetailResource::make($patient->refresh());
     }
@@ -255,11 +287,29 @@ class PatientController extends Controller
         UpdatePatientStatusRequest $request,
         CurrentLaboratory $currentLaboratory,
         int $patient,
+        AuditWriter $auditWriter,
     ): PatientDetailResource {
-        $patient = Patient::forLaboratory($currentLaboratory->get())
+        $laboratory = $currentLaboratory->get();
+        $patient = Patient::forLaboratory($laboratory)
             ->findOrFail($patient);
 
-        $patient->update($request->validated());
+        DB::transaction(function () use ($request, $laboratory, $patient, $auditWriter): void {
+            $oldStatus = $patient->status;
+            $patient->fill($request->validated());
+
+            if (! $patient->isDirty('status')) {
+                return;
+            }
+
+            $patient->save();
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::PATIENT_STATUS_CHANGED,
+                MasterDataAuditEvents::SUBJECT_PATIENT,
+                $patient->getKey(),
+                ['status' => $oldStatus],
+                ['status' => $patient->status],
+            ));
+        });
 
         return PatientDetailResource::make($patient->refresh());
     }

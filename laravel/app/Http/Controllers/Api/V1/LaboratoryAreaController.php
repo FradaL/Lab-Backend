@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\MasterDataAuditEvents;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LaboratoryArea\ActiveLaboratoryAreaRequest;
 use App\Http\Requests\Api\V1\LaboratoryArea\IndexLaboratoryAreaRequest;
@@ -17,11 +20,15 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
 
 class LaboratoryAreaController extends Controller
 {
+    /** @var list<string> */
+    private const AUDITABLE_FIELDS = ['code', 'name', 'description'];
+
     #[OA\Get(
         path: '/api/v1/laboratory-areas',
         operationId: 'laboratoryAreasIndex',
@@ -114,12 +121,25 @@ class LaboratoryAreaController extends Controller
     public function store(
         StoreLaboratoryAreaRequest $request,
         CurrentLaboratory $currentLaboratory,
+        AuditWriter $auditWriter,
     ): JsonResponse {
+        $laboratory = $currentLaboratory->get();
+
         try {
-            $area = $currentLaboratory->get()
-                ->laboratoryAreas()
-                ->create($request->validated())
-                ->refresh();
+            $area = DB::transaction(function () use ($request, $laboratory, $auditWriter): LaboratoryArea {
+                $area = $laboratory->laboratoryAreas()->create($request->validated());
+                $newValues = $area->only(self::AUDITABLE_FIELDS);
+                $newValues['status'] = LaboratoryArea::STATUS_ACTIVE;
+
+                $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                    MasterDataAuditEvents::LABORATORY_AREA_CREATED,
+                    MasterDataAuditEvents::SUBJECT_LABORATORY_AREA,
+                    $area->getKey(),
+                    newValues: $newValues,
+                ));
+
+                return $area;
+            })->refresh();
         } catch (QueryException $exception) {
             $this->convertUniqueConstraintViolation($exception);
         }
@@ -251,11 +271,29 @@ class LaboratoryAreaController extends Controller
         UpdateLaboratoryAreaRequest $request,
         CurrentLaboratory $currentLaboratory,
         int $area,
+        AuditWriter $auditWriter,
     ): LaboratoryAreaDetailResource {
         $area = $this->findLaboratoryArea($currentLaboratory, $area);
+        $laboratory = $currentLaboratory->get();
 
         try {
-            $area->update($request->validated());
+            DB::transaction(function () use ($request, $laboratory, $area, $auditWriter): void {
+                $area->fill($request->validated());
+                [$oldValues, $newValues] = $this->auditDelta($area);
+
+                if ($oldValues === []) {
+                    return;
+                }
+
+                $area->save();
+                $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                    MasterDataAuditEvents::LABORATORY_AREA_UPDATED,
+                    MasterDataAuditEvents::SUBJECT_LABORATORY_AREA,
+                    $area->getKey(),
+                    $oldValues,
+                    $newValues,
+                ));
+            });
         } catch (QueryException $exception) {
             $this->convertUniqueConstraintViolation($exception);
         }
@@ -304,12 +342,28 @@ class LaboratoryAreaController extends Controller
         UpdateLaboratoryAreaStatusRequest $request,
         CurrentLaboratory $currentLaboratory,
         int $area,
+        AuditWriter $auditWriter,
     ): LaboratoryAreaDetailResource {
         $area = $this->findLaboratoryArea($currentLaboratory, $area);
+        $laboratory = $currentLaboratory->get();
 
-        $area->update([
-            'status' => $request->validated('status'),
-        ]);
+        DB::transaction(function () use ($request, $laboratory, $area, $auditWriter): void {
+            $oldStatus = $area->status;
+            $area->status = $request->validated('status');
+
+            if (! $area->isDirty('status')) {
+                return;
+            }
+
+            $area->save();
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::LABORATORY_AREA_STATUS_CHANGED,
+                MasterDataAuditEvents::SUBJECT_LABORATORY_AREA,
+                $area->getKey(),
+                ['status' => $oldStatus],
+                ['status' => $area->status],
+            ));
+        });
 
         return LaboratoryAreaDetailResource::make($area->refresh());
     }
@@ -326,6 +380,22 @@ class LaboratoryAreaController extends Controller
         }
 
         return $resolvedArea;
+    }
+
+    /** @return array{array<string, mixed>, array<string, mixed>} */
+    private function auditDelta(LaboratoryArea $area): array
+    {
+        $oldValues = [];
+        $newValues = [];
+
+        foreach (self::AUDITABLE_FIELDS as $field) {
+            if ($area->isDirty($field)) {
+                $oldValues[$field] = $area->getOriginal($field);
+                $newValues[$field] = $area->getAttribute($field);
+            }
+        }
+
+        return [$oldValues, $newValues];
     }
 
     private function convertUniqueConstraintViolation(QueryException $exception): never

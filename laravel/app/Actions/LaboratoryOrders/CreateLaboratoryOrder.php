@@ -2,6 +2,9 @@
 
 namespace App\Actions\LaboratoryOrders;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\OrderAuditEvents;
 use App\Models\Branch;
 use App\Models\CommercialClient;
 use App\Models\Doctor;
@@ -10,12 +13,17 @@ use App\Models\LaboratoryOrder;
 use App\Models\Patient;
 use App\Models\PriceList;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 final class CreateLaboratoryOrder
 {
     private const ACTIVE_BRANCH_STATUS = 'active';
+
+    public function __construct(
+        private readonly AuditWriter $auditWriter,
+    ) {}
 
     /**
      * @param  array{
@@ -76,28 +84,49 @@ final class CreateLaboratoryOrder
         /** @var Branch $branch */
         /** @var Patient $patient */
         /** @var PriceList $priceList */
-        $order = $laboratory->orders()->create([
-            'branch_id' => $branch->getKey(),
-            'patient_id' => $patient->getKey(),
-            'doctor_id' => $doctor?->getKey(),
-            'commercial_client_id' => $commercialClient?->getKey(),
-            'commercial_client_name' => $commercialClient?->name,
-            'commercial_client_type' => $commercialClient?->type,
-            'price_list_id' => $priceList->getKey(),
-            'price_list_name' => $priceList->name,
-            'code' => 'ORD-'.Str::ulid(),
-            'ordered_at' => $attributes['ordered_at'],
-            'status' => LaboratoryOrder::STATUS_PENDING,
-            'notes' => $attributes['notes'],
-            'subtotal' => '0.00',
-            'discount' => '0.00',
-            'discount_type' => null,
-            'discount_value' => null,
-            'taxes' => '0.00',
-            'total' => '0.00',
-            'currency' => $priceList->currency,
-            'created_by' => $creator->getKey(),
-        ]);
+        $order = DB::transaction(function () use ($laboratory, $creator, $attributes, $branch, $patient, $doctor, $commercialClient, $priceList): LaboratoryOrder {
+            $order = $laboratory->orders()->create([
+                'branch_id' => $branch->getKey(),
+                'patient_id' => $patient->getKey(),
+                'doctor_id' => $doctor?->getKey(),
+                'commercial_client_id' => $commercialClient?->getKey(),
+                'commercial_client_name' => $commercialClient?->name,
+                'commercial_client_type' => $commercialClient?->type,
+                'price_list_id' => $priceList->getKey(),
+                'price_list_name' => $priceList->name,
+                'code' => 'ORD-'.Str::ulid(),
+                'ordered_at' => $attributes['ordered_at'],
+                'status' => LaboratoryOrder::STATUS_PENDING,
+                'notes' => $attributes['notes'],
+                'subtotal' => '0.00',
+                'discount' => '0.00',
+                'discount_type' => null,
+                'discount_value' => null,
+                'taxes' => '0.00',
+                'total' => '0.00',
+                'currency' => $priceList->currency,
+                'created_by' => $creator->getKey(),
+            ]);
+
+            $this->auditWriter->record($laboratory, $creator, new AuditEvent(
+                OrderAuditEvents::CREATED,
+                OrderAuditEvents::SUBJECT_ORDER,
+                $order->getKey(),
+                newValues: [
+                    'code' => $order->code,
+                    'branch_id' => $order->branch_id,
+                    'patient_id' => $order->patient_id,
+                    'doctor_id' => $order->doctor_id,
+                    'commercial_client_id' => $order->commercial_client_id,
+                    'price_list_id' => $order->price_list_id,
+                    'ordered_at' => $order->ordered_at->format('Y-m-d H:i:s'),
+                    'status' => $order->status,
+                    'currency' => $order->currency,
+                ],
+            ));
+
+            return $order;
+        });
 
         $order->setRelation('branch', $branch);
         $order->setRelation('patient', $patient);

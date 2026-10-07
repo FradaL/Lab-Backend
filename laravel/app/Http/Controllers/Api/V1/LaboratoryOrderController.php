@@ -283,7 +283,9 @@ final class LaboratoryOrderController extends Controller
         }
 
         $laboratoryExamId = $examRequest->validated($request)['laboratory_exam_id'];
-        $orderExam = $addExam->execute($laboratory, $laboratoryOrder, $laboratoryExamId);
+        /** @var User $actor */
+        $actor = $request->user();
+        $orderExam = $addExam->execute($laboratory, $laboratoryOrder, $laboratoryExamId, $actor);
 
         return LaboratoryOrderExamResource::make($orderExam)
             ->response()
@@ -354,7 +356,9 @@ final class LaboratoryOrderController extends Controller
             throw ValidationException::withMessages($errors);
         }
 
-        $removeExam->execute($laboratory, $laboratoryOrder, $laboratoryOrderExam);
+        /** @var User $actor */
+        $actor = $request->user();
+        $removeExam->execute($laboratory, $laboratoryOrder, $laboratoryOrderExam, $actor);
 
         return response()->noContent();
     }
@@ -413,11 +417,14 @@ final class LaboratoryOrderController extends Controller
         }
 
         $discount = $discountRequest->validated($request);
+        /** @var User $actor */
+        $actor = $request->user();
         $order = $setDiscount->execute(
             $laboratory,
             $laboratoryOrder,
             $discount['type'],
             $discount['value'],
+            $actor,
         );
 
         return LaboratoryOrderResource::make($order);
@@ -482,7 +489,9 @@ final class LaboratoryOrderController extends Controller
             ]);
         }
 
-        $order = $removeDiscount->execute($laboratory, $laboratoryOrder);
+        /** @var User $actor */
+        $actor = $request->user();
+        $order = $removeDiscount->execute($laboratory, $laboratoryOrder, $actor);
 
         return LaboratoryOrderResource::make($order);
     }
@@ -541,7 +550,9 @@ final class LaboratoryOrderController extends Controller
         }
 
         $targetStatus = $statusRequest->validated($request)['status'];
-        $order = $transitionStatus->execute($laboratory, $laboratoryOrder, $targetStatus);
+        /** @var User $actor */
+        $actor = $request->user();
+        $order = $transitionStatus->execute($laboratory, $laboratoryOrder, $targetStatus, $actor);
 
         return LaboratoryOrderResource::make($order);
     }

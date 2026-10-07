@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\MasterDataAuditEvents;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Doctor\IndexDoctorRequest;
 use App\Http\Requests\Api\V1\Doctor\StoreDoctorRequest;
@@ -14,6 +17,7 @@ use App\Tenancy\CurrentLaboratory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use OpenApi\Attributes as OA;
 
 class DoctorController extends Controller
@@ -116,11 +120,21 @@ class DoctorController extends Controller
     public function store(
         StoreDoctorRequest $request,
         CurrentLaboratory $currentLaboratory,
+        AuditWriter $auditWriter,
     ): JsonResponse {
-        $doctor = $currentLaboratory->get()
-            ->doctors()
-            ->create($request->validated())
-            ->refresh();
+        $laboratory = $currentLaboratory->get();
+        $doctor = DB::transaction(function () use ($request, $laboratory, $auditWriter): Doctor {
+            $doctor = $laboratory->doctors()->create($request->validated());
+
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::DOCTOR_CREATED,
+                MasterDataAuditEvents::SUBJECT_DOCTOR,
+                $doctor->getKey(),
+                newValues: ['status' => Doctor::STATUS_ACTIVE],
+            ));
+
+            return $doctor;
+        })->refresh();
 
         return DoctorResource::make($doctor)
             ->response()
@@ -210,10 +224,28 @@ class DoctorController extends Controller
         UpdateDoctorRequest $request,
         CurrentLaboratory $currentLaboratory,
         int $doctor,
+        AuditWriter $auditWriter,
     ): DoctorDetailResource {
         $doctor = $this->findDoctor($currentLaboratory, $doctor);
+        $laboratory = $currentLaboratory->get();
 
-        $doctor->update($request->validated());
+        DB::transaction(function () use ($request, $laboratory, $doctor, $auditWriter): void {
+            $doctor->fill($request->validated());
+            $changedFields = array_keys($doctor->getDirty());
+            sort($changedFields);
+
+            if ($changedFields === []) {
+                return;
+            }
+
+            $doctor->save();
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::DOCTOR_UPDATED,
+                MasterDataAuditEvents::SUBJECT_DOCTOR,
+                $doctor->getKey(),
+                metadata: ['changed_fields' => $changedFields],
+            ));
+        });
 
         return DoctorDetailResource::make($doctor->refresh());
     }
@@ -259,12 +291,28 @@ class DoctorController extends Controller
         UpdateDoctorStatusRequest $request,
         CurrentLaboratory $currentLaboratory,
         int $doctor,
+        AuditWriter $auditWriter,
     ): DoctorDetailResource {
         $doctor = $this->findDoctor($currentLaboratory, $doctor);
+        $laboratory = $currentLaboratory->get();
 
-        $doctor->update([
-            'status' => $request->validated('status'),
-        ]);
+        DB::transaction(function () use ($request, $laboratory, $doctor, $auditWriter): void {
+            $oldStatus = $doctor->status;
+            $doctor->status = $request->validated('status');
+
+            if (! $doctor->isDirty('status')) {
+                return;
+            }
+
+            $doctor->save();
+            $auditWriter->record($laboratory, $request->user(), new AuditEvent(
+                MasterDataAuditEvents::DOCTOR_STATUS_CHANGED,
+                MasterDataAuditEvents::SUBJECT_DOCTOR,
+                $doctor->getKey(),
+                ['status' => $oldStatus],
+                ['status' => $doctor->status],
+            ));
+        });
 
         return DoctorDetailResource::make($doctor->refresh());
     }

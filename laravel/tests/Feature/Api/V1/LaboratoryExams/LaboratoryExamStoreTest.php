@@ -445,7 +445,9 @@ class LaboratoryExamStoreTest extends TestCase
                 ->assertJsonValidationErrors(['code']);
 
             $this->assertNoDatabaseDetails($response);
-            $this->assertDatabaseCount('laboratory_exams', 1);
+            // The listener simulates a concurrent winner on this connection. The
+            // audited mutation is atomic, so the whole simulated transaction rolls back.
+            $this->assertDatabaseCount('laboratory_exams', 0);
         } finally {
             LaboratoryExam::flushEventListeners();
         }

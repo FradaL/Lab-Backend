@@ -736,7 +736,8 @@ class LaboratoryExamUpdateTest extends TestCase
                 'code' => 'ORIGINAL',
                 'name' => 'Original',
             ]);
-            $this->assertDatabaseCount('laboratory_exams', 2);
+            // The simulated concurrent write shares this transaction in tests.
+            $this->assertDatabaseCount('laboratory_exams', 1);
         } finally {
             LaboratoryExam::flushEventListeners();
         }
