@@ -334,6 +334,7 @@ class CommercialClientShowTest extends TestCase
         $laboratory = Laboratory::factory()->create();
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'commercial_clients.view');
 
         return [$user, $laboratory];
     }

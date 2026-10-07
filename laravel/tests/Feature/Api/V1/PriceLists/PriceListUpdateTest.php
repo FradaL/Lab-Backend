@@ -607,6 +607,8 @@ class PriceListUpdateTest extends TestCase
 
     private function updateRequest(User $user, Laboratory $laboratory, int|string $priceList, array $payload): TestResponse
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'price_lists.update');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson("/api/v1/price-lists/{$priceList}", $payload);

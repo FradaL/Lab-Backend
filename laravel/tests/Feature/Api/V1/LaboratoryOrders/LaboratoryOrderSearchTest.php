@@ -270,6 +270,8 @@ final class LaboratoryOrderSearchTest extends TestCase
             'trial_ends_at' => null,
         ]);
 
+        $this->assignAllOrderPermissions($user, $laboratory);
+
         return [$user, $laboratory];
     }
 

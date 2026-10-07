@@ -436,6 +436,8 @@ class LaboratoryExamStatusTest extends TestCase
     /** @param array<string, mixed> $payload */
     private function statusRequest(User $user, Laboratory $laboratory, int|string $exam, array $payload): TestResponse
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'laboratory_exams.change_status');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson("/api/v1/laboratory-exams/{$exam}/status", $payload);

@@ -478,6 +478,8 @@ class LaboratoryAreaUpdateTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['laboratory_areas.view', 'laboratory_areas.update', 'laboratory_areas.change_status']);
+
         return [$user, $laboratory];
     }
 
@@ -509,6 +511,8 @@ class LaboratoryAreaUpdateTest extends TestCase
         int|string $area,
         array $payload,
     ): TestResponse {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'laboratory_areas.update');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson("/api/v1/laboratory-areas/{$area}", $payload);

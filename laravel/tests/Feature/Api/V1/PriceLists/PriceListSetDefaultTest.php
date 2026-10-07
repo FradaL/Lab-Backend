@@ -507,6 +507,8 @@ class PriceListSetDefaultTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'price_lists.set_default');
+
         return [$user, $laboratory];
     }
 
@@ -527,6 +529,8 @@ class PriceListSetDefaultTest extends TestCase
         string $query = '',
     ): TestResponse {
         $suffix = $query === '' ? '' : '?'.$query;
+
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'price_lists.set_default');
 
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)

@@ -307,6 +307,14 @@ final class MasterDataAuditTest extends TestCase
         Subscription::factory()->for($laboratory)->create([
             'starts_at' => now()->subDay(), 'ends_at' => now()->addMonth(), 'trial_ends_at' => null,
         ]);
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, [
+            'patients.view', 'patients.create', 'patients.update', 'patients.change_status',
+            'doctors.create', 'doctors.update', 'doctors.change_status',
+            'laboratory_areas.create', 'laboratory_areas.update', 'laboratory_areas.change_status',
+            'sample_types.create', 'sample_types.update', 'sample_types.change_status',
+            'laboratory_exams.create', 'laboratory_exams.update', 'laboratory_exams.change_status',
+            'commercial_clients.create', 'commercial_clients.update', 'commercial_clients.change_status',
+        ]);
 
         return [$user, $laboratory];
     }

@@ -630,7 +630,7 @@ class CommercialClientUpdateTest extends TestCase
         $operations = collect($document['paths'])->flatMap(
             fn (array $item): array => array_values(array_intersect_key($item, $verbs)),
         );
-        $this->assertCount(67, $operations);
+        $this->assertCount(68, $operations);
         $this->assertCount(6, $operations->filter(
             fn (array $item): bool => in_array('Commercial Clients', $item['tags'] ?? [], true),
         ));
@@ -687,6 +687,8 @@ class CommercialClientUpdateTest extends TestCase
         int|string $commercialClient,
         array $payload,
     ): TestResponse {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'commercial_clients.update');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson("/api/v1/commercial-clients/{$commercialClient}", $payload);

@@ -426,6 +426,8 @@ class LaboratoryExamIntegrationTest extends TestCase
 
     private function request(User $user, Laboratory $laboratory): self
     {
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['laboratory_exams.view', 'laboratory_exams.create', 'laboratory_exams.update', 'laboratory_exams.change_status']);
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id);
     }

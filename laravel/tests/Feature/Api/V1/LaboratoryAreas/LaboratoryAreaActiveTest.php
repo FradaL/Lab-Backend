@@ -277,6 +277,8 @@ class LaboratoryAreaActiveTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['laboratory_areas.view', 'laboratory_areas.update', 'laboratory_areas.change_status']);
+
         return [$user, $laboratory];
     }
 

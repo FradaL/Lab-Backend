@@ -428,6 +428,8 @@ class PriceListActiveTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'price_lists.view');
+
         return [$user, $laboratory];
     }
 

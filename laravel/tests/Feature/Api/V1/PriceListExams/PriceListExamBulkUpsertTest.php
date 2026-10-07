@@ -316,6 +316,9 @@ class PriceListExamBulkUpsertTest extends TestCase
         $laboratory = Laboratory::factory()->create();
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         Subscription::factory()->for($laboratory)->create(['starts_at' => now()->subDay(), 'ends_at' => now()->addMonth(), 'trial_ends_at' => null]);
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'exam_prices.manage');
+
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['exam_prices.view', 'exam_prices.manage']);
 
         return [$user, $laboratory];
     }
@@ -344,6 +347,7 @@ class PriceListExamBulkUpsertTest extends TestCase
 
     private function rawBulk(User $user, Laboratory $laboratory, PriceList $list, string $json): TestResponse
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'exam_prices.manage');
         $this->actingAs($user, 'web');
 
         return $this->call('PUT', "/api/v1/price-lists/{$list->id}/exams/bulk", [], [], [], [

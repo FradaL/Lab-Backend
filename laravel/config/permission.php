@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Laboratory;
 use Spatie\Permission\DefaultTeamResolver;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -35,7 +36,7 @@ return [
          * Eloquent model should be used to retrieve your teams. Of course, it
          * is often just the "Team" model but you may use whatever you like.
          */
-        'team' => null,
+        'team' => Laboratory::class,
 
         /*
          * When using the "HasModels" trait and passing raw IDs to syncModels,
@@ -110,7 +111,7 @@ return [
          * foreign key is other than `team_id`.
          */
 
-        'team_foreign_key' => 'team_id',
+        'team_foreign_key' => 'laboratory_id',
     ],
 
     /*
@@ -148,7 +149,7 @@ return [
      * (view the latest version of this package's migration file)
      */
 
-    'teams' => false,
+    'teams' => true,
 
     /*
      * The class to use to resolve the permissions team id

@@ -342,7 +342,7 @@ final class LaboratoryOrderDiscountTest extends TestCase
         $path = $document['paths']['/api/v1/laboratory-orders/{laboratoryOrder}/discount'];
         $input = $document['components']['schemas']['UpdateLaboratoryOrderDiscountInput'];
         $this->assertSame(['put', 'delete'], array_keys($path));
-        $this->assertSame(67, collect($document['paths'])->sum(fn (array $item): int => count(array_intersect_key(
+        $this->assertSame(68, collect($document['paths'])->sum(fn (array $item): int => count(array_intersect_key(
             $item,
             array_flip(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']),
         ))));
@@ -364,6 +364,8 @@ final class LaboratoryOrderDiscountTest extends TestCase
             'ends_at' => now()->addMonth(),
             'trial_ends_at' => null,
         ]);
+
+        $this->assignAllOrderPermissions($user, $laboratory);
 
         return [$user, $laboratory];
     }

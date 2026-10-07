@@ -289,6 +289,8 @@ class SampleTypeIntegrationTest extends TestCase
 
     private function tenantRequest(User $user, Laboratory $laboratory): self
     {
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['sample_types.view', 'sample_types.create', 'sample_types.update', 'sample_types.change_status']);
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id);
     }

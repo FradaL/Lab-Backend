@@ -351,6 +351,8 @@ class CommercialClientPriceListIndexTest extends TestCase
         $id = $commercialClient instanceof CommercialClient ? $commercialClient->id : $commercialClient;
         $suffix = $query === [] ? '' : '?'.http_build_query($query);
 
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'commercial_price_assignments.view');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->getJson("/api/v1/commercial-clients/{$id}/price-list-assignments{$suffix}");
