@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\CommercialAuditEvents;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\CommercialClientPriceList\IndexCommercialClientPriceListRequest;
 use App\Http\Requests\Api\V1\CommercialClientPriceList\StoreCommercialClientPriceListRequest;
@@ -11,6 +14,7 @@ use App\Http\Resources\Api\V1\CommercialClientPriceListResource;
 use App\Models\CommercialClient;
 use App\Models\CommercialClientPriceList;
 use App\Models\PriceList;
+use App\Models\User;
 use App\Tenancy\CurrentLaboratory;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Container\Container;
@@ -20,7 +24,9 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use LogicException;
 use OpenApi\Attributes as OA;
 
 class CommercialClientPriceListController extends Controller
@@ -178,8 +184,10 @@ class CommercialClientPriceListController extends Controller
         CurrentLaboratory $currentLaboratory,
         int $commercialClient,
         StoreCommercialClientPriceListRequest $storeRequest,
+        AuditWriter $auditWriter,
     ): JsonResponse {
         $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
         $resolvedCommercialClient = CommercialClient::forLaboratory($laboratory)
             ->whereKey($commercialClient)
             ->first();
@@ -221,13 +229,37 @@ class CommercialClientPriceListController extends Controller
         }
 
         try {
-            $assignment = $resolvedCommercialClient->priceListAssignments()->create([
-                'laboratory_id' => $laboratory->getKey(),
-                'price_list_id' => $priceList->getKey(),
-                'starts_at' => $attributes['starts_at'],
-                'ends_at' => $attributes['ends_at'],
-                'status' => CommercialClientPriceList::STATUS_ACTIVE,
-            ]);
+            $assignment = DB::transaction(function () use (
+                $resolvedCommercialClient,
+                $laboratory,
+                $priceList,
+                $attributes,
+                $actor,
+                $auditWriter,
+            ): CommercialClientPriceList {
+                $assignment = $resolvedCommercialClient->priceListAssignments()->create([
+                    'laboratory_id' => $laboratory->getKey(),
+                    'price_list_id' => $priceList->getKey(),
+                    'starts_at' => $attributes['starts_at'],
+                    'ends_at' => $attributes['ends_at'],
+                    'status' => CommercialClientPriceList::STATUS_ACTIVE,
+                ]);
+
+                $auditWriter->record($laboratory, $actor, new AuditEvent(
+                    CommercialAuditEvents::COMMERCIAL_ASSIGNMENT_CREATED,
+                    CommercialAuditEvents::SUBJECT_COMMERCIAL_ASSIGNMENT,
+                    $assignment->getKey(),
+                    newValues: [
+                        'commercial_client_id' => (int) $assignment->commercial_client_id,
+                        'price_list_id' => (int) $assignment->price_list_id,
+                        'starts_at' => $assignment->starts_at->toDateString(),
+                        'ends_at' => $assignment->ends_at?->toDateString(),
+                        'status' => $assignment->status,
+                    ],
+                ));
+
+                return $assignment;
+            });
         } catch (QueryException $exception) {
             $this->convertPeriodConstraintViolation($exception);
         }
@@ -290,8 +322,10 @@ class CommercialClientPriceListController extends Controller
         int $commercialClient,
         int $assignment,
         UpdateCommercialClientPriceListRequest $updateRequest,
+        AuditWriter $auditWriter,
     ): JsonResponse {
         $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
         $resolvedCommercialClient = CommercialClient::forLaboratory($laboratory)
             ->whereKey($commercialClient)
             ->first();
@@ -359,7 +393,24 @@ class CommercialClientPriceListController extends Controller
 
         if ($changes !== []) {
             try {
-                $resolvedAssignment->fill($changes)->save();
+                DB::transaction(function () use (
+                    $resolvedAssignment,
+                    $changes,
+                    $currentValues,
+                    $laboratory,
+                    $actor,
+                    $auditWriter,
+                ): void {
+                    $oldValues = array_intersect_key($currentValues, $changes);
+                    $resolvedAssignment->fill($changes)->save();
+                    $auditWriter->record($laboratory, $actor, new AuditEvent(
+                        CommercialAuditEvents::COMMERCIAL_ASSIGNMENT_UPDATED,
+                        CommercialAuditEvents::SUBJECT_COMMERCIAL_ASSIGNMENT,
+                        $resolvedAssignment->getKey(),
+                        $oldValues,
+                        $changes,
+                    ));
+                });
             } catch (QueryException $exception) {
                 $this->convertPeriodConstraintViolation($exception);
             }
@@ -422,8 +473,10 @@ class CommercialClientPriceListController extends Controller
         int $commercialClient,
         int $assignment,
         UpdateCommercialClientPriceListStatusRequest $statusRequest,
+        AuditWriter $auditWriter,
     ): JsonResponse {
         $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
         $resolvedCommercialClient = CommercialClient::forLaboratory($laboratory)
             ->whereKey($commercialClient)
             ->first();
@@ -480,8 +533,24 @@ class CommercialClientPriceListController extends Controller
         }
 
         try {
-            $resolvedAssignment->status = $requestedStatus;
-            $resolvedAssignment->save();
+            DB::transaction(function () use (
+                $resolvedAssignment,
+                $requestedStatus,
+                $laboratory,
+                $actor,
+                $auditWriter,
+            ): void {
+                $oldStatus = $resolvedAssignment->status;
+                $resolvedAssignment->status = $requestedStatus;
+                $resolvedAssignment->save();
+                $auditWriter->record($laboratory, $actor, new AuditEvent(
+                    CommercialAuditEvents::COMMERCIAL_ASSIGNMENT_STATUS_CHANGED,
+                    CommercialAuditEvents::SUBJECT_COMMERCIAL_ASSIGNMENT,
+                    $resolvedAssignment->getKey(),
+                    ['status' => $oldStatus],
+                    ['status' => $requestedStatus],
+                ));
+            });
         } catch (QueryException $exception) {
             $this->convertPeriodConstraintViolation($exception);
         }
@@ -518,6 +587,17 @@ class CommercialClientPriceListController extends Controller
                 fn (Builder $query): Builder => $query->where('starts_at', '<=', $normalizedEnd),
             )
             ->exists();
+    }
+
+    private function authenticatedActor(Request $request): User
+    {
+        $actor = $request->user();
+
+        if (! $actor instanceof User) {
+            throw new LogicException('An authenticated user is required to audit commercial assignment mutations.');
+        }
+
+        return $actor;
     }
 
     private function convertPeriodConstraintViolation(QueryException $exception): never

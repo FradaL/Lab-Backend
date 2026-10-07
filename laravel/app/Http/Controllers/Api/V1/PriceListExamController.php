@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\CommercialAuditEvents;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\PriceListExam\AvailablePriceListExamRequest;
 use App\Http\Requests\Api\V1\PriceListExam\BulkUpsertPriceListExamRequest;
@@ -11,9 +14,11 @@ use App\Http\Requests\Api\V1\PriceListExam\UpsertPriceListExamRequest;
 use App\Http\Resources\Api\V1\AvailablePriceListExamCollection;
 use App\Http\Resources\Api\V1\PriceListExamCollection;
 use App\Http\Resources\Api\V1\PriceListExamResource;
+use App\Models\Laboratory;
 use App\Models\LaboratoryExam;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
+use App\Models\User;
 use App\Tenancy\CurrentLaboratory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\JoinClause;
@@ -23,6 +28,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use LogicException;
 use OpenApi\Attributes as OA;
 
 class PriceListExamController extends Controller
@@ -263,8 +269,10 @@ class PriceListExamController extends Controller
         CurrentLaboratory $currentLaboratory,
         int $priceList,
         BulkUpsertPriceListExamRequest $bulkRequest,
+        AuditWriter $auditWriter,
     ): JsonResponse {
         $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
         $resolvedPriceList = PriceList::forLaboratory($laboratory)
             ->whereKey($priceList)
             ->first();
@@ -289,13 +297,13 @@ class PriceListExamController extends Controller
         $this->ensureBulkCreationAllowed($items, $resolvedPriceList, $resolvedExams, $existing);
 
         try {
-            $result = $this->performBulkUpsert($laboratory->getKey(), $resolvedPriceList->getKey(), $items);
+            $result = $this->performBulkUpsert($laboratory, $actor, $auditWriter, $resolvedPriceList->getKey(), $items);
         } catch (QueryException $exception) {
             if (! $this->isAssignmentUniqueConstraintViolation($exception)) {
                 throw $exception;
             }
 
-            $result = $this->performBulkUpsert($laboratory->getKey(), $resolvedPriceList->getKey(), $items);
+            $result = $this->performBulkUpsert($laboratory, $actor, $auditWriter, $resolvedPriceList->getKey(), $items);
         }
 
         $result['exams']->load([
@@ -353,8 +361,10 @@ class PriceListExamController extends Controller
         int $priceList,
         int $laboratoryExam,
         UpsertPriceListExamRequest $upsertRequest,
+        AuditWriter $auditWriter,
     ): JsonResponse {
         $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
         $resolvedPriceList = PriceList::forLaboratory($laboratory)
             ->whereKey($priceList)
             ->first();
@@ -379,6 +389,8 @@ class PriceListExamController extends Controller
                 $resolvedPriceList,
                 $resolvedExam,
                 $price,
+                $actor,
+                $auditWriter,
             ): array {
                 $existing = $this->priceListExamQuery(
                     $laboratory->getKey(),
@@ -387,8 +399,19 @@ class PriceListExamController extends Controller
                 )->lockForUpdate()->first();
 
                 if ($existing !== null) {
+                    $oldPrice = $existing->price;
                     $existing->price = $price;
-                    $existing->save();
+
+                    if ($existing->isDirty('price')) {
+                        $existing->save();
+                        $auditWriter->record($laboratory, $actor, new AuditEvent(
+                            CommercialAuditEvents::EXAM_PRICE_CHANGED,
+                            CommercialAuditEvents::SUBJECT_PRICE_LIST_EXAM,
+                            $existing->getKey(),
+                            ['price' => $oldPrice],
+                            ['price' => $existing->price],
+                        ));
+                    }
 
                     return [$existing, false];
                 }
@@ -401,6 +424,17 @@ class PriceListExamController extends Controller
                     'price' => $price,
                 ]);
                 $created->setAttribute('status', PriceListExam::STATUS_ACTIVE);
+                $auditWriter->record($laboratory, $actor, new AuditEvent(
+                    CommercialAuditEvents::EXAM_PRICE_CREATED,
+                    CommercialAuditEvents::SUBJECT_PRICE_LIST_EXAM,
+                    $created->getKey(),
+                    newValues: [
+                        'price_list_id' => (int) $created->price_list_id,
+                        'laboratory_exam_id' => (int) $created->laboratory_exam_id,
+                        'price' => $created->price,
+                        'status' => $created->status,
+                    ],
+                ));
 
                 return [$created, true];
             });
@@ -415,6 +449,8 @@ class PriceListExamController extends Controller
                 $resolvedExam,
                 $price,
                 $exception,
+                $actor,
+                $auditWriter,
             ): PriceListExam {
                 $winner = $this->priceListExamQuery(
                     $laboratory->getKey(),
@@ -426,8 +462,19 @@ class PriceListExamController extends Controller
                     throw $exception;
                 }
 
+                $oldPrice = $winner->price;
                 $winner->price = $price;
-                $winner->save();
+
+                if ($winner->isDirty('price')) {
+                    $winner->save();
+                    $auditWriter->record($laboratory, $actor, new AuditEvent(
+                        CommercialAuditEvents::EXAM_PRICE_CHANGED,
+                        CommercialAuditEvents::SUBJECT_PRICE_LIST_EXAM,
+                        $winner->getKey(),
+                        ['price' => $oldPrice],
+                        ['price' => $winner->price],
+                    ));
+                }
 
                 return $winner;
             });
@@ -473,8 +520,10 @@ class PriceListExamController extends Controller
         int $priceList,
         int $laboratoryExam,
         UpdatePriceListExamStatusRequest $statusRequest,
+        AuditWriter $auditWriter,
     ): JsonResponse {
         $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
         $resolvedPriceList = PriceList::forLaboratory($laboratory)->whereKey($priceList)->first();
 
         if ($resolvedPriceList === null) {
@@ -497,8 +546,23 @@ class PriceListExamController extends Controller
             abort(404, 'Resource not found.');
         }
 
-        $priceListExam->status = $statusRequest->validated($request)['status'];
-        $priceListExam->save();
+        $status = $statusRequest->validated($request)['status'];
+
+        if ($priceListExam->status !== $status) {
+            $oldStatus = $priceListExam->status;
+
+            DB::transaction(function () use ($priceListExam, $status, $oldStatus, $laboratory, $actor, $auditWriter): void {
+                $priceListExam->status = $status;
+                $priceListExam->save();
+                $auditWriter->record($laboratory, $actor, new AuditEvent(
+                    CommercialAuditEvents::EXAM_PRICE_STATUS_CHANGED,
+                    CommercialAuditEvents::SUBJECT_PRICE_LIST_EXAM,
+                    $priceListExam->getKey(),
+                    ['status' => $oldStatus],
+                    ['status' => $status],
+                ));
+            });
+        }
 
         $resolvedExam->load(['laboratoryArea:id,code,name', 'sampleType:id,name']);
         $priceListExam->setRelation('laboratoryExam', $resolvedExam);
@@ -510,9 +574,15 @@ class PriceListExamController extends Controller
      * @param  list<array{laboratory_exam_id: int, price: string}>  $items
      * @return array{items: list<PriceListExam>, exams: Collection<int, LaboratoryExam>, meta: array{created: int, updated: int, unchanged: int}}
      */
-    private function performBulkUpsert(int|string $laboratoryId, int|string $priceListId, array $items): array
-    {
-        return DB::transaction(function () use ($laboratoryId, $priceListId, $items): array {
+    private function performBulkUpsert(
+        Laboratory $laboratory,
+        User $actor,
+        AuditWriter $auditWriter,
+        int|string $priceListId,
+        array $items,
+    ): array {
+        return DB::transaction(function () use ($laboratory, $actor, $auditWriter, $priceListId, $items): array {
+            $laboratoryId = $laboratory->getKey();
             $priceList = PriceList::query()
                 ->where('laboratory_id', $laboratoryId)
                 ->whereKey($priceListId)
@@ -551,11 +621,30 @@ class PriceListExamController extends Controller
                         'price' => $item['price'],
                     ]);
                     $priceListExam->setAttribute('status', PriceListExam::STATUS_ACTIVE);
+                    $auditWriter->record($laboratory, $actor, new AuditEvent(
+                        CommercialAuditEvents::EXAM_PRICE_CREATED,
+                        CommercialAuditEvents::SUBJECT_PRICE_LIST_EXAM,
+                        $priceListExam->getKey(),
+                        newValues: [
+                            'price_list_id' => (int) $priceListExam->price_list_id,
+                            'laboratory_exam_id' => (int) $priceListExam->laboratory_exam_id,
+                            'price' => $priceListExam->price,
+                            'status' => $priceListExam->status,
+                        ],
+                    ));
                     $meta['created']++;
                 } else {
+                    $oldPrice = $priceListExam->price;
                     $priceListExam->price = $item['price'];
                     if ($priceListExam->isDirty('price')) {
                         $priceListExam->save();
+                        $auditWriter->record($laboratory, $actor, new AuditEvent(
+                            CommercialAuditEvents::EXAM_PRICE_CHANGED,
+                            CommercialAuditEvents::SUBJECT_PRICE_LIST_EXAM,
+                            $priceListExam->getKey(),
+                            ['price' => $oldPrice],
+                            ['price' => $priceListExam->price],
+                        ));
                         $meta['updated']++;
                     } else {
                         $meta['unchanged']++;
@@ -646,6 +735,17 @@ class PriceListExamController extends Controller
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
         }
+    }
+
+    private function authenticatedActor(Request $request): User
+    {
+        $actor = $request->user();
+
+        if (! $actor instanceof User) {
+            throw new LogicException('An authenticated user is required to audit exam-price mutations.');
+        }
+
+        return $actor;
     }
 
     private function isAssignmentUniqueConstraintViolation(QueryException $exception): bool

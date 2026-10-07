@@ -359,10 +359,10 @@ class PriceListStoreTest extends TestCase
             $this->assertNoDatabaseDetails($response);
             $this->assertTrue($inserted);
 
-            if (DB::getDriverName() !== 'pgsql') {
-                $this->assertDatabaseCount('price_lists', 1);
-                $this->assertSame('Lista General', PriceList::query()->sole()->name);
-            }
+            // The simulated contender runs on this same connection. Store is now
+            // transactional with its audit insert, so that synthetic row rolls back
+            // with the failed request (a real concurrent transaction remains isolated).
+            $this->assertDatabaseCount('price_lists', 0);
         } finally {
             PriceList::flushEventListeners();
         }

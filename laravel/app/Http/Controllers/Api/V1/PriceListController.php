@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
+use App\Audit\CommercialAuditEvents;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\PriceList\ActivePriceListRequest;
 use App\Http\Requests\Api\V1\PriceList\IndexPriceListRequest;
@@ -14,6 +17,7 @@ use App\Http\Resources\Api\V1\ActivePriceListResource;
 use App\Http\Resources\Api\V1\PriceListResource;
 use App\Models\Laboratory;
 use App\Models\PriceList;
+use App\Models\User;
 use App\Tenancy\CurrentLaboratory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
@@ -22,6 +26,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use LogicException;
 use OpenApi\Attributes as OA;
 
 class PriceListController extends Controller
@@ -130,23 +135,42 @@ class PriceListController extends Controller
     public function store(
         StorePriceListRequest $request,
         CurrentLaboratory $currentLaboratory,
+        AuditWriter $auditWriter,
     ): JsonResponse {
         $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
 
         try {
-            $priceList = $laboratory->priceLists()->create([
-                'name' => $request->validated('name'),
-                'description' => $request->validated('description'),
-                'currency' => $request->validated('currency'),
-            ]);
+            $priceList = DB::transaction(function () use ($request, $laboratory, $actor, $auditWriter): PriceList {
+                $priceList = $laboratory->priceLists()->create([
+                    'name' => $request->validated('name'),
+                    'description' => $request->validated('description'),
+                    'currency' => $request->validated('currency'),
+                ]);
+
+                // The INSERT intentionally leaves these columns to database defaults.
+                // Mirror those defaults in-memory so the response and audit need no refresh query.
+                $priceList->setAttribute('status', PriceList::STATUS_ACTIVE);
+                $priceList->setAttribute('is_default', false);
+
+                $auditWriter->record($laboratory, $actor, new AuditEvent(
+                    CommercialAuditEvents::PRICE_LIST_CREATED,
+                    CommercialAuditEvents::SUBJECT_PRICE_LIST,
+                    $priceList->getKey(),
+                    newValues: [
+                        'name' => $priceList->name,
+                        'description' => $priceList->description,
+                        'currency' => $priceList->currency,
+                        'status' => $priceList->status,
+                        'is_default' => $priceList->is_default,
+                    ],
+                ));
+
+                return $priceList;
+            });
         } catch (QueryException $exception) {
             $this->convertUniqueNameConstraintViolation($exception);
         }
-
-        // The INSERT intentionally leaves these columns to database defaults.
-        // Mirror those defaults in-memory so the response needs no refresh query.
-        $priceList->setAttribute('status', PriceList::STATUS_ACTIVE);
-        $priceList->setAttribute('is_default', false);
 
         return PriceListResource::make($priceList)
             ->response()
@@ -276,8 +300,10 @@ class PriceListController extends Controller
         CurrentLaboratory $currentLaboratory,
         int $priceList,
         UpdatePriceListRequest $updateRequest,
+        AuditWriter $auditWriter,
     ): PriceListResource {
         $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
         $resolvedPriceList = PriceList::forLaboratory($laboratory)
             ->whereKey($priceList)
             ->first();
@@ -289,8 +315,33 @@ class PriceListController extends Controller
         $attributes = $updateRequest->validated($request, $laboratory, $resolvedPriceList);
 
         try {
-            $resolvedPriceList->fill($attributes);
-            $resolvedPriceList->save();
+            DB::transaction(function () use ($resolvedPriceList, $attributes, $laboratory, $actor, $auditWriter): void {
+                $resolvedPriceList->fill($attributes);
+                $changedFields = array_keys(array_intersect_key(
+                    $resolvedPriceList->getDirty(),
+                    array_flip(['name', 'description', 'currency']),
+                ));
+
+                if ($changedFields === []) {
+                    return;
+                }
+
+                $oldValues = [];
+                $newValues = [];
+                foreach ($changedFields as $field) {
+                    $oldValues[$field] = $resolvedPriceList->getOriginal($field);
+                    $newValues[$field] = $resolvedPriceList->getAttribute($field);
+                }
+
+                $resolvedPriceList->save();
+                $auditWriter->record($laboratory, $actor, new AuditEvent(
+                    CommercialAuditEvents::PRICE_LIST_UPDATED,
+                    CommercialAuditEvents::SUBJECT_PRICE_LIST,
+                    $resolvedPriceList->getKey(),
+                    $oldValues,
+                    $newValues,
+                ));
+            });
         } catch (QueryException $exception) {
             $this->convertUniqueNameConstraintViolation($exception);
         }
@@ -334,8 +385,11 @@ class PriceListController extends Controller
         CurrentLaboratory $currentLaboratory,
         int $priceList,
         UpdatePriceListStatusRequest $statusRequest,
+        AuditWriter $auditWriter,
     ): PriceListResource {
-        $resolvedPriceList = PriceList::forLaboratory($currentLaboratory->get())
+        $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
+        $resolvedPriceList = PriceList::forLaboratory($laboratory)
             ->whereKey($priceList)
             ->first();
 
@@ -355,8 +409,21 @@ class PriceListController extends Controller
             ]);
         }
 
-        $resolvedPriceList->status = $status;
-        $resolvedPriceList->save();
+        if ($resolvedPriceList->status !== $status) {
+            $oldStatus = $resolvedPriceList->status;
+
+            DB::transaction(function () use ($resolvedPriceList, $status, $oldStatus, $laboratory, $actor, $auditWriter): void {
+                $resolvedPriceList->status = $status;
+                $resolvedPriceList->save();
+                $auditWriter->record($laboratory, $actor, new AuditEvent(
+                    CommercialAuditEvents::PRICE_LIST_STATUS_CHANGED,
+                    CommercialAuditEvents::SUBJECT_PRICE_LIST,
+                    $resolvedPriceList->getKey(),
+                    ['status' => $oldStatus],
+                    ['status' => $status],
+                ));
+            });
+        }
 
         return PriceListResource::make($resolvedPriceList);
     }
@@ -393,8 +460,10 @@ class PriceListController extends Controller
         CurrentLaboratory $currentLaboratory,
         int $priceList,
         SetDefaultPriceListRequest $setDefaultRequest,
+        AuditWriter $auditWriter,
     ): PriceListResource {
         $laboratory = $currentLaboratory->get();
+        $actor = $this->authenticatedActor($request);
         $target = PriceList::forLaboratory($laboratory)
             ->whereKey($priceList)
             ->first();
@@ -406,7 +475,7 @@ class PriceListController extends Controller
         $setDefaultRequest->validate($request);
         $this->ensurePriceListCanBecomeDefault($target);
 
-        $target = DB::transaction(function () use ($laboratory, $priceList): PriceList {
+        $target = DB::transaction(function () use ($laboratory, $priceList, $actor, $auditWriter): PriceList {
             Laboratory::query()
                 ->whereKey($laboratory->getKey())
                 ->lockForUpdate()
@@ -434,10 +503,24 @@ class PriceListController extends Controller
             if ($previousDefault !== null) {
                 $previousDefault->is_default = false;
                 $previousDefault->save();
+                $auditWriter->record($laboratory, $actor, new AuditEvent(
+                    CommercialAuditEvents::PRICE_LIST_DEFAULT_CHANGED,
+                    CommercialAuditEvents::SUBJECT_PRICE_LIST,
+                    $previousDefault->getKey(),
+                    ['is_default' => true],
+                    ['is_default' => false],
+                ));
             }
 
             $lockedTarget->is_default = true;
             $lockedTarget->save();
+            $auditWriter->record($laboratory, $actor, new AuditEvent(
+                CommercialAuditEvents::PRICE_LIST_DEFAULT_CHANGED,
+                CommercialAuditEvents::SUBJECT_PRICE_LIST,
+                $lockedTarget->getKey(),
+                ['is_default' => false],
+                ['is_default' => true],
+            ));
 
             return $lockedTarget;
         });
@@ -452,6 +535,17 @@ class PriceListController extends Controller
                 'status' => ['The inactive price list cannot be set as default.'],
             ]);
         }
+    }
+
+    private function authenticatedActor(Request $request): User
+    {
+        $actor = $request->user();
+
+        if (! $actor instanceof User) {
+            throw new LogicException('An authenticated user is required to audit price-list mutations.');
+        }
+
+        return $actor;
     }
 
     private function convertUniqueNameConstraintViolation(QueryException $exception): never
