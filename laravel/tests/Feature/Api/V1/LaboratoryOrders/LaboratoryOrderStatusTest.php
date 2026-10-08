@@ -359,8 +359,8 @@ final class LaboratoryOrderStatusTest extends TestCase
             array_flip(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']),
         )));
 
-        $this->assertSame(68, $operationCount);
-        $this->assertCount(76, Route::getRoutes()->getRoutes());
+        $this->assertSame(69, $operationCount);
+        $this->assertCount(77, Route::getRoutes()->getRoutes());
         $this->assertSame(['status'], $schema['required']);
         $this->assertSame(['status'], array_keys($schema['properties']));
         $this->assertFalse($schema['additionalProperties']);
