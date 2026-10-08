@@ -874,6 +874,8 @@ class LaboratoryExamUpdateTest extends TestCase
         int|string $laboratoryExam,
         array $payload,
     ): TestResponse {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'laboratory_exams.update');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson("/api/v1/laboratory-exams/{$laboratoryExam}", $payload);

@@ -390,6 +390,8 @@ class LaboratoryAreaStoreTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['laboratory_areas.view', 'laboratory_areas.create']);
+
         return [$user, $laboratory];
     }
 
@@ -418,6 +420,8 @@ class LaboratoryAreaStoreTest extends TestCase
      */
     private function areaRequest(User $user, Laboratory $laboratory, array $payload): TestResponse
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'laboratory_areas.create');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->postJson('/api/v1/laboratory-areas', $payload);

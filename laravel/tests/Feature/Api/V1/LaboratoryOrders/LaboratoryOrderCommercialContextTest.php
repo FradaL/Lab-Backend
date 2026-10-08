@@ -159,6 +159,7 @@ final class LaboratoryOrderCommercialContextTest extends TestCase
             'ends_at' => now()->addMonth(),
             'trial_ends_at' => null,
         ]);
+        $this->assignAllOrderPermissions($user, $laboratory);
 
         return [
             $user,

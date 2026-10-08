@@ -149,6 +149,7 @@ final class LaboratoryOrderShowTest extends TestCase
         [, $laboratory, $order] = $this->orderContext(user: $creator);
         $reader = User::factory()->create(['name' => 'Lector Actual']);
         $reader->laboratories()->attach($laboratory, ['is_active' => true]);
+        $this->assignDirectLaboratoryPermission($reader, $laboratory, 'orders.view');
 
         $this->request($reader, $laboratory, $order)
             ->assertOk()
@@ -334,8 +335,8 @@ final class LaboratoryOrderShowTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(67, $operationCount);
-        $this->assertCount(75, Route::getRoutes()->getRoutes());
+        $this->assertSame(68, $operationCount);
+        $this->assertCount(76, Route::getRoutes()->getRoutes());
         $this->assertSame(['get'], array_keys($path));
         $parameter = collect($operation['parameters'])->firstWhere('name', 'laboratoryOrder');
         $this->assertSame('path', $parameter['in']);
@@ -385,6 +386,8 @@ final class LaboratoryOrderShowTest extends TestCase
             'ends_at' => now()->addMonth(),
             'trial_ends_at' => null,
         ]);
+
+        $this->assignAllOrderPermissions($user, $laboratory);
 
         return [$user, $laboratory];
     }

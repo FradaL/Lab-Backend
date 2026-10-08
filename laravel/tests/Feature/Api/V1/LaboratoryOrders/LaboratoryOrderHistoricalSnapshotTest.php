@@ -191,6 +191,7 @@ final class LaboratoryOrderHistoricalSnapshotTest extends TestCase
             'ends_at' => now()->addMonth(),
             'trial_ends_at' => null,
         ]);
+        $this->assignDirectLaboratoryPermission($user, $laboratoryB, 'orders.view');
         $order = LaboratoryOrder::factory()->for($laboratoryA)->create([
             'price_list_id' => $priceList->id,
             'price_list_name' => 'Lista General',
@@ -247,6 +248,8 @@ final class LaboratoryOrderHistoricalSnapshotTest extends TestCase
             'price' => '35.00',
             'status' => PriceListExam::STATUS_ACTIVE,
         ]);
+
+        $this->assignAllOrderPermissions($user, $laboratory);
 
         return [$user, $laboratory, $branch, $patient, $client, $priceList, $exam, $catalogPrice];
     }

@@ -594,6 +594,8 @@ class CommercialClientStoreTest extends TestCase
         Laboratory $laboratory,
         array $payload,
     ): TestResponse {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'commercial_clients.create');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->postJson('/api/v1/commercial-clients', $payload);

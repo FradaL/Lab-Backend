@@ -335,6 +335,8 @@ class SampleTypeStoreTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['sample_types.view', 'sample_types.create']);
+
         return [$user, $laboratory];
     }
 
@@ -355,6 +357,8 @@ class SampleTypeStoreTest extends TestCase
         Laboratory $laboratory,
         array $payload,
     ): TestResponse {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'sample_types.create');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->postJson('/api/v1/sample-types', $payload);

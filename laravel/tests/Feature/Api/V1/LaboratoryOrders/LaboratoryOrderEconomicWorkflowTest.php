@@ -203,6 +203,8 @@ final class LaboratoryOrderEconomicWorkflowTest extends TestCase
             ]);
         }
 
+        $this->assignAllOrderPermissions($user, $laboratory);
+
         return [$user, $laboratory, $priceList, $exams, $priceEntries, $commercialClient];
     }
 

@@ -489,6 +489,8 @@ class PriceListStatusTest extends TestCase
 
     private function statusRequest(User $user, Laboratory $laboratory, int|string $priceList, array $payload): TestResponse
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'price_lists.change_status');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson("/api/v1/price-lists/{$priceList}/status", $payload);

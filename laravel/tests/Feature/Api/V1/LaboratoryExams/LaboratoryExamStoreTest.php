@@ -631,6 +631,8 @@ class LaboratoryExamStoreTest extends TestCase
         Laboratory $laboratory,
         array $payload,
     ): TestResponse {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'laboratory_exams.create');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->postJson('/api/v1/laboratory-exams', $payload);

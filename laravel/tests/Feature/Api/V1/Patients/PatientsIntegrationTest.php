@@ -227,6 +227,8 @@ class PatientsIntegrationTest extends TestCase
 
     private function tenantRequest(User $user, Laboratory $laboratory): static
     {
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['patients.view', 'patients.create', 'patients.update', 'patients.change_status']);
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id);
     }

@@ -283,6 +283,8 @@ class LaboratoryAreaIntegrationTest extends TestCase
 
     private function tenantRequest(User $user, Laboratory $laboratory): self
     {
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['laboratory_areas.view', 'laboratory_areas.create', 'laboratory_areas.update', 'laboratory_areas.change_status']);
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id);
     }

@@ -464,10 +464,10 @@ final class LaboratoryOrderStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(67, $operationCount);
+        $this->assertSame(68, $operationCount);
         // The test bootstrap omits Laravel's generated storage route; the real
         // CLI inventory is asserted separately and contains one additional route.
-        $this->assertCount(75, Route::getRoutes()->getRoutes());
+        $this->assertCount(76, Route::getRoutes()->getRoutes());
         $this->assertSame([
             'branch_id', 'patient_id', 'doctor_id', 'commercial_client_id',
             'price_list_id', 'ordered_at', 'notes',
@@ -504,6 +504,7 @@ final class LaboratoryOrderStoreTest extends TestCase
             'ends_at' => now()->addMonth(),
             'trial_ends_at' => null,
         ]);
+        $this->assignAllOrderPermissions($user, $laboratory);
 
         return [
             $user,

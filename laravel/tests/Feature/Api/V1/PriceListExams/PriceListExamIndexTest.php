@@ -363,6 +363,8 @@ class PriceListExamIndexTest extends TestCase
             'trial_ends_at' => null,
         ]);
 
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'exam_prices.view');
+
         return [$user, $laboratory];
     }
 

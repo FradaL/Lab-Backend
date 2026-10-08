@@ -488,6 +488,8 @@ class SampleTypeUpdateTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['sample_types.view', 'sample_types.update', 'sample_types.change_status']);
+
         return [$user, $laboratory];
     }
 
@@ -519,6 +521,8 @@ class SampleTypeUpdateTest extends TestCase
         string $query = '',
     ): TestResponse {
         $suffix = $query === '' ? '' : "?{$query}";
+
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'sample_types.update');
 
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)

@@ -553,6 +553,8 @@ class PriceListStoreTest extends TestCase
     /** @param array<string, mixed> $payload */
     private function priceListRequest(User $user, Laboratory $laboratory, array $payload): TestResponse
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'price_lists.create');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->postJson('/api/v1/price-lists', $payload);

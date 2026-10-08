@@ -392,6 +392,9 @@ final class LaboratoryOrderAuditTest extends TestCase
 
     private function request(User $user, Laboratory $laboratory): static
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'exam_prices.manage');
+        $this->assignAllOrderPermissions($user, $laboratory);
+
         return $this->actingAs($user, 'web')->withHeader('X-Laboratory-ID', (string) $laboratory->id);
     }
 

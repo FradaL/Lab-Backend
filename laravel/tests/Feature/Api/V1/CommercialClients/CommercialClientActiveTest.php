@@ -321,7 +321,7 @@ class CommercialClientActiveTest extends TestCase
         $this->assertSame(['insurance', 'company', 'agreement', 'other'], $schema['properties']['type']['enum']);
         $this->assertSame(['data'], $collection['required']);
         $this->assertSame('#/components/schemas/ActiveCommercialClient', $collection['properties']['data']['items']['$ref']);
-        $this->assertCount(67, $operations);
+        $this->assertCount(68, $operations);
         $this->assertCount(6, $operations->filter(
             fn (array $item): bool => in_array('Commercial Clients', $item['tags'] ?? [], true),
         ));
@@ -337,6 +337,8 @@ class CommercialClientActiveTest extends TestCase
         $laboratory = Laboratory::factory()->create();
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
+
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'commercial_clients.view');
 
         return [$user, $laboratory];
     }

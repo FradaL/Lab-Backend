@@ -170,6 +170,9 @@ class PriceListCommercialAuditTest extends TestCase
             'ends_at' => now()->addMonth(),
             'trial_ends_at' => null,
         ]);
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, [
+            'price_lists.create', 'price_lists.update', 'price_lists.change_status', 'price_lists.set_default',
+        ]);
 
         return [$user, $laboratory];
     }

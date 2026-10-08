@@ -227,6 +227,8 @@ class PriceListExamStatusTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         Subscription::factory()->for($laboratory)->create(['starts_at' => now()->subDay(), 'ends_at' => now()->addMonth(), 'trial_ends_at' => null]);
 
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['exam_prices.view', 'exam_prices.manage']);
+
         return [$user, $laboratory];
     }
 
@@ -249,6 +251,8 @@ class PriceListExamStatusTest extends TestCase
     {
         $listId = $list instanceof PriceList ? $list->id : $list;
         $examId = $exam instanceof LaboratoryExam ? $exam->id : $exam;
+
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'exam_prices.manage');
 
         return $this->actingAs($user, 'web')->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson("/api/v1/price-lists/{$listId}/exams/{$examId}/status", $payload);

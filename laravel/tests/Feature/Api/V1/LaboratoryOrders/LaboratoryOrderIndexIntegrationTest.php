@@ -298,6 +298,7 @@ final class LaboratoryOrderIndexIntegrationTest extends TestCase
                 'ordered_at' => '2026-10-05 08:00:00',
             ]);
         }
+        $this->indexRequest($user, $laboratory, ['per_page' => 1])->assertOk();
         DB::enableQueryLog();
         $totalQueryCounts = [];
 
@@ -345,6 +346,8 @@ final class LaboratoryOrderIndexIntegrationTest extends TestCase
             'ends_at' => now()->addMonth(),
             'trial_ends_at' => null,
         ]);
+
+        $this->assignAllOrderPermissions($user, $laboratory);
 
         return [$user, $laboratory];
     }

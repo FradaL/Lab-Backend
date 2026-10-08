@@ -349,6 +349,8 @@ final class LaboratoryOrderIndexTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignAllOrderPermissions($user, $laboratory);
+
         return [$user, $laboratory];
     }
 

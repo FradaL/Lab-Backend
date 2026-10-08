@@ -518,6 +518,8 @@ class CommercialClientPriceListStatusTest extends TestCase
         int $assignment,
         array $payload,
     ): TestResponse {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'commercial_price_assignments.manage');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson(

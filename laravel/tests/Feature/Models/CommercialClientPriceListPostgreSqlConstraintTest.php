@@ -329,6 +329,11 @@ class CommercialClientPriceListPostgreSqlConstraintTest extends TestCase
         $user = User::factory()->create();
         $laboratory = Laboratory::factory()->create();
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
+        $this->assignDirectLaboratoryPermission(
+            $user,
+            $laboratory,
+            'commercial_price_assignments.manage',
+        );
         Subscription::factory()->for($laboratory)->create([
             'starts_at' => now()->subDay(),
             'ends_at' => now()->addMonth(),
@@ -356,8 +361,8 @@ class CommercialClientPriceListPostgreSqlConstraintTest extends TestCase
                 'ends_at' => '2026-06-30',
             ])->assertUnprocessable()->assertJsonValidationErrors(['period']);
 
-        $this->assertDatabaseCount('commercial_client_price_lists', 1);
-        $this->assertDatabaseHas('commercial_client_price_lists', ['price_list_id' => $racingPriceList->id]);
+        $this->assertDatabaseCount('commercial_client_price_lists', 0);
+        $this->assertDatabaseMissing('commercial_client_price_lists', ['price_list_id' => $racingPriceList->id]);
     }
 
     public function test_update_database_race_and_unique_collision_are_translated_to_http_422(): void
@@ -366,6 +371,11 @@ class CommercialClientPriceListPostgreSqlConstraintTest extends TestCase
         $user = User::factory()->create();
         $laboratory = Laboratory::factory()->create();
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
+        $this->assignDirectLaboratoryPermission(
+            $user,
+            $laboratory,
+            'commercial_price_assignments.manage',
+        );
         Subscription::factory()->for($laboratory)->create([
             'starts_at' => now()->subDay(),
             'ends_at' => now()->addMonth(),
@@ -587,6 +597,11 @@ class CommercialClientPriceListPostgreSqlConstraintTest extends TestCase
         $user = User::factory()->create();
         $laboratory = Laboratory::factory()->create();
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
+        $this->assignDirectLaboratoryPermission(
+            $user,
+            $laboratory,
+            'commercial_price_assignments.manage',
+        );
         Subscription::factory()->for($laboratory)->create([
             'starts_at' => now()->subDay(),
             'ends_at' => now()->addMonth(),
@@ -618,12 +633,12 @@ class CommercialClientPriceListPostgreSqlConstraintTest extends TestCase
             ])->assertUnprocessable()->assertJsonValidationErrors(['period']);
 
         $this->assertSame(CommercialClientPriceList::STATUS_INACTIVE, $assignment->fresh()->status);
-        $this->assertDatabaseHas('commercial_client_price_lists', [
+        $this->assertDatabaseMissing('commercial_client_price_lists', [
             'commercial_client_id' => $client->id,
             'price_list_id' => $priceLists[1]->id,
             'status' => CommercialClientPriceList::STATUS_ACTIVE,
         ]);
-        $this->assertDatabaseCount('commercial_client_price_lists', 2);
+        $this->assertDatabaseCount('commercial_client_price_lists', 1);
     }
 
     private function requirePostgreSql(): void

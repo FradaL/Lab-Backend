@@ -229,6 +229,8 @@ class DoctorShowTest extends TestCase
         Laboratory $laboratory,
         int|string $doctor,
     ): TestResponse {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'doctors.view');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->getJson("/api/v1/doctors/{$doctor}");

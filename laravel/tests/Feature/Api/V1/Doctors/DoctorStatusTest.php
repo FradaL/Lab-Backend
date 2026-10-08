@@ -359,6 +359,10 @@ class DoctorStatusTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, [
+            'doctors.view', 'doctors.update', 'doctors.change_status',
+        ]);
+
         return [$user, $laboratory];
     }
 
@@ -402,6 +406,8 @@ class DoctorStatusTest extends TestCase
         int|string $doctor,
         array $payload,
     ): TestResponse {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'doctors.change_status');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson("/api/v1/doctors/{$doctor}/status", $payload);

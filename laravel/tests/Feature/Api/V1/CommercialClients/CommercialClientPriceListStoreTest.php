@@ -368,7 +368,7 @@ class CommercialClientPriceListStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertCount(67, $operations);
+        $this->assertCount(68, $operations);
         $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Commercial Client Price List Assignments', $item['tags'] ?? [], true)));
         $this->assertCount(6, $operations->filter(fn (array $item): bool => in_array('Commercial Clients', $item['tags'] ?? [], true)));
         $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Exam Prices', $item['tags'] ?? [], true)));
@@ -419,6 +419,8 @@ class CommercialClientPriceListStoreTest extends TestCase
 
     private function request(User $user, Laboratory $laboratory, int $commercialClient, array $payload): TestResponse
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'commercial_price_assignments.manage');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->postJson("/api/v1/commercial-clients/{$commercialClient}/price-list-assignments", $payload);

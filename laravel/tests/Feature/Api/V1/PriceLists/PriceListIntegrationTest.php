@@ -466,6 +466,8 @@ class PriceListIntegrationTest extends TestCase
         string $path,
         array $payload = [],
     ): TestResponse {
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['price_lists.view', 'price_lists.create', 'price_lists.update', 'price_lists.change_status', 'price_lists.set_default']);
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->json($method, $path, $payload);

@@ -296,6 +296,8 @@ class ActiveSampleTypeTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createCurrentSubscription($laboratory);
 
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, ['sample_types.view', 'sample_types.update', 'sample_types.change_status']);
+
         return [$user, $laboratory];
     }
 
@@ -325,6 +327,8 @@ class ActiveSampleTypeTest extends TestCase
         if ($query !== []) {
             $uri .= '?'.http_build_query($query);
         }
+
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'sample_types.view');
 
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)

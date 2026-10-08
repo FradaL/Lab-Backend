@@ -298,6 +298,8 @@ final class BranchActiveTest extends TestCase
             $uri .= '?'.http_build_query($query);
         }
 
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'branches.view');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->getJson($uri);
@@ -306,6 +308,8 @@ final class BranchActiveTest extends TestCase
     /** @param array<string, mixed> $payload */
     private function orderRequest(User $user, Laboratory $laboratory, array $payload): TestResponse
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'orders.create');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->postJson('/api/v1/laboratory-orders', $payload);

@@ -175,6 +175,7 @@ class ExamPriceCommercialAuditTest extends TestCase
             'ends_at' => now()->addMonth(),
             'trial_ends_at' => null,
         ]);
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'exam_prices.manage');
 
         return [$user, $laboratory];
     }

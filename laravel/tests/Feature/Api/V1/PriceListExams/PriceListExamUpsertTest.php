@@ -353,6 +353,9 @@ class PriceListExamUpsertTest extends TestCase
             'ends_at' => now()->addMonth(),
             'trial_ends_at' => null,
         ]);
+        $this->assignDirectLaboratoryPermissions($user, $laboratory, [
+            'exam_prices.view', 'exam_prices.manage',
+        ]);
 
         return [$user, $laboratory];
     }
@@ -391,6 +394,7 @@ class PriceListExamUpsertTest extends TestCase
 
     private function rawUpsert(User $user, Laboratory $laboratory, PriceList|int $list, LaboratoryExam|int $exam, string $json): TestResponse
     {
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'exam_prices.manage');
         $this->actingAs($user, 'web');
 
         return $this->call('PUT', $this->uri($list, $exam), [], [], [], [

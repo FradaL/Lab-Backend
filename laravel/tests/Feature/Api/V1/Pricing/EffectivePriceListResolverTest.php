@@ -506,7 +506,7 @@ class EffectivePriceListResolverTest extends TestCase
         $routes = collect(Route::getRoutes()->getRoutes());
         $resolverRoutes = $routes->filter(fn ($route): bool => $route->uri() === 'api/v1/pricing/resolve-price-list');
 
-        $this->assertCount(75, $routes);
+        $this->assertCount(76, $routes);
         $this->assertCount(1, $resolverRoutes);
         $route = $resolverRoutes->first();
         $this->assertSame(['POST'], $route->methods());
@@ -527,7 +527,7 @@ class EffectivePriceListResolverTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertCount(67, $operations);
+        $this->assertCount(68, $operations);
         $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Commercial Client Price List Assignments', $item['tags'] ?? [], true)));
         $this->assertCount(6, $operations->filter(fn (array $item): bool => in_array('Commercial Clients', $item['tags'] ?? [], true)));
         $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Exam Prices', $item['tags'] ?? [], true)));
@@ -550,6 +550,7 @@ class EffectivePriceListResolverTest extends TestCase
         $laboratory = Laboratory::factory()->create();
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->currentSubscription($laboratory);
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'pricing.resolve');
 
         return [$user, $laboratory];
     }

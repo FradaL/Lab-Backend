@@ -398,6 +398,8 @@ class AvailablePriceListExamsTest extends TestCase
         $user->laboratories()->attach($laboratory, ['is_active' => true]);
         Subscription::factory()->for($laboratory)->create(['starts_at' => now()->subDay(), 'ends_at' => now()->addMonth(), 'trial_ends_at' => null]);
 
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'exam_prices.view');
+
         return [$user, $laboratory];
     }
 

@@ -65,12 +65,12 @@ docker compose exec workspace php artisan test
 
 Los seeders crean dos usuarios exclusivamente para desarrollo local:
 
-| Nombre | Correo | Contraseña |
-| --- | --- | --- |
-| Administrador Demo | `admin@donqerlab.test` | `password` |
-| Recepción Demo | `reception@donqerlab.test` | `password` |
+| Nombre | Correo | Contraseña | Roles |
+| --- | --- | --- | --- |
+| Administrador Demo | `admin@donqerlab.test` | `password` | `administrator` |
+| Recepción Demo | `reception@donqerlab.test` | `password` | `receptionist`, `cashier` |
 
-La contraseña se almacena hasheada. Estos usuarios no tienen roles ni permisos asignados; esa configuración pertenece a BE-17.
+La contraseña se almacena hasheada. Los roles y sus permisos se asignan dentro del laboratorio demo.
 
 Ejecutar los seeders desde `laradock/`:
 

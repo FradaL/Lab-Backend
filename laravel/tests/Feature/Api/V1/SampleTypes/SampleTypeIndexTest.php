@@ -382,6 +382,8 @@ class SampleTypeIndexTest extends TestCase
             $uri .= '?'.http_build_query($query);
         }
 
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'sample_types.view');
+
         return $this->actingAs($user, 'web')
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->getJson($uri);
