@@ -1,0 +1,119 @@
+name: donqer-lab
+
+x-app: &app
+  build:
+    context: ${BACKEND_SOURCE:-../..}
+    dockerfile: deploy/production/Dockerfile
+    target: app
+  image: donqer-lab-app:local
+  env_file:
+    - ${BACKEND_ENV_FILE:-.env}
+  init: true
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    - backend
+  volumes:
+    - app-storage:/var/www/html/storage/app
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  app:
+    <<: *app
+    expose:
+      - "9000"
+    mem_limit: 256m
+
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+    mem_limit: 128m
+
+  seed:
+    <<: *app
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile
+      target: seed
+    image: donqer-lab-seed:local
+    restart: "no"
+    profiles:
+      - tools
+
+  web:
+    build:
+      context: ${BACKEND_SOURCE:-../..}
+      dockerfile: deploy/production/Dockerfile
+      target: web
+    image: donqer-lab-web:local
+    init: true
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    expose:
+      - "80"
+    networks:
+      backend:
+      edge:
+        aliases:
+          - donqer-lab-web
+    volumes:
+      - app-storage:/var/www/html/storage/app:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/up"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    mem_limit: 64m
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=50
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"${DB_USERNAME}\" -d \"${DB_DATABASE}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    mem_limit: 256m
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  backend:
+    driver: bridge
+  edge:
+    external: true
+    name: educational-api_backend
+
+volumes:
+  app-storage:
+  postgres-data:

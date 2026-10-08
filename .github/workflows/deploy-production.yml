@@ -1,0 +1,97 @@
+name: Deploy backend production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: donqer-lab-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate deployment sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f laravel/artisan
+          test -f laravel/composer.lock
+          test -f deploy/production/Dockerfile
+          test -f deploy/production/compose.yaml
+
+      - name: Package release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_id="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          artifact="${RUNNER_TEMP}/donqer-lab-backend-${release_id}.tar.gz"
+          git archive --format=tar.gz --output="$artifact" "$GITHUB_SHA"
+          checksum=$(sha256sum "$artifact" | awk '{print $1}')
+          {
+            echo "id=$release_id"
+            echo "artifact=$artifact"
+            echo "checksum=$checksum"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure production SSH key
+        shell: bash
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_SSH_KEY:?Missing PRODUCTION_SSH_KEY}"
+          : "${DEPLOY_KNOWN_HOSTS:?Missing PRODUCTION_SSH_KNOWN_HOSTS}"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/production"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/production" "$HOME/.ssh/known_hosts"
+
+      - name: Deploy release
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          DEPLOY_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+          RELEASE_ARTIFACT: ${{ steps.release.outputs.artifact }}
+          RELEASE_CHECKSUM: ${{ steps.release.outputs.checksum }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?Missing PRODUCTION_SSH_HOST}"
+          : "${DEPLOY_USER:?Missing PRODUCTION_SSH_USER}"
+          cat "$RELEASE_ARTIFACT" | ssh \
+            -T \
+            -i "$HOME/.ssh/production" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "deploy $RELEASE_ID $RELEASE_CHECKSUM"
+
+      - name: Verify public API
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --retry 10 \
+            --retry-all-errors \
+            --retry-delay 2 \
+            https://api-lab.donqer.com/up > /dev/null
