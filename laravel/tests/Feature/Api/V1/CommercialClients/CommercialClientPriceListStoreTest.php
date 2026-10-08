@@ -368,7 +368,7 @@ class CommercialClientPriceListStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertCount(68, $operations);
+        $this->assertCount(69, $operations);
         $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Commercial Client Price List Assignments', $item['tags'] ?? [], true)));
         $this->assertCount(6, $operations->filter(fn (array $item): bool => in_array('Commercial Clients', $item['tags'] ?? [], true)));
         $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Exam Prices', $item['tags'] ?? [], true)));

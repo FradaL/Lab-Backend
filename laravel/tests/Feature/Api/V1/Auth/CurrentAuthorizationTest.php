@@ -394,7 +394,7 @@ final class CurrentAuthorizationTest extends TestCase
         $this->assertContains('saas', $route->gatherMiddleware());
         $this->assertFalse(collect($route->gatherMiddleware())
             ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')));
-        $this->assertSame(61, collect(Route::getRoutes()->getRoutes())
+        $this->assertSame(62, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/'))
             ->filter(fn (IlluminateRoute $route): bool => collect($route->gatherMiddleware())
                 ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')))

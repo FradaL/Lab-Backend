@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Auth\CurrentAuthorizationController;
 use App\Http\Controllers\Api\V1\BranchController;
 use App\Http\Controllers\Api\V1\CommercialClientController;
 use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DoctorController;
 use App\Http\Controllers\Api\V1\LaboratoryAreaController;
 use App\Http\Controllers\Api\V1\LaboratoryExamController;
@@ -34,6 +35,8 @@ Route::prefix('v1')->group(function (): void {
 
     Route::middleware('saas')->group(function (): void {
         Route::get('/auth/authorization', CurrentAuthorizationController::class);
+        Route::get('/dashboard', DashboardController::class)
+            ->middleware('can:orders.view');
         Route::get('/branches/active', [BranchController::class, 'active'])
             ->middleware('can:branches.view');
         Route::get('/laboratory-orders', [LaboratoryOrderController::class, 'index'])

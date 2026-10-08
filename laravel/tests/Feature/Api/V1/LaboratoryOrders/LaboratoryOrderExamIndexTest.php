@@ -312,7 +312,7 @@ final class LaboratoryOrderExamIndexTest extends TestCase
         )));
 
         $this->assertSame(['get', 'post'], array_keys($path));
-        $this->assertSame(68, $operationCount);
+        $this->assertSame(69, $operationCount);
         $this->assertArrayNotHasKey('requestBody', $operation);
         $this->assertSame('#/components/schemas/LaboratoryOrderExamCollectionResponse', $operation['responses']['200']['content']['application/json']['schema']['$ref']);
         $this->assertSame([200, 400, 401, 403, 404, 422], array_keys($operation['responses']));
