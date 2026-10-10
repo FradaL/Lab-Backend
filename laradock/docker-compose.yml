@@ -1,8 +1,14 @@
 networks:
   frontend:
     driver: ${NETWORKS_DRIVER}
+    ipam:
+      config:
+        - subnet: ${NETWORKS_FRONTEND_SUBNET}
   backend:
     driver: ${NETWORKS_DRIVER}
+    ipam:
+      config:
+        - subnet: ${NETWORKS_BACKEND_SUBNET}
 volumes:
   arangodb:
     driver: ${VOLUMES_DRIVER}
