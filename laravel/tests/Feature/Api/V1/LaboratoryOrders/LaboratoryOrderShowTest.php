@@ -277,10 +277,13 @@ final class LaboratoryOrderShowTest extends TestCase
         $this->request($user, $laboratory, $order)->assertOk();
 
         foreach (['laboratory_orders', 'patients', 'doctors', 'branches', 'users'] as $table) {
-            $this->assertCount(1, collect($queries)->filter(
+            $this->assertCount($table === 'users' ? 2 : 1, collect($queries)->filter(
                 fn (string $sql): bool => str_contains($sql, "from \"{$table}\""),
-            ), "Expected exactly one read from {$table}.");
+            ), "Expected constant reads from {$table}, including the user activation check.");
         }
+        $this->assertCount(1, collect($queries)->filter(
+            fn (string $sql): bool => str_starts_with($sql, 'select "is_active" from "users"'),
+        ));
         foreach (['commercial_clients', 'price_lists', 'commercial_client_price_lists', 'price_list_exams', 'laboratory_order_exams'] as $table) {
             $this->assertFalse(collect($queries)->contains(fn (string $sql): bool => str_contains($sql, $table)));
         }

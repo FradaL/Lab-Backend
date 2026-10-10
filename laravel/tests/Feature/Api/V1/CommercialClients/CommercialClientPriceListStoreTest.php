@@ -223,7 +223,7 @@ class CommercialClientPriceListStoreTest extends TestCase
             'starts_at' => '2026-01-01',
             'ends_at' => '2026-12-31',
         ]);
-        $original = $existing->getAttributes();
+        $original = $existing->fresh()->getAttributes();
 
         $this->request($user, $laboratory, $client->id, [
             'price_list_id' => $otherPriceList->id,

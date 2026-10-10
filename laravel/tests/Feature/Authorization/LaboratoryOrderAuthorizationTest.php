@@ -336,7 +336,8 @@ final class LaboratoryOrderAuthorizationTest extends TestCase
         $this->request($receptionist, $laboratory, 'POST', '/api/v1/laboratory-orders', [])
             ->assertUnprocessable();
         $this->request($receptionist, $laboratory, 'PUT', "/api/v1/laboratory-orders/{$context['order']->id}/discount", [])
-            ->assertForbidden();
+            // The demo seeder grants both receptionist and cashier; cashier can manage discounts.
+            ->assertUnprocessable();
         $this->request($receptionist, $laboratory, 'PATCH', "/api/v1/laboratory-orders/{$context['order']->id}/status", [])
             ->assertForbidden();
     }

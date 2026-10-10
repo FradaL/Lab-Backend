@@ -121,6 +121,7 @@ final class LaboratoryOrderSeederTest extends TestCase
         $idsBefore = LaboratoryOrder::query()
             ->where('laboratory_id', $demoLaboratory->id)
             ->where('code', 'like', LaboratoryOrderSeeder::DEMO_CODE_PREFIX.'%')
+            ->orderBy('code')
             ->pluck('id', 'code')
             ->all();
 
@@ -139,6 +140,7 @@ final class LaboratoryOrderSeederTest extends TestCase
         $idsAfter = LaboratoryOrder::query()
             ->where('laboratory_id', $demoLaboratory->id)
             ->where('code', 'like', LaboratoryOrderSeeder::DEMO_CODE_PREFIX.'%')
+            ->orderBy('code')
             ->pluck('id', 'code')
             ->all();
 

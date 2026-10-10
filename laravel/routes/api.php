@@ -28,8 +28,8 @@ Route::prefix('v1')->group(function (): void {
 
         Route::middleware('auth:sanctum')->group(function (): void {
             Route::post('/logout', [AuthController::class, 'logout']);
-            Route::get('/me', [AuthController::class, 'me']);
-            Route::get('/laboratories', AvailableLaboratoryController::class);
+            Route::get('/me', [AuthController::class, 'me'])->middleware('user.active');
+            Route::get('/laboratories', AvailableLaboratoryController::class)->middleware('user.active');
         });
     });
 

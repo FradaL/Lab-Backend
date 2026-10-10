@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureActiveSubscription;
+use App\Http\Middleware\EnsureActiveUser;
 use App\Http\Middleware\ResolveLaboratoryContext;
 use App\Http\Middleware\SetPermissionTeamContext;
 use Illuminate\Foundation\Application;
@@ -19,14 +20,17 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
         $middleware->alias([
+            'user.active' => EnsureActiveUser::class,
             'laboratory.context' => ResolveLaboratoryContext::class,
             'permission.team' => SetPermissionTeamContext::class,
             'subscription.active' => EnsureActiveSubscription::class,
         ]);
         $middleware->prependToPriorityList(SubstituteBindings::class, SetPermissionTeamContext::class);
         $middleware->prependToPriorityList(SetPermissionTeamContext::class, ResolveLaboratoryContext::class);
+        $middleware->prependToPriorityList(ResolveLaboratoryContext::class, EnsureActiveUser::class);
         $middleware->group('saas', [
             'auth:sanctum',
+            'user.active',
             'laboratory.context',
             'permission.team',
             'subscription.active',

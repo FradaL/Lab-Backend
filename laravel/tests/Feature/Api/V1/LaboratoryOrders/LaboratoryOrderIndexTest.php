@@ -278,10 +278,13 @@ final class LaboratoryOrderIndexTest extends TestCase
         $this->indexRequest($user, $laboratory, ['per_page' => 100])->assertOk();
 
         foreach (['branches', 'patients', 'doctors', 'users'] as $table) {
-            $this->assertCount(1, collect($queries)->filter(
+            $this->assertCount($table === 'users' ? 2 : 1, collect($queries)->filter(
                 fn (string $sql): bool => str_contains($sql, "from \"{$table}\""),
-            ), "Expected one eager-load query for {$table}.");
+            ), "Expected constant reads for {$table}, including the user activation check.");
         }
+        $this->assertCount(1, collect($queries)->filter(
+            fn (string $sql): bool => str_starts_with($sql, 'select "is_active" from "users"'),
+        ));
         $orderQueries = collect($queries)->filter(
             fn (string $sql): bool => str_contains($sql, 'from "laboratory_orders"'),
         );

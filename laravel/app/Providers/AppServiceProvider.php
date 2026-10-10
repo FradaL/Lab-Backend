@@ -5,9 +5,11 @@ namespace App\Providers;
 use App\Tenancy\CurrentLaboratory;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Tests\Support\TestingDatabaseServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -17,6 +19,13 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(CurrentLaboratory::class);
+
+        $testingRequested = $this->app->environment('testing')
+            || Env::get('APP_ENV') === 'testing';
+
+        if ($testingRequested) {
+            $this->app->register(TestingDatabaseServiceProvider::class);
+        }
     }
 
     /**

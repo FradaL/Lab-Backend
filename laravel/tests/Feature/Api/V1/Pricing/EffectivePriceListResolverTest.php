@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Pricing\AmbiguousEffectivePriceListException;
 use App\Services\Pricing\PriceListResolution;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -451,12 +452,26 @@ class EffectivePriceListResolverTest extends TestCase
         $this->assertNoUnrelatedQueries($queries->all());
     }
 
-    public function test_ambiguous_effective_data_raises_an_invariant_violation_without_tiebreaking(): void
+    public function test_ambiguous_effective_data_is_prevented_by_postgresql_or_rejected_by_the_resolver(): void
     {
         [$user, $laboratory] = $this->activeContext();
         $client = CommercialClient::factory()->for($laboratory)->create();
         $priceLists = PriceList::factory()->count(2)->for($laboratory)->create();
         $this->assignment($laboratory, $client, $priceLists[0], '2026-01-01', null);
+        if (DB::getDriverName() === 'pgsql') {
+            try {
+                DB::transaction(fn () => $this->assignment($laboratory, $client, $priceLists[1], '2026-06-01', '2026-12-31'));
+                $this->fail('PostgreSQL must reject overlapping active assignments.');
+            } catch (QueryException $exception) {
+                $this->assertSame('23P01', $exception->getCode());
+                $this->assertStringContainsString('ccpl_no_active_period_overlap', $exception->getMessage());
+            }
+            $this->assertDatabaseCount('commercial_client_price_lists', 1);
+            $this->request($user, $laboratory, $client->id, '2026-10-03')
+                ->assertOk()->assertJsonPath('data.price_list.id', $priceLists[0]->id);
+
+            return;
+        }
         $this->assignment($laboratory, $client, $priceLists[1], '2026-06-01', '2026-12-31');
         $this->withoutExceptionHandling();
 
