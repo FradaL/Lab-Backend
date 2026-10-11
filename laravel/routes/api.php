@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\AvailableLaboratoryController;
 use App\Http\Controllers\Api\V1\Auth\CurrentAuthorizationController;
 use App\Http\Controllers\Api\V1\BranchController;
+use App\Http\Controllers\Api\V1\ClinicalExamController;
 use App\Http\Controllers\Api\V1\CommercialClientController;
 use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
 use App\Http\Controllers\Api\V1\DashboardController;
@@ -11,6 +12,8 @@ use App\Http\Controllers\Api\V1\DoctorController;
 use App\Http\Controllers\Api\V1\LaboratoryAreaController;
 use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Http\Controllers\Api\V1\LaboratoryOrderController;
+use App\Http\Controllers\Api\V1\LaboratoryResultController;
+use App\Http\Controllers\Api\V1\LaboratorySampleController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PriceListController;
 use App\Http\Controllers\Api\V1\PriceListExamController;
@@ -127,6 +130,19 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('/price-lists/{priceList}/default', [PriceListController::class, 'setDefault'])
             ->middleware('can:price_lists.set_default')
             ->whereNumber('priceList');
+        Route::post('/laboratory-exams/drafts', [ClinicalExamController::class, 'store'])->middleware('can:laboratory_exams.create_draft');
+        Route::get('/global-exam-templates', [ClinicalExamController::class, 'templates'])->middleware('can:laboratory_exams.view');
+        Route::post('/laboratory-exams/import-template', [ClinicalExamController::class, 'import'])->middleware('can:laboratory_exams.import_template');
+        Route::prefix('/laboratory-exams/{laboratoryExam}')->whereNumber('laboratoryExam')->group(function (): void {
+            Route::get('/versions', [ClinicalExamController::class, 'index'])->middleware('can:laboratory_exams.view');
+            Route::post('/versions', [ClinicalExamController::class, 'fork'])->middleware('can:laboratory_exams.create_draft');
+            Route::get('/versions/current', [ClinicalExamController::class, 'current'])->middleware('can:laboratory_exams.view');
+            Route::get('/order-configuration', [ClinicalExamController::class, 'orderConfiguration'])->middleware('can:laboratory_exams.view');
+            Route::get('/versions/{version}', [ClinicalExamController::class, 'show'])->middleware('can:laboratory_exams.view')->whereNumber('version');
+            Route::put('/versions/{version}', [ClinicalExamController::class, 'update'])->middleware('can:laboratory_exams.edit_draft')->whereNumber('version');
+            Route::post('/versions/{version}/validate-publication', [ClinicalExamController::class, 'validatePublication'])->middleware('can:laboratory_exams.publish')->whereNumber('version');
+            Route::post('/versions/{version}/publish', [ClinicalExamController::class, 'publish'])->middleware('can:laboratory_exams.publish')->whereNumber('version');
+        });
         Route::get('/laboratory-exams', [LaboratoryExamController::class, 'index'])
             ->middleware('can:laboratory_exams.view');
         Route::post('/laboratory-exams', [LaboratoryExamController::class, 'store'])
@@ -142,6 +158,36 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('/laboratory-exams/{laboratoryExam}/status', [LaboratoryExamController::class, 'updateStatus'])
             ->middleware('can:laboratory_exams.change_status')
             ->whereNumber('laboratoryExam');
+        Route::get('/laboratory-orders/{order}/exams/{line}/results/history', [LaboratoryResultController::class, 'history'])
+            ->middleware('can:results.view_history')->whereNumber(['order', 'line']);
+        Route::get('/laboratory-orders/{order}/exams/{line}/results', [LaboratoryResultController::class, 'show'])
+            ->middleware('can:results.view')->whereNumber(['order', 'line']);
+        Route::put('/laboratory-orders/{order}/exams/{line}/results', [LaboratoryResultController::class, 'save'])
+            ->middleware('can:results.capture')->whereNumber(['order', 'line']);
+        Route::get('/laboratory-orders/{order}/samples', [LaboratorySampleController::class, 'index'])
+            ->middleware('can:samples.view')->whereNumber(['order']);
+        Route::post('/laboratory-orders/{order}/samples/collect', [LaboratorySampleController::class, 'collect'])
+            ->middleware('can:samples.collect')->whereNumber(['order']);
+        Route::post('/laboratory-orders/{order}/samples/receive', [LaboratorySampleController::class, 'receiveNew'])
+            ->middleware('can:samples.receive')->whereNumber(['order']);
+        Route::get('/laboratory-orders/{order}/samples/{sample}', [LaboratorySampleController::class, 'show'])
+            ->middleware('can:samples.view')->whereNumber(['order', 'sample']);
+        Route::post('/laboratory-orders/{order}/samples/{sample}/receive', [LaboratorySampleController::class, 'receive'])
+            ->middleware('can:samples.receive')->whereNumber(['order', 'sample']);
+        Route::post('/laboratory-orders/{order}/samples/{sample}/accept', [LaboratorySampleController::class, 'accept'])
+            ->middleware('can:samples.evaluate')->whereNumber(['order', 'sample']);
+        Route::post('/laboratory-orders/{order}/samples/{sample}/reject', [LaboratorySampleController::class, 'reject'])
+            ->middleware('can:samples.evaluate')->whereNumber(['order', 'sample']);
+        Route::get('/laboratory-orders/{order}/samples/{sample}/candidates', [LaboratorySampleController::class, 'candidates'])
+            ->middleware('can:samples.view')->whereNumber(['order', 'sample']);
+        Route::post('/laboratory-orders/{order}/samples/{sample}/associations', [LaboratorySampleController::class, 'associate'])
+            ->middleware('can:samples.associate')->whereNumber(['order', 'sample']);
+        Route::post('/laboratory-orders/{order}/samples/{sample}/associations/{association}/release', [LaboratorySampleController::class, 'release'])
+            ->middleware('can:samples.associate')->whereNumber(['order', 'sample', 'association']);
+        Route::get('/laboratory-orders/{order}/operational', [LaboratorySampleController::class, 'operational'])
+            ->middleware('can:samples.view')->whereNumber(['order']);
+        Route::post('/laboratory-orders/{order}/exams/{line}/start', [LaboratorySampleController::class, 'start'])
+            ->middleware('can:orders.start_exam')->whereNumber(['order', 'line']);
         Route::get('/sample-types', [SampleTypeController::class, 'index'])
             ->middleware('can:sample_types.view');
         Route::post('/sample-types', [SampleTypeController::class, 'store'])

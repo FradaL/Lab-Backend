@@ -19,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+        $resultInput = fn (Request $request) => $request->isMethod('PUT') && $request->is('api/v1/laboratory-orders/*/exams/*/results');
+        $middleware->trimStrings(except: [$resultInput]);
+        $middleware->convertEmptyStringsToNull(except: [$resultInput]);
         $middleware->alias([
             'user.active' => EnsureActiveUser::class,
             'laboratory.context' => ResolveLaboratoryContext::class,

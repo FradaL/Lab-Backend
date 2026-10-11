@@ -53,6 +53,7 @@ final class LaboratoryOrderResource extends JsonResource
             ],
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
+            'exams' => LaboratoryOrderExamResource::collection($this->whenLoaded('orderExams')),
         ];
     }
 }

@@ -85,7 +85,7 @@ final class LaboratoryOrderIndexIntegrationTest extends TestCase
             'status' => LaboratoryOrder::STATUS_PENDING,
             'ordered_at' => '2026-10-05 11:00:00',
         ]);
-        $exam = LaboratoryExam::factory()->for($laboratoryA)->create(['name' => 'Glucosa']);
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratoryA)->create(['name' => 'Glucosa']);
         LaboratoryOrderExam::factory()->count(3)->for($laboratoryA)->create([
             'laboratory_order_id' => $target->id,
             'laboratory_exam_id' => $exam->id,

@@ -19,12 +19,15 @@ final class RbacCatalog
         'laboratory_areas.view', 'laboratory_areas.create', 'laboratory_areas.update', 'laboratory_areas.change_status',
         'sample_types.view', 'sample_types.create', 'sample_types.update', 'sample_types.change_status',
         'laboratory_exams.view', 'laboratory_exams.create', 'laboratory_exams.update', 'laboratory_exams.change_status',
+        'laboratory_exams.create_draft', 'laboratory_exams.edit_draft', 'laboratory_exams.publish', 'laboratory_exams.import_template',
         'commercial_clients.view', 'commercial_clients.create', 'commercial_clients.update', 'commercial_clients.change_status',
         'price_lists.view', 'price_lists.create', 'price_lists.update', 'price_lists.change_status', 'price_lists.set_default',
         'exam_prices.view', 'exam_prices.manage',
         'commercial_price_assignments.view', 'commercial_price_assignments.manage',
         'pricing.resolve',
         'orders.view', 'orders.create', 'orders.add_exam', 'orders.remove_exam', 'orders.manage_discount', 'orders.change_status',
+        'results.view', 'results.capture', 'results.edit', 'results.view_history',
+        'samples.view', 'samples.collect', 'samples.receive', 'samples.evaluate', 'samples.associate', 'orders.start_exam',
     ];
 
     private const array RECEPTIONIST_PERMISSIONS = [
@@ -74,8 +77,8 @@ final class RbacCatalog
 
     public static function assertValid(): void
     {
-        if (count(self::PERMISSIONS) !== 41 || count(array_unique(self::PERMISSIONS)) !== 41) {
-            throw new LogicException('The RBAC catalog must contain exactly 41 unique permissions.');
+        if (count(self::PERMISSIONS) !== 55 || count(array_unique(self::PERMISSIONS)) !== 55) {
+            throw new LogicException('The RBAC catalog must contain exactly 55 unique permissions.');
         }
 
         $matrix = self::rolePermissions();

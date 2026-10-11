@@ -18,6 +18,7 @@ use App\Models\PriceListExam;
 use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
@@ -97,6 +98,9 @@ final class LaboratoryOrderAuditTest extends TestCase
             'exam_name' => 'Glucosa',
             'price_list_name' => 'Precio particular',
             'unit_price' => '35.00',
+            'clinical_version_id' => $exam->orderExams()->firstOrFail()->clinical_version_id,
+            'clinical_configuration_source' => 'published_version',
+            'configuration_hash' => $exam->orderExams()->firstOrFail()->clinicalVersion->configuration_hash,
         ], $added[0]->new_values);
         $this->assertSame(['price' => '35.00'], $changed->old_values);
         $this->assertSame(['price' => '40.00'], $changed->new_values);
@@ -131,6 +135,9 @@ final class LaboratoryOrderAuditTest extends TestCase
             'exam_name' => 'Glucosa',
             'price_list_name' => 'Precio particular',
             'unit_price' => '35.00',
+            'clinical_version_id' => DB::table('laboratory_exam_clinical_states')->where('laboratory_exam_id', $exam->id)->value('current_version_id'),
+            'clinical_configuration_source' => 'published_version',
+            'sample_requirement_ids' => [],
         ], $removed->old_values);
         $this->assertNull($removed->new_values);
         $this->assertSame('0.00', $order->fresh()->total);
@@ -175,6 +182,12 @@ final class LaboratoryOrderAuditTest extends TestCase
     public function test_real_status_transitions_audit_exact_deltas(string $from, string $to): void
     {
         [$actor, $laboratory, $order] = $this->orderContext(['status' => $from]);
+
+        $lineFactory = LaboratoryOrderExam::factory()->for($laboratory);
+        if ($order->status === 'pending') {
+            $lineFactory = $lineFactory->processingStarted();
+        }
+        $lineFactory->create(['laboratory_order_id' => $order->id, 'unit_price' => '0.00']);
 
         $this->request($actor, $laboratory)
             ->patchJson("/api/v1/laboratory-orders/{$order->id}/status", ['status' => $to])
@@ -240,6 +253,7 @@ final class LaboratoryOrderAuditTest extends TestCase
         [, $first] = $this->activeTenant($actor);
         [, $second, $order] = $this->orderContext(user: $actor);
 
+        LaboratoryOrderExam::factory()->for($second)->processingStarted()->create(['laboratory_order_id' => $order->id, 'unit_price' => '0.00']);
         $this->requestStatus($actor, $second, $order, 'in_process')->assertOk();
 
         $log = AuditLog::query()->sole();
@@ -260,6 +274,7 @@ final class LaboratoryOrderAuditTest extends TestCase
         $this->line($laboratory, $discountOrder, $discountExam, '100.00');
         $discountOrder->update(['subtotal' => '100.00', 'total' => '100.00']);
         [, , $statusOrder] = $this->orderContext(user: $actor, laboratory: $laboratory);
+        LaboratoryOrderExam::factory()->for($laboratory)->processingStarted()->create(['laboratory_order_id' => $statusOrder->id, 'unit_price' => '0.00']);
         $orderCount = LaboratoryOrder::query()->count();
         AuditLog::creating(static fn (): never => throw new RuntimeException('audit unavailable'));
         $this->withoutExceptionHandling();
@@ -297,7 +312,7 @@ final class LaboratoryOrderAuditTest extends TestCase
     public function test_integrated_history_has_exact_sequence_and_reads_add_nothing(): void
     {
         [$actor, $laboratory, $branch, $patient, $doctor, $client, $priceList] = $this->creationContext();
-        $exam = LaboratoryExam::factory()->for($laboratory)->create(['status' => 'active']);
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create(['status' => 'active']);
         PriceListExam::factory()->for($laboratory)->create([
             'price_list_id' => $priceList->id, 'laboratory_exam_id' => $exam->id,
             'price' => '50.00', 'status' => 'active',
@@ -312,6 +327,8 @@ final class LaboratoryOrderAuditTest extends TestCase
         $second = $this->addExam($actor, $laboratory, $order, $exam)->assertCreated()->json('data.id');
         $this->request($actor, $laboratory)->putJson("/api/v1/laboratory-orders/{$orderId}/discount", ['type' => 'percentage', 'value' => '10.00'])->assertOk();
         $this->request($actor, $laboratory)->deleteJson("/api/v1/laboratory-orders/{$orderId}/exams/{$first}")->assertNoContent();
+        $this->assignDirectLaboratoryPermission($actor, $laboratory, 'orders.start_exam');
+        $this->request($actor, $laboratory)->postJson("/api/v1/laboratory-orders/{$orderId}/exams/{$second}/start")->assertOk();
         $this->requestStatus($actor, $laboratory, $order, 'in_process')->assertOk();
         $this->request($actor, $laboratory)->getJson('/api/v1/laboratory-orders')->assertOk();
         $this->request($actor, $laboratory)->getJson("/api/v1/laboratory-orders/{$orderId}")->assertOk();
@@ -320,7 +337,7 @@ final class LaboratoryOrderAuditTest extends TestCase
         $logs = AuditLog::query()->orderBy('id')->get();
         $this->assertSame([
             OrderAuditEvents::CREATED, OrderAuditEvents::EXAM_ADDED, OrderAuditEvents::EXAM_ADDED,
-            OrderAuditEvents::DISCOUNT_SET, OrderAuditEvents::EXAM_REMOVED, OrderAuditEvents::STATUS_CHANGED,
+            OrderAuditEvents::DISCOUNT_SET, OrderAuditEvents::EXAM_REMOVED, 'order_exam.processing_started', OrderAuditEvents::STATUS_CHANGED,
         ], $logs->pluck('event')->all());
         $this->assertSame([$first, $second], $logs->where('event', OrderAuditEvents::EXAM_ADDED)->pluck('auditable_id')->values()->all());
         $this->assertNotSame($first, $second);
@@ -369,7 +386,7 @@ final class LaboratoryOrderAuditTest extends TestCase
             'currency' => 'GTQ', 'status' => 'pending', 'created_by' => $user->id,
         ], $attributes));
         $examCount = LaboratoryExam::forLaboratory($laboratory)->count();
-        $exam = LaboratoryExam::factory()->for($laboratory)->create([
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
             'code' => $examCount === 0 ? 'GLU' : 'GLU-'.($examCount + 1),
             'name' => $examCount === 0 ? 'Glucosa' : 'Glucosa '.($examCount + 1),
             'status' => 'active',

@@ -5,6 +5,7 @@ namespace App\Actions\LaboratoryOrders;
 use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\Audit\OrderAuditEvents;
+use App\ClinicalExams\ClinicalConflict;
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
@@ -51,6 +52,13 @@ final class RemoveExamFromLaboratoryOrder
                 abort(404, 'Resource not found.');
             }
 
+            $requirements = $orderExam->sampleRequirements()->lockForUpdate()->get();
+            if ($orderExam->clinical_activity_started_at !== null || $requirements->contains(
+                fn ($requirement): bool => $requirement->status !== 'pending' || $requirement->clinical_activity_started_at !== null,
+            )) {
+                throw new ClinicalConflict('order_exam_has_clinical_activity', 'A line with clinical activity cannot be removed.');
+            }
+
             $snapshot = [
                 'laboratory_order_id' => $orderExam->laboratory_order_id,
                 'laboratory_exam_id' => $orderExam->laboratory_exam_id,
@@ -59,9 +67,13 @@ final class RemoveExamFromLaboratoryOrder
                 'exam_name' => $orderExam->exam_name,
                 'price_list_name' => $orderExam->price_list_name,
                 'unit_price' => $orderExam->unit_price,
+                'clinical_version_id' => $orderExam->clinical_version_id,
+                'clinical_configuration_source' => $orderExam->clinical_configuration_source,
+                'sample_requirement_ids' => $requirements->modelKeys(),
             ];
             $subjectId = $orderExam->getKey();
 
+            $orderExam->sampleRequirements()->delete();
             $orderExam->delete();
 
             $this->recalculateEconomics->execute($laboratory, $order);

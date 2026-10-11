@@ -8,6 +8,7 @@ use App\Models\CommercialClient;
 use App\Models\Doctor;
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
+use App\Models\LaboratoryOrderExam;
 use App\Models\Patient;
 use App\Models\PriceList;
 use App\Models\Subscription;
@@ -277,9 +278,10 @@ final class LaboratoryOrderStatusTest extends TestCase
         $response = $this->request($user, $laboratory, $order->id, ['status' => 'in_process'])
             ->assertOk();
 
-        foreach (['commercial_client_price_lists', 'price_list_exams', 'laboratory_order_exams'] as $table) {
+        foreach (['commercial_client_price_lists', 'price_list_exams'] as $table) {
             $this->assertFalse(collect($queries)->contains(fn (string $sql): bool => str_contains($sql, $table)));
         }
+        $this->assertCount(2, collect($queries)->filter(fn (string $sql): bool => str_contains($sql, 'from "laboratory_order_exams"')));
         $this->assertCount(1, collect($queries)->filter(
             fn (string $sql): bool => str_starts_with($sql, 'update "laboratory_orders"'),
         ));
@@ -334,6 +336,7 @@ final class LaboratoryOrderStatusTest extends TestCase
     {
         $routes = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
+            ->filter(fn ($route): bool => $route->getAction('controller') !== null && str_starts_with($route->getAction('controller'), LaboratoryOrderController::class.'@'))
             ->values();
         $statusRoute = $routes->first(fn ($route): bool => in_array('PATCH', $route->methods(), true));
 
@@ -359,15 +362,15 @@ final class LaboratoryOrderStatusTest extends TestCase
             array_flip(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']),
         )));
 
-        $this->assertSame(69, $operationCount);
-        $this->assertCount(77, Route::getRoutes()->getRoutes());
+        $this->assertSame(95, $operationCount);
+        $this->assertCount(103, Route::getRoutes()->getRoutes());
         $this->assertSame(['status'], $schema['required']);
         $this->assertSame(['status'], array_keys($schema['properties']));
         $this->assertFalse($schema['additionalProperties']);
         $this->assertSame(LaboratoryOrder::STATUSES, $schema['properties']['status']['enum']);
         $this->assertSame('#/components/schemas/UpdateLaboratoryOrderStatusInput', $operation['requestBody']['content']['application/json']['schema']['$ref']);
         $this->assertSame('#/components/schemas/LaboratoryOrderResponse', $operation['responses']['200']['content']['application/json']['schema']['$ref']);
-        $this->assertSame([200, 400, 401, 403, 404, 422], array_keys($operation['responses']));
+        $this->assertSame([200, 400, 401, 403, 404, 409, 422], array_keys($operation['responses']));
         $this->assertStringContainsString('pending', strtolower($operation['description']));
         $this->assertStringContainsString('terminales', strtolower($operation['description']));
         $this->assertStringContainsString('no-op', strtolower($operation['description']));
@@ -391,6 +394,12 @@ final class LaboratoryOrderStatusTest extends TestCase
             'currency' => 'GTQ',
             'created_by' => $user->id,
         ], $attributes));
+
+        $lineFactory = LaboratoryOrderExam::factory()->for($laboratory);
+        if ($order->status === 'pending') {
+            $lineFactory = $lineFactory->processingStarted();
+        }
+        $lineFactory->create(['laboratory_order_id' => $order->id, 'unit_price' => '0.00']);
 
         return [$user, $laboratory, $order];
     }

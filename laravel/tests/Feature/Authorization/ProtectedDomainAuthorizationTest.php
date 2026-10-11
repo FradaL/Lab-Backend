@@ -47,9 +47,9 @@ final class ProtectedDomainAuthorizationTest extends TestCase
         ksort($expected);
 
         $this->assertSame($expected, $actual);
-        $this->assertCount(62, $actual);
+        $this->assertCount(88, $actual);
         $this->assertEmpty(array_diff(array_values($actual), RbacCatalog::PERMISSIONS));
-        $this->assertSame(9, collect(Route::getRoutes()->getRoutes())
+        $this->assertSame(24, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
             ->filter(fn (IlluminateRoute $route): bool => collect($route->gatherMiddleware())
                 ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')))
@@ -349,6 +349,17 @@ final class ProtectedDomainAuthorizationTest extends TestCase
             'GET api/v1/sample-types/{sampleType}' => 'sample_types.view',
             'PATCH api/v1/sample-types/{sampleType}' => 'sample_types.update',
             'PATCH api/v1/sample-types/{sampleType}/status' => 'sample_types.change_status',
+            'POST api/v1/laboratory-exams/drafts' => 'laboratory_exams.create_draft',
+            'GET api/v1/global-exam-templates' => 'laboratory_exams.view',
+            'POST api/v1/laboratory-exams/import-template' => 'laboratory_exams.import_template',
+            'GET api/v1/laboratory-exams/{laboratoryExam}/versions' => 'laboratory_exams.view',
+            'POST api/v1/laboratory-exams/{laboratoryExam}/versions' => 'laboratory_exams.create_draft',
+            'GET api/v1/laboratory-exams/{laboratoryExam}/versions/current' => 'laboratory_exams.view',
+            'GET api/v1/laboratory-exams/{laboratoryExam}/order-configuration' => 'laboratory_exams.view',
+            'GET api/v1/laboratory-exams/{laboratoryExam}/versions/{version}' => 'laboratory_exams.view',
+            'PUT api/v1/laboratory-exams/{laboratoryExam}/versions/{version}' => 'laboratory_exams.edit_draft',
+            'POST api/v1/laboratory-exams/{laboratoryExam}/versions/{version}/validate-publication' => 'laboratory_exams.publish',
+            'POST api/v1/laboratory-exams/{laboratoryExam}/versions/{version}/publish' => 'laboratory_exams.publish',
             'GET api/v1/laboratory-exams' => 'laboratory_exams.view',
             'POST api/v1/laboratory-exams' => 'laboratory_exams.create',
             'GET api/v1/laboratory-exams/active' => 'laboratory_exams.view',
@@ -387,6 +398,21 @@ final class ProtectedDomainAuthorizationTest extends TestCase
             'PUT api/v1/laboratory-orders/{laboratoryOrder}/discount' => 'orders.manage_discount',
             'DELETE api/v1/laboratory-orders/{laboratoryOrder}/discount' => 'orders.manage_discount',
             'PATCH api/v1/laboratory-orders/{laboratoryOrder}/status' => 'orders.change_status',
+            'GET api/v1/laboratory-orders/{order}/exams/{line}/results' => 'results.view',
+            'PUT api/v1/laboratory-orders/{order}/exams/{line}/results' => 'results.capture',
+            'GET api/v1/laboratory-orders/{order}/exams/{line}/results/history' => 'results.view_history',
+            'GET api/v1/laboratory-orders/{order}/samples' => 'samples.view',
+            'POST api/v1/laboratory-orders/{order}/samples/collect' => 'samples.collect',
+            'POST api/v1/laboratory-orders/{order}/samples/receive' => 'samples.receive',
+            'GET api/v1/laboratory-orders/{order}/samples/{sample}' => 'samples.view',
+            'POST api/v1/laboratory-orders/{order}/samples/{sample}/receive' => 'samples.receive',
+            'POST api/v1/laboratory-orders/{order}/samples/{sample}/accept' => 'samples.evaluate',
+            'POST api/v1/laboratory-orders/{order}/samples/{sample}/reject' => 'samples.evaluate',
+            'GET api/v1/laboratory-orders/{order}/samples/{sample}/candidates' => 'samples.view',
+            'POST api/v1/laboratory-orders/{order}/samples/{sample}/associations' => 'samples.associate',
+            'POST api/v1/laboratory-orders/{order}/samples/{sample}/associations/{association}/release' => 'samples.associate',
+            'GET api/v1/laboratory-orders/{order}/operational' => 'samples.view',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/start' => 'orders.start_exam',
         ];
     }
 }

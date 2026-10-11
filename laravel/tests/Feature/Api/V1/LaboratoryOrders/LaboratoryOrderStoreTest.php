@@ -62,7 +62,7 @@ final class LaboratoryOrderStoreTest extends TestCase
             'id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor',
             'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type',
             'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by',
-            'created_at', 'updated_at',
+            'created_at', 'updated_at', 'exams',
         ], array_keys($response->json('data')));
         $this->assertSame(['id', 'first_names', 'last_names'], array_keys($response->json('data.patient')));
         $this->assertSame(['id', 'first_names', 'last_names'], array_keys($response->json('data.doctor')));
@@ -92,7 +92,7 @@ final class LaboratoryOrderStoreTest extends TestCase
             ->assertJsonMissingPath('data.doctor_id')
             ->assertJsonMissingPath('data.commercial_client_id')
             ->assertJsonMissingPath('data.price_list_id')
-            ->assertJsonMissingPath('data.exams');
+            ->assertJsonPath('data.exams', []);
     }
 
     public function test_particular_order_without_doctor_and_notes_uses_explicit_nondefault_list(): void
@@ -439,6 +439,7 @@ final class LaboratoryOrderStoreTest extends TestCase
     {
         $routes = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
+            ->filter(fn ($route): bool => $route->getAction('controller') !== null && str_starts_with($route->getAction('controller'), LaboratoryOrderController::class.'@'))
             ->values();
 
         $this->assertCount(9, $routes);
@@ -464,15 +465,15 @@ final class LaboratoryOrderStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(69, $operationCount);
+        $this->assertSame(95, $operationCount);
         // The test bootstrap omits Laravel's generated storage route; the real
         // CLI inventory is asserted separately and contains one additional route.
-        $this->assertCount(77, Route::getRoutes()->getRoutes());
+        $this->assertCount(103, Route::getRoutes()->getRoutes());
         $this->assertSame([
             'branch_id', 'patient_id', 'doctor_id', 'commercial_client_id',
             'price_list_id', 'ordered_at', 'notes',
         ], $input['required']);
-        $this->assertSame($input['required'], array_keys($input['properties']));
+        $this->assertSame([...$input['required'], 'exams'], array_keys($input['properties']));
         $this->assertFalse($input['additionalProperties']);
         $this->assertSame(['integer', 'null'], $input['properties']['doctor_id']['type']);
         $this->assertSame(['integer', 'null'], $input['properties']['commercial_client_id']['type']);
@@ -489,8 +490,8 @@ final class LaboratoryOrderStoreTest extends TestCase
         $this->assertStringContainsString('10.00 para 10%', $orderOutput['properties']['discount_value']['description']);
         $this->assertStringContainsString('Monto monetario resultante', $orderOutput['properties']['discount']['description']);
         $this->assertSame('#/components/schemas/CreateLaboratoryOrderInput', $operation['requestBody']['content']['application/json']['schema']['$ref']);
-        $this->assertSame('#/components/schemas/LaboratoryOrderResponse', $operation['responses']['201']['content']['application/json']['schema']['$ref']);
-        $this->assertSame([201, 400, 401, 403, 422], array_keys($operation['responses']));
+        $this->assertSame('#/components/schemas/LaboratoryOrderCreationResponse', $operation['responses']['201']['content']['application/json']['schema']['$ref']);
+        $this->assertSame([201, 400, 401, 403, 409, 422], array_keys($operation['responses']));
     }
 
     /** @return array{User, Laboratory, Branch, Patient, Doctor, CommercialClient, PriceList} */

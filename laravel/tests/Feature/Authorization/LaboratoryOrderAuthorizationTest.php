@@ -370,7 +370,7 @@ final class LaboratoryOrderAuthorizationTest extends TestCase
         $branch = Branch::factory()->for($laboratory)->create();
         $patient = Patient::factory()->for($laboratory)->create();
         $priceList = PriceList::factory()->for($laboratory)->create(['currency' => 'GTQ']);
-        $exam = LaboratoryExam::factory()->for($laboratory)->create(['status' => LaboratoryExam::STATUS_ACTIVE]);
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create(['status' => LaboratoryExam::STATUS_ACTIVE]);
         PriceListExam::factory()->for($laboratory)->create([
             'price_list_id' => $priceList->id,
             'laboratory_exam_id' => $exam->id,

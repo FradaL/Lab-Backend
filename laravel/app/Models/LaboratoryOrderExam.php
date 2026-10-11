@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'laboratory_id',
@@ -18,6 +20,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'exam_code',
     'exam_name',
     'price_list_name',
+    'clinical_version_id',
+    'clinical_configuration_source',
+    'clinical_activity_started_at',
+    'processing_started_at', 'processing_started_by',
 ])]
 class LaboratoryOrderExam extends Model
 {
@@ -44,11 +50,35 @@ class LaboratoryOrderExam extends Model
         return $this->belongsTo(PriceList::class);
     }
 
+    /** @return BelongsTo<LaboratoryExamVersion, $this> */
+    public function clinicalVersion(): BelongsTo
+    {
+        return $this->belongsTo(LaboratoryExamVersion::class, 'clinical_version_id');
+    }
+
+    /** @return HasMany<LaboratoryOrderSampleRequirement, $this> */
+    public function sampleRequirements(): HasMany
+    {
+        return $this->hasMany(LaboratoryOrderSampleRequirement::class)->orderBy('position')->orderBy('id');
+    }
+
+    public function resultCapture(): HasOne
+    {
+        return $this->hasOne(LaboratoryOrderResultCapture::class);
+    }
+
+    public function results(): HasMany
+    {
+        return $this->hasMany(LaboratoryOrderResult::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
         return [
             'unit_price' => 'decimal:2',
+            'clinical_activity_started_at' => 'immutable_datetime',
+            'processing_started_at' => 'immutable_datetime',
         ];
     }
 }

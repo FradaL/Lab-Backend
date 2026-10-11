@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1\LaboratoryExams;
 
+use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Models\Laboratory;
 use App\Models\LaboratoryArea;
 use App\Models\LaboratoryExam;
@@ -420,7 +421,7 @@ class LaboratoryExamShowTest extends TestCase
     public function test_route_registration_is_exact_numeric_and_saas_protected(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-exams'))
+            ->filter(fn ($route): bool => str_starts_with($route->getActionName(), LaboratoryExamController::class.'@'))
             ->values();
 
         $this->assertCount(6, $routes);

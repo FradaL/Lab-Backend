@@ -62,7 +62,7 @@ final class LaboratoryOrderIndexTest extends TestCase
             'currency' => 'GTQ',
             'total' => '175.00',
         ]);
-        $exam = LaboratoryExam::factory()->for($laboratory)->create();
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create();
         LaboratoryOrderExam::factory()->count(3)->for($laboratory)->create([
             'laboratory_order_id' => $order->id,
             'laboratory_exam_id' => $exam->id,

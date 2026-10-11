@@ -314,6 +314,7 @@ final class LaboratoryOrderShowTest extends TestCase
     {
         $routes = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
+            ->filter(fn ($route): bool => $route->getAction('controller') !== null && str_starts_with($route->getAction('controller'), LaboratoryOrderController::class.'@'))
             ->values();
 
         $this->assertCount(9, $routes);
@@ -338,8 +339,8 @@ final class LaboratoryOrderShowTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(69, $operationCount);
-        $this->assertCount(77, Route::getRoutes()->getRoutes());
+        $this->assertSame(95, $operationCount);
+        $this->assertCount(103, Route::getRoutes()->getRoutes());
         $this->assertSame(['get'], array_keys($path));
         $parameter = collect($operation['parameters'])->firstWhere('name', 'laboratoryOrder');
         $this->assertSame('path', $parameter['in']);

@@ -40,17 +40,54 @@ use OpenApi\Attributes as OA;
 )]
 #[OA\Schema(
     schema: 'LaboratoryOrderExam',
-    required: ['id', 'exam', 'price_list', 'unit_price', 'created_at', 'updated_at'],
+    required: ['id', 'exam', 'price_list', 'unit_price', 'clinical_version_id', 'clinical_configuration_source', 'sample_requirements', 'created_at', 'updated_at'],
     properties: [
         new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 501),
         new OA\Property(property: 'exam', ref: '#/components/schemas/LaboratoryOrderExamSnapshot'),
         new OA\Property(property: 'price_list', ref: '#/components/schemas/LaboratoryOrderExamPriceListSnapshot'),
         new OA\Property(property: 'unit_price', description: 'Precio capturado al agregar la línea.', type: 'string', pattern: '^\d+\.\d{2}$', example: '35.00'),
+        new OA\Property(property: 'clinical_version_id', description: 'Versión publicada fijada al agregar; null para historia o compatibilidad legacy explícita.', type: ['integer', 'null']),
+        new OA\Property(property: 'clinical_configuration_source', type: 'string', enum: ['published_version', 'legacy_compatibility', 'historical']),
+        new OA\Property(property: 'sample_requirements', type: 'array', items: new OA\Items(ref: '#/components/schemas/LaboratoryOrderSampleRequirement')),
         new OA\Property(property: 'created_at', type: 'string', format: 'date-time'),
         new OA\Property(property: 'updated_at', type: 'string', format: 'date-time'),
     ],
     type: 'object',
     additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'LaboratoryOrderSampleRequirement',
+    required: ['id', 'laboratory_order_exam_id', 'clinical_version_id', 'requirement_key', 'position', 'status', 'configuration'],
+    properties: [
+        new OA\Property(property: 'id', type: 'integer'),
+        new OA\Property(property: 'laboratory_order_exam_id', type: 'integer'),
+        new OA\Property(property: 'clinical_version_id', type: 'integer'),
+        new OA\Property(property: 'requirement_key', type: 'string'),
+        new OA\Property(property: 'position', type: 'integer', minimum: 0),
+        new OA\Property(property: 'status', type: 'string', enum: ['pending', 'satisfied'], description: 'Satisfacción actual derivada de asociaciones activas, aceptación y compatibilidad temporal.'),
+        new OA\Property(property: 'configuration', ref: '#/components/schemas/ClinicalExamSampleRequirementSnapshot'),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
+    schema: 'ClinicalExamSampleRequirementSnapshot',
+    allOf: [new OA\Schema(ref: '#/components/schemas/ClinicalExamSampleRequirement')],
+    required: ['key', 'sample_type_id', 'sample_type_name'],
+    type: 'object',
+)]
+#[OA\Schema(
+    schema: 'ClinicalExamConflict',
+    required: ['message', 'code', 'errors'],
+    properties: [
+        new OA\Property(property: 'message', type: 'string'),
+        new OA\Property(property: 'code', type: 'string'),
+        new OA\Property(property: 'errors', oneOf: [
+            new OA\Schema(type: 'array', items: new OA\Items(type: 'string')),
+            new OA\Schema(type: 'object', additionalProperties: new OA\AdditionalProperties(type: 'array', items: new OA\Items(type: 'string'))),
+        ]),
+    ],
+    type: 'object',
 )]
 #[OA\Schema(
     schema: 'LaboratoryOrderExamResponse',
@@ -85,6 +122,7 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'price_list_id', type: 'integer', format: 'int64', minimum: 1, example: 3),
         new OA\Property(property: 'ordered_at', description: 'Fecha y hora local persistida sin conversión de zona horaria.', type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$', example: '2026-10-03 14:30:00'),
         new OA\Property(property: 'notes', type: ['string', 'null'], example: 'Observaciones opcionales'),
+        new OA\Property(property: 'exams', description: 'Opcional; omitido o [] crea cabecera vacía. Con líneas requiere también orders.add_exam. Repeticiones independientes, máximo 50.', type: 'array', maxItems: 50, items: new OA\Items(ref: '#/components/schemas/AddLaboratoryOrderExamInput')),
     ],
     type: 'object',
     additionalProperties: false,
@@ -95,7 +133,7 @@ use OpenApi\Attributes as OA;
     properties: [
         new OA\Property(
             property: 'status',
-            description: 'Estado objetivo explícito. Sólo se permiten las transiciones pending→in_process/cancelled e in_process→completed/cancelled; el mismo estado es idempotente y completed/cancelled son terminales.',
+            description: 'Estado objetivo explícito. pending→in_process exige al menos una línea cuyo procesamiento se haya iniciado explícitamente mediante /exams/{line}/start. Las líneas legacy no habilitan inicio. El cierre de órdenes con procesamiento BE-S2-05 queda bloqueado hasta integrar resultados y validación clínica. Mismo estado idempotente; completed/cancelled terminales.',
             type: 'string',
             enum: ['pending', 'in_process', 'completed', 'cancelled'],
             example: 'in_process',
@@ -260,6 +298,19 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'created_at', type: 'string', format: 'date-time'),
         new OA\Property(property: 'updated_at', type: 'string', format: 'date-time'),
     ],
+    type: 'object',
+)]
+#[OA\Schema(
+    schema: 'LaboratoryOrderCreation',
+    required: ['exams'],
+    properties: [new OA\Property(property: 'exams', type: 'array', items: new OA\Items(ref: '#/components/schemas/LaboratoryOrderExam'))],
+    allOf: [new OA\Schema(ref: '#/components/schemas/LaboratoryOrder')],
+    type: 'object',
+)]
+#[OA\Schema(
+    schema: 'LaboratoryOrderCreationResponse',
+    required: ['data'],
+    properties: [new OA\Property(property: 'data', ref: '#/components/schemas/LaboratoryOrderCreation')],
     type: 'object',
 )]
 #[OA\Schema(

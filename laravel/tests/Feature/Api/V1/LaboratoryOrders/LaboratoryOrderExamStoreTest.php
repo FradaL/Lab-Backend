@@ -51,7 +51,7 @@ final class LaboratoryOrderExamStoreTest extends TestCase
         $this->assertNull($order->discount_value);
 
         $this->assertSame(
-            ['id', 'exam', 'price_list', 'unit_price', 'created_at', 'updated_at'],
+            ['id', 'exam', 'price_list', 'unit_price', 'clinical_version_id', 'clinical_configuration_source', 'sample_requirements', 'created_at', 'updated_at'],
             array_keys($response->json('data')),
         );
         $this->assertSame(['id', 'code', 'name'], array_keys($response->json('data.exam')));
@@ -132,9 +132,11 @@ final class LaboratoryOrderExamStoreTest extends TestCase
     {
         [$user, $laboratory, $order, $exam] = $this->activeContext();
         $exam->update(['status' => LaboratoryExam::STATUS_INACTIVE]);
-        $foreignExam = LaboratoryExam::factory()->create();
+        $foreignExam = LaboratoryExam::factory()->orderable()->create();
 
-        foreach ([$exam->id, $foreignExam->id, 999999] as $examId) {
+        $this->request($user, $laboratory, $order, ['laboratory_exam_id' => $exam->id])
+            ->assertConflict()->assertJsonPath('code', 'clinical_exam_unavailable');
+        foreach ([$foreignExam->id, 999999] as $examId) {
             $this->request($user, $laboratory, $order, ['laboratory_exam_id' => $examId])
                 ->assertUnprocessable()
                 ->assertJsonValidationErrors(['laboratory_exam_id']);
@@ -364,12 +366,12 @@ final class LaboratoryOrderExamStoreTest extends TestCase
         )));
 
         $this->assertSame(['get', 'post'], array_keys($path));
-        $this->assertSame(69, $operationCount);
+        $this->assertSame(95, $operationCount);
         $this->assertSame(['laboratory_exam_id'], $schema['required']);
         $this->assertSame(['laboratory_exam_id'], array_keys($schema['properties']));
         $this->assertFalse($schema['additionalProperties']);
         $this->assertSame('#/components/schemas/LaboratoryOrderExamResponse', $operation['responses']['201']['content']['application/json']['schema']['$ref']);
-        $this->assertSame([201, 400, 401, 403, 404, 422], array_keys($operation['responses']));
+        $this->assertSame([201, 400, 401, 403, 404, 409, 422], array_keys($operation['responses']));
         $this->assertStringContainsString('repetir', strtolower($operation['description']));
     }
 
@@ -391,7 +393,7 @@ final class LaboratoryOrderExamStoreTest extends TestCase
             'status' => LaboratoryOrder::STATUS_PENDING,
             'created_by' => $user->id,
         ], $orderAttributes));
-        $exam = LaboratoryExam::factory()->for($laboratory)->create([
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
             'code' => 'GLU',
             'name' => 'Glucosa',
             'status' => LaboratoryExam::STATUS_ACTIVE,
