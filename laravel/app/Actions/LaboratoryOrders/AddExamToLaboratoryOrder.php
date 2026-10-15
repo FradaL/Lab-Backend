@@ -8,6 +8,7 @@ use App\Audit\OrderAuditEvents;
 use App\ClinicalExams\ClinicalConflict;
 use App\ClinicalExams\ClinicalExamService;
 use App\Models\Laboratory;
+use App\Models\LaboratoryArea;
 use App\Models\LaboratoryExam;
 use App\Models\LaboratoryExamVersion;
 use App\Models\LaboratoryOrder;
@@ -17,6 +18,7 @@ use App\Models\PriceListExam;
 use App\Models\User;
 use App\Services\LaboratoryOrders\RecalculateLaboratoryOrderEconomics;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 final class AddExamToLaboratoryOrder
@@ -101,7 +103,9 @@ final class AddExamToLaboratoryOrder
                 ? null
                 : $this->clinicalExams->orderConfiguration($laboratory, $exam->id);
 
+            $area = LaboratoryArea::forLaboratory($laboratory)->whereKey($exam->laboratory_area_id)->sharedLock()->firstOrFail();
             $orderExam = $order->orderExams()->create([
+                ...(Schema::hasColumn('laboratory_order_exams', 'report_area_snapshot') ? ['report_area_snapshot' => ['id' => $area->id, 'name' => $area->name, 'source' => 'line_creation']] : []),
                 'laboratory_id' => $laboratory->id,
                 'laboratory_exam_id' => $exam->id,
                 'price_list_id' => $order->price_list_id,

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['laboratory_id', 'laboratory_order_id', 'laboratory_order_exam_id', 'laboratory_exam_id', 'clinical_version_id', 'revision', 'status', 'captured_by', 'captured_at'])]
+#[Fillable(['laboratory_id', 'laboratory_order_id', 'laboratory_order_exam_id', 'laboratory_exam_id', 'clinical_version_id', 'revision', 'status', 'captured_by', 'captured_at', 'last_validation_id'])]
 class LaboratoryOrderResultCapture extends Model
 {
     use BelongsToLaboratory;
@@ -19,6 +19,11 @@ class LaboratoryOrderResultCapture extends Model
     protected function casts(): array
     {
         return ['captured_at' => 'immutable_datetime', 'revision' => 'integer'];
+    }
+
+    public function lastValidation(): BelongsTo
+    {
+        return $this->belongsTo(LaboratoryResultValidation::class, 'last_validation_id');
     }
 
     public function line(): BelongsTo

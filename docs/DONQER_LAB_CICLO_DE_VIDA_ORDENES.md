@@ -113,7 +113,9 @@ Un examen es procesable si tiene satisfechos sus requisitos de muestras o su con
 
 Para pasar de `in_process` a `completed`, se exige al menos un examen, autorización para completar y que todos los exámenes estén validados o tengan resolución clínica final justificada, sin pendientes clínicos. Cada resolución excepcional conserva motivo, responsable y fecha.
 
-No se exige pago completo, emisión ni entrega de informes para completar. Las correcciones posteriores requieren versiones y revalidación, y no reabren automáticamente la orden. El catálogo de resoluciones finales y su representación técnica deben definirse antes de implementarlas.
+**Ampliación aprobada BE-S2-08 (2026-10-11):** se permite también `pending → completed` exclusivamente mediante la finalización clínica explícita cuando absolutamente todas las líneas tienen excepciones aprobadas por otro usuario autorizado. Se conserva evidencia del conjunto completo; no se inventa inicio de procesamiento. El PATCH ordinario no habilita este atajo ni sustituye el cierre explícito desde `in_process`.
+
+No se exige pago completo, emisión ni entrega de informes para completar. Las correcciones posteriores requieren versiones y revalidación, y no reabren automáticamente la orden. BE-S2-08 distingue `validated_result` y `authorized_exception` mediante resoluciones inmutables. Una validación vigente requiere finalización individual explícita; aprobar una excepción no valida resultados. Consultar [BE-S2-08](sprint-2/BE-S2-08-finalizacion-clinica-ordenes.md) para su contrato.
 
 ### 5.6 Cancelación (DT-17)
 
@@ -305,3 +307,15 @@ La correspondencia técnica se mantiene en el [complemento BE-S2-01](sprint-2/BE
 |---|---|---|---|
 | 1.0 | 10 de octubre de 2026 | Diseño funcional inicial, D01–D13. | Base del ciclo clínico; nombres técnicos sujetos a auditoría. |
 | 1.1 | 10 de octubre de 2026 | Incorporar DT-14–DT-17: creación compatible con exámenes opcionales, avance individual, finalización clínica y cancelación controlada. Precisar D05 para cabeceras vacías. | Futura ampliación del request de creación, validaciones/transacciones, configuración clínica, permisos, auditoría y pruebas; consumidores deberán adaptarse sólo a contratos ampliados aprobados. No se implementa código ni se generan migraciones en BE-S2-01. |
+
+### Implementación BE-S2-09.1 — emisión de informes
+
+La emisión es explícita, independiente de validación/finalización/pago y de una futura entrega. Parciales solo contienen resoluciones definitivas seleccionadas de una orden abierta; completos requieren el conjunto exacto del cierre clínico. Cada emisión conserva evidencias BE07/08, presentación, número/secuencia y PDF privado/hash inmutables; otra emisión no reemplaza ni invalida anteriores. La verificación QR pública informa exclusivamente autenticidad de la emisión, número, fecha y laboratorio.
+
+Decisión de compatibilidad aprobada: identidad y área se capturan prospectivamente al crear orden/línea. Para órdenes anteriores sin identidad histórica, se exige confirmar explícitamente los datos actuales al emitir y registrar esa fuente; no se presentan como identidad histórica de la orden. Área antigua sin snapshot se muestra como no disponible, sin backfill. Detalles en [BE-S2-09.1](sprint-2/BE-S2-09.1-generacion-emision-informes.md).
+
+### Implementación BE-S2-09.2 — política y entrega formal
+
+La entrega queda implementada como operación independiente de la emisión y del acceso interno. Cada laboratorio elige `unrestricted`, `full_payment_required` o `payment_or_credit`; la ausencia de configuración usa `full_payment_required` y una integración comercial no disponible falla de forma cerrada. El frontend no puede declarar pago o crédito. Una excepción comercial exacta, autorizada con permiso sensible, no modifica finanzas y solo puede consumirse en una entrega.
+
+Cada entrega exige destinatario, base y evidencia confirmados, una preparación descargada y vigente, reevaluación server-side y confirmación explícita. Preparar, descargar o imprimir no afirma entrega. Se admiten documento impreso y archivo digital entregado manualmente; no se implementan envíos automáticos. Los registros de política, excepción, revocación, preparación y entrega son tenant-scoped, auditados e inmutables. Detalles en [BE-S2-09.2](sprint-2/BE-S2-09.2-politicas-entrega-informes.md).

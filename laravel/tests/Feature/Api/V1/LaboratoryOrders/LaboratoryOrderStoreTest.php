@@ -59,7 +59,7 @@ final class LaboratoryOrderStoreTest extends TestCase
         $this->assertLessThanOrEqual(45, strlen($order->code));
 
         $this->assertSame([
-            'id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor',
+            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'notes', 'patient', 'doctor',
             'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type',
             'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by',
             'created_at', 'updated_at', 'exams',
@@ -465,10 +465,10 @@ final class LaboratoryOrderStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(95, $operationCount);
+        $this->assertSame(130, $operationCount);
         // The test bootstrap omits Laravel's generated storage route; the real
         // CLI inventory is asserted separately and contains one additional route.
-        $this->assertCount(103, Route::getRoutes()->getRoutes());
+        $this->assertCount(138, Route::getRoutes()->getRoutes());
         $this->assertSame([
             'branch_id', 'patient_id', 'doctor_id', 'commercial_client_id',
             'price_list_id', 'ordered_at', 'notes',

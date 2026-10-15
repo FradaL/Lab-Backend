@@ -24,6 +24,10 @@ class DatabaseSeeder extends Seeder
                 LaboratoryOrderSeeder::class,
                 LaboratorySampleSeeder::class,
                 LaboratoryResultSeeder::class,
+                LaboratoryValidationSeeder::class,
+                LaboratoryFinalizationSeeder::class,
+                LaboratoryReportEvidenceSeeder::class,
+                LaboratoryReportDeliveryEvidenceSeeder::class,
             ]);
         });
     }

@@ -45,7 +45,7 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     private function snapshots(): array
     {
-        $tables = ['users', 'plans', 'laboratories', 'branches', 'laboratory_user', 'subscriptions', 'laboratory_areas', 'sample_types', 'laboratory_exams', 'laboratory_exam_versions', 'laboratory_exam_clinical_states', 'patients', 'doctors', 'price_lists', 'price_list_exams', 'commercial_clients', 'commercial_client_price_lists', 'laboratory_orders', 'laboratory_order_exams', 'laboratory_order_sample_requirements', 'audit_logs', 'demo_datasets', 'demo_dataset_records', 'roles', 'permissions', 'role_has_permissions', 'model_has_roles', 'laboratory_order_legacy_exams', 'laboratory_samples', 'laboratory_sample_events', 'laboratory_sample_associations', 'laboratory_sample_processing_dependencies', 'laboratory_sample_idempotencies', 'laboratory_order_result_captures', 'laboratory_order_results'];
+        $tables = ['users', 'plans', 'laboratories', 'branches', 'laboratory_user', 'subscriptions', 'laboratory_areas', 'sample_types', 'laboratory_exams', 'laboratory_exam_versions', 'laboratory_exam_clinical_states', 'patients', 'doctors', 'price_lists', 'price_list_exams', 'commercial_clients', 'commercial_client_price_lists', 'laboratory_orders', 'laboratory_order_exams', 'laboratory_order_sample_requirements', 'audit_logs', 'demo_datasets', 'demo_dataset_records', 'roles', 'permissions', 'role_has_permissions', 'model_has_roles', 'laboratory_order_legacy_exams', 'laboratory_samples', 'laboratory_sample_events', 'laboratory_sample_associations', 'laboratory_sample_processing_dependencies', 'laboratory_sample_idempotencies', 'laboratory_order_result_captures', 'laboratory_order_results', 'validation_professionals', 'laboratory_result_validations', 'laboratory_result_rectifications', 'model_has_permissions', 'clinical_exception_requests', 'clinical_exception_decisions', 'clinical_line_resolutions', 'clinical_order_finalizations', 'laboratory_report_settings', 'report_delivery_policies', 'report_delivery_policy_changes', 'report_delivery_exceptions', 'report_delivery_exception_authorizations', 'report_delivery_exception_revocations', 'report_delivery_preparations', 'report_deliveries'];
         $snapshots = [];
         foreach ($tables as $table) {
             $rows = DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
@@ -60,10 +60,10 @@ final class LaboratoryOrderSeederTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
         $orders = LaboratoryOrder::with(['orderExams.sampleRequirements', 'orderExams.clinicalVersion'])->get();
-        $this->assertCount(LaboratoryOrderSeeder::DEMO_ORDER_COUNT + 2, $orders);
-        $this->assertSame(['pending', 'in_process'], $orders->pluck('status')->unique()->values()->all());
-        $this->assertDatabaseCount('laboratory_exam_versions', 14);
-        $this->assertDatabaseCount('laboratory_order_exams', 51);
+        $this->assertCount(LaboratoryOrderSeeder::DEMO_ORDER_COUNT + 15, $orders);
+        $this->assertSame(['pending', 'in_process', 'completed'], $orders->pluck('status')->unique()->values()->all());
+        $this->assertDatabaseCount('laboratory_exam_versions', 20);
+        $this->assertDatabaseCount('laboratory_order_exams', 74);
         $this->assertDatabaseCount('laboratory_order_sample_requirements', 47);
         $this->assertDatabaseCount('laboratory_order_legacy_exams', 0);
         $lab = Laboratory::where('nit', '000000000001')->sole();
@@ -76,12 +76,12 @@ final class LaboratoryOrderSeederTest extends TestCase
             $this->assertSame($totals->discount, $order->discount);
             $this->assertSame($totals->total, $order->total);
             foreach ($order->orderExams as $line) {
-                $this->assertSame($lab->id, $line->laboratory_id);
+                $this->assertSame($order->laboratory_id, $line->laboratory_id);
                 $this->assertSame('published_version', $line->clinical_configuration_source);
                 $this->assertSame('published', $line->clinicalVersion->status);
                 $this->assertStringContainsString(DemoDataset::DISCLAIMER, $line->clinicalVersion->configuration['description']);
                 $this->assertSame($line->laboratory_exam_id, $line->clinicalVersion->laboratory_exam_id);
-                $this->assertSame($lab->id, $line->clinicalVersion->laboratory_id);
+                $this->assertSame($order->laboratory_id, $line->clinicalVersion->laboratory_id);
                 foreach ($line->sampleRequirements as $requirement) {
                     $this->assertSame('pending', $requirement->status);
                     $this->assertSame($line->clinical_version_id, $requirement->clinical_version_id);
@@ -100,8 +100,8 @@ final class LaboratoryOrderSeederTest extends TestCase
         $this->assertSame('20.00', $this->scenario('order-18')->total);
         $this->assertSame('none', $this->scenario('order-18')->orderExams()->sole()->clinicalVersion->configuration['sample_mode']);
         $this->assertSame(4, LaboratoryOrderSampleRequirement::query()->distinct('sample_type_id')->count('sample_type_id'));
-        $this->assertSame(20, AuditLog::where('event', 'order.created')->count());
-        $this->assertSame(51, AuditLog::where('event', 'order_exam.added')->count());
+        $this->assertSame(33, AuditLog::where('event', 'order.created')->count());
+        $this->assertSame(74, AuditLog::where('event', 'order_exam.added')->count());
         $physicalId = DB::table('demo_dataset_records')->where('entity_kind', 'physical_order_scenario')->where('entity_key', 'samples-v1')->value('entity_id');
         $operational = app(LaboratorySampleService::class)->operational($lab, $physicalId);
         $this->assertSame(['started', 'ready', 'pending_samples', 'ready'], array_column($operational['exams'], 'operational_status'));
@@ -114,6 +114,29 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     }
 
+    public function test_finalization_dataset_has_explicit_evidence_and_no_artificial_legacy_or_payment(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $lab = Laboratory::where('nit', 'DEMO-BE08-1')->sole();
+        $orders = LaboratoryOrder::forLaboratory($lab)->with(['clinicalFinalization', 'orderExams.clinicalResolution'])->get();
+        $this->assertCount(8, $orders);
+        $closed = $orders->where('status', 'completed');
+        $this->assertCount(3, $closed);
+        foreach ($closed as $order) {
+            $this->assertSame('50.00', $order->total);
+            $this->assertCount(2, $order->clinicalFinalization->lines_snapshot);
+            $this->assertTrue($order->orderExams->every(fn ($line) => $line->clinicalResolution !== null));
+        }
+        $this->assertDatabaseCount('clinical_line_resolutions', 14);
+        $this->assertDatabaseCount('clinical_exception_requests', 7);
+        $this->assertDatabaseCount('clinical_exception_decisions', 6);
+        $this->assertDatabaseCount('clinical_order_finalizations', 5);
+        $this->assertDatabaseCount('laboratory_order_legacy_exams', 0);
+        $before = $this->snapshots();
+        $this->seed(DatabaseSeeder::class);
+        $this->assertSame($before, $this->snapshots());
+    }
+
     public function test_fictional_result_scenario_is_independent_preliminary_and_not_overwritten_on_reseed(): void
     {
         $this->seed(DatabaseSeeder::class);
@@ -123,8 +146,8 @@ final class LaboratoryOrderSeederTest extends TestCase
         $this->assertSame(['empty', 'partial', 'complete'], array_column(array_column($operational['exams'], 'result_capture'), 'status'));
         $this->assertSame('75.00', $operational['order']['total']);
         $this->assertSame('in_process', $operational['order']['status']);
-        $this->assertDatabaseCount('laboratory_order_result_captures', 2);
-        $this->assertDatabaseCount('laboratory_order_results', 6);
+        $this->assertDatabaseCount('laboratory_order_result_captures', 16);
+        $this->assertDatabaseCount('laboratory_order_results', 35);
         $actor = User::where('email', 'admin@donqerlab.test')->sole();
         setPermissionsTeamId($lab->id);
         app(LaboratoryResultService::class)->save($lab, $actor, $id, $operational['exams'][1]['id'],
@@ -156,6 +179,14 @@ final class LaboratoryOrderSeederTest extends TestCase
         $migration = require database_path('migrations/2026_10_10_000002_add_order_clinical_composition.php');
         $physical = require database_path('migrations/2026_10_10_000004_add_physical_sample_operations.php');
         $resultsMigration = require database_path('migrations/2026_10_11_000001_create_clinical_order_results.php');
+        $validationMigration = require database_path('migrations/2026_10_11_000002_add_clinical_result_validation.php');
+        $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
+        $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
+        $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $deliveryMigration->down();
+        $reportMigration->down();
+        $finalizationMigration->down();
+        $validationMigration->down();
         $resultsMigration->down();
         $physical->down();
         $migration->down();
@@ -167,6 +198,10 @@ final class LaboratoryOrderSeederTest extends TestCase
         $migration->up();
         $physical->up();
         $resultsMigration->up();
+        $validationMigration->up();
+        $finalizationMigration->up();
+        $reportMigration->up();
+        $deliveryMigration->up();
         setPermissionsTeamId($lab->id);
         $role = Role::create(['name' => 'administrator', 'guard_name' => 'web', 'laboratory_id' => $lab->id]);
         $role->givePermissionTo(Permission::findOrCreate('orders.view', 'web'));

@@ -240,3 +240,20 @@ Verificación posterior BE-S2-05 (2026-10-11): suite completa de **3.068 casos y
 `DatabaseSeeder` añade `LaboratoryResultSeeder` después del escenario físico: un examen ficticio nuevo publicado por el dominio y una orden registrada de tres líneas repetidas, con capturas vacía/parcial/completa. Dataset limpio posterior: 14 publicaciones, 20 órdenes, 51 líneas, 47 requisitos, 4 muestras, 2 capturas y 6 resultados preliminares. Se conserva el registro de procedencia, la protección contra producción, la atomicidad exterior y las correcciones manuales. Roles demo existentes no se actualizan automáticamente; la incorporación exige sus permisos provisionados explícitamente. `RolePermissionSeeder` permanece independiente.
 
 El inventario posterior comprende 55 permisos, seis roles, 103 rutas Laravel y 95 operaciones OpenAPI. Las verificaciones propias de BE-S2-06 y su comprobación de segunda ejecución se registran en su documento; los resultados históricos de los apartados anteriores se mantienen como antecedentes de sus entregas.
+
+## Actualización posterior — BE-S2-07 (2026-10-11)
+
+BE-S2-07 añade validaciones/rectificaciones sobre líneas clínicas explícitamente iniciadas y conserva los snapshots y excepciones legacy de composición. El dataset añade exclusivamente dos laboratorios ficticios registrados con políticas diferentes; no modifica las órdenes demostrativas anteriores.
+
+El informe y las cifras anteriores corresponden a esta entrega histórica. Para el contrato vigente consultar [BE-S2-07 — Validación de resultados clínicos](BE-S2-07-validacion-resultados-clinicos.md). El inventario ampliado es de 112 rutas Laravel, 104 operaciones OpenAPI y 60 permisos (97 rutas protegidas por permiso). RolePermissionSeeder permanece independiente; esta ampliación no ejecuta migraciones/seeders en entornos operativos ni commit/push. La verificación final se documenta en BE-S2-07.
+
+
+## Actualización posterior — BE-S2-08 (2026-10-11)
+
+BE-S2-08 incorpora resolución individual explícita, excepciones solicitadas y decididas por usuarios independientes y cierre clínico con evidencia inmutable. Una validación vigente no finaliza automáticamente una línea. Las líneas resueltas bloquean la rectificación ordinaria; el PATCH de estado no completa órdenes. Se aprobó el cierre explícito desde pending cuando absolutamente todas las líneas tienen excepciones aprobadas, conservando su origen y sin inventar procesamiento. La composición, publicaciones, resultados y excepciones legacy históricas permanecen intactos.
+
+Se conserva la independencia financiera del cierre y se añade un escenario demo propio e idempotente. El catálogo vigente contiene 66 permisos y seis roles; las escrituras clínicas nuevas requieren concesión explícita. Las cifras anteriores corresponden a esta entrega histórica; el contrato y la verificación ampliados se documentan en [BE-S2-08 — Finalización clínica](BE-S2-08-finalizacion-clinica-ordenes.md). No se ejecutan estos cambios en entornos operativos ni commit/push.
+
+## Actualización posterior — BE-S2-09.1
+
+Creación/adición conservan prospectivamente identidad de paciente/sucursal y área para informes. Las columnas son internas, nullable e inmutables; no hay backfill ni cambio de corte legacy, snapshots clínicos/económicos o líneas históricas. DatabaseSeeder prepara evidencias ficticias de informes en un laboratorio propio; generar sus PDFs exige el seeder explícito separado LaboratoryReportIssuanceSeeder. Contrato y pruebas en [BE-S2-09.1](BE-S2-09.1-generacion-emision-informes.md).

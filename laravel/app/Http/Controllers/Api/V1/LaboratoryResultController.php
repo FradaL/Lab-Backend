@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\ClinicalResults\LaboratoryResultService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LaboratoryResult\SaveLaboratoryResultsRequest;
+use App\Models\LaboratoryOrder;
+use App\Models\ValidationProfessional;
 use App\Tenancy\CurrentLaboratory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -50,7 +52,7 @@ class LaboratoryResultController extends Controller
     {
         $data = $this->service->save($this->current->get(), $request->user(), $order, $line, $request->validated());
         if (! $request->user()->can('results.view')) {
-            unset($data['parameters']);
+            unset($data['parameters'], $data['applied_references']);
         }
 
         return response()->json(['data' => $this->permissions($request, $data)]);
@@ -76,9 +78,32 @@ class LaboratoryResultController extends Controller
 
     private function permissions(Request $request, array $data): array
     {
+        $lab = $this->current->get()->fresh();
+        $clinicalAuthorized = $lab->validation_policy === 'permission_based' || ValidationProfessional::forLaboratory($lab)->where('user_id', $request->user()->id)->where('status', 'authorized')->exists();
+        // Validated captures are unavailable for ordinary capture but remain eligible for rectification.
+        $order = LaboratoryOrder::forLaboratory($lab)->findOrFail($data['laboratory_order_id']);
+        $data['validation_blocking_reasons'] = [];
+        if ($data['clinical_exception_pending'] ?? false) {
+            $data['validation_blocking_reasons'][] = 'clinical_exception_pending';
+        }
+        if ($data['clinical_resolution'] ?? null) {
+            $data['validation_blocking_reasons'][] = 'clinical_line_resolved';
+        }
+        if (! $data['progress']['complete']) {
+            $data['validation_blocking_reasons'][] = 'incomplete_capture';
+        }
+        if (! $clinicalAuthorized) {
+            $data['validation_blocking_reasons'][] = 'professional_authorization_required';
+        }
+        if (! $request->user()->can('results.validate')) {
+            $data['validation_blocking_reasons'][] = 'validation_permission_required';
+        }
         $data['permissions'] = ['can_view' => $request->user()->can('results.view'),
             'can_capture' => $data['capture_available'] && $request->user()->can('results.capture'),
             'can_edit' => $data['capture_available'] && $request->user()->can('results.capture') && $request->user()->can('results.edit'),
+            'can_validate' => ! ($data['clinical_exception_pending'] ?? false) && $data['capture_available'] && $data['progress']['complete'] && $clinicalAuthorized && $request->user()->can('results.validate'),
+            'can_rectify' => ($data['clinical_resolution'] ?? null) === null && $order->status === 'in_process' && $data['processing_started_at'] !== null && $data['clinical_status'] === 'validated' && $clinicalAuthorized && $request->user()->can('results.rectify'),
+            'can_view_validations' => $request->user()->can('results.validation_history'),
             'can_view_history' => $request->user()->can('results.view_history')];
 
         return $data;

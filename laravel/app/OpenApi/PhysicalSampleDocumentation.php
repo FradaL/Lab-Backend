@@ -87,12 +87,14 @@ use OpenApi\Attributes as OA;
 #[OA\Schema(schema: 'OrderExamStartResponse', type: 'object', properties: [new OA\Property(property: 'data', type: 'object', properties: [new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'operational_status', type: 'string', enum: ['started']), new OA\Property(property: 'processing_started_at', type: 'string', format: 'date-time'), new OA\Property(property: 'processing_started_by', type: 'integer')])])]
 #[OA\Schema(schema: 'OrderOperationalResponse', type: 'object', properties: [new OA\Property(property: 'data', type: 'object', properties: [
     new OA\Property(property: 'laboratory_order_id', type: 'integer'), new OA\Property(property: 'order_number', type: 'string'), new OA\Property(property: 'status', type: 'string'),
+    new OA\Property(property: 'clinical_finalization', ref: '#/components/schemas/ClinicalFinalizationProgress'),
     new OA\Property(property: 'order', ref: '#/components/schemas/LaboratoryOrder'),
     new OA\Property(property: 'samples', type: 'array', items: new OA\Items(ref: '#/components/schemas/PhysicalSample')),
     new OA\Property(property: 'exams', type: 'array', items: new OA\Items(ref: '#/components/schemas/OrderExamOperational')),
 ])])]
 #[OA\Schema(schema: 'OrderExamOperational', type: 'object', properties: [
     new OA\Property(property: 'can_start', type: 'boolean'),
+    new OA\Property(property: 'clinical_resolution', type: ['object', 'null'], properties: [new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'resolution_type', type: 'string', enum: ['validated_result', 'authorized_exception']), new OA\Property(property: 'resolved_by', type: 'integer'), new OA\Property(property: 'resolved_at', type: 'string', format: 'date-time')]),
     new OA\Property(property: 'result_capture', ref: '#/components/schemas/ClinicalResultProgress'),
     new OA\Property(property: 'processing_dependencies', type: 'array', items: new OA\Items(type: 'object', properties: [new OA\Property(property: 'association_id', type: 'integer'), new OA\Property(property: 'decision', type: 'object', description: 'Immutable historical configuration, observed facts and evaluation timestamp used at start.')])),
     new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'clinical_version_id', type: ['integer', 'null']), new OA\Property(property: 'clinical_configuration_source', type: 'string'),

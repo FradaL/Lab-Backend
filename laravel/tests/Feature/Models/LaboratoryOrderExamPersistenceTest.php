@@ -74,6 +74,7 @@ class LaboratoryOrderExamPersistenceTest extends TestCase
             'clinical_activity_started_at',
             'processing_started_at',
             'processing_started_by',
+            'report_area_snapshot',
         ], Schema::getColumnListing('laboratory_order_exams'));
     }
 
@@ -380,6 +381,7 @@ class LaboratoryOrderExamPersistenceTest extends TestCase
             'unit_price',
             'exam_code',
             'exam_name',
+            'report_area_snapshot',
             'price_list_name',
             'clinical_version_id',
             'clinical_configuration_source',

@@ -99,11 +99,13 @@ final class LaboratoryOrderController extends Controller
                 'code',
                 'ordered_at',
                 'status',
+                'clinical_revision',
                 'currency',
                 'total',
                 'created_by',
             ])
             ->with([
+                'clinicalFinalization',
                 'branch:id,name',
                 'patient:id,first_names,last_names',
                 'doctor:id,first_names,last_names',
@@ -603,6 +605,7 @@ final class LaboratoryOrderController extends Controller
 
         $order = LaboratoryOrder::forLaboratory($currentLaboratory->get())
             ->with([
+                'clinicalFinalization',
                 'patient',
                 'doctor',
                 'branch',

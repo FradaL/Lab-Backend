@@ -16,7 +16,7 @@ use App\Models\Subscription;
 
 trait ClinicalResultScenario
 {
-    protected function scenario(bool $start = true): array
+    protected function scenario(bool $start = true, array $parameterOverrides = []): array
     {
         $lab = Laboratory::factory()->create();
         $actor = $this->createLaboratoryMember($lab);
@@ -32,7 +32,15 @@ trait ClinicalResultScenario
                 ['code' => 'Q', 'name' => 'Fictional qualitative', 'type' => 'qualitative', 'options' => [['code' => 'YES', 'label' => 'Fictitious YES'], ['code' => 'NO', 'label' => 'Fictitious NO'], ['code' => '01', 'label' => 'Fictitious zero-one'], ['code' => '1', 'label' => 'Fictitious one']]],
                 ['code' => 'O', 'name' => 'Fictional option', 'type' => 'predefined_options', 'options' => [['code' => 'A', 'label' => 'Fictitious A']]],
             ]]]);
-        app(ClinicalExamService::class)->publish($lab, $actor, $draft->laboratory_exam_id, $draft->id, 1);
+        if ($parameterOverrides !== []) {
+            $configuration = $draft->configuration;
+            foreach ($configuration['parameters'] as &$parameter) {
+                $parameter = array_replace($parameter, $parameterOverrides[$parameter['code']] ?? []);
+            }
+            unset($parameter);
+            $draft = app(ClinicalExamService::class)->update($lab, $actor, $draft->laboratory_exam_id, $draft->id, 1, $configuration);
+        }
+        app(ClinicalExamService::class)->publish($lab, $actor, $draft->laboratory_exam_id, $draft->id, $draft->revision);
         $exam = LaboratoryExam::findOrFail($draft->laboratory_exam_id);
         $exam->update(['status' => 'active']);
         $prices = PriceList::factory()->for($lab)->create(['status' => 'active', 'currency' => 'GTQ']);

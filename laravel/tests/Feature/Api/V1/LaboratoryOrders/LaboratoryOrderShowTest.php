@@ -34,7 +34,7 @@ final class LaboratoryOrderShowTest extends TestCase
         $response = $this->request($user, $laboratory, $order)->assertOk();
 
         $this->assertSame([
-            'id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor',
+            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'clinical_finalization', 'notes', 'patient', 'doctor',
             'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type',
             'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by',
             'created_at', 'updated_at',
@@ -339,8 +339,8 @@ final class LaboratoryOrderShowTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(95, $operationCount);
-        $this->assertCount(103, Route::getRoutes()->getRoutes());
+        $this->assertSame(130, $operationCount);
+        $this->assertCount(138, Route::getRoutes()->getRoutes());
         $this->assertSame(['get'], array_keys($path));
         $parameter = collect($operation['parameters'])->firstWhere('name', 'laboratoryOrder');
         $this->assertSame('path', $parameter['in']);

@@ -157,3 +157,16 @@ Modificados: relaciones de `LaboratoryOrderExam`, progreso en `LaboratorySampleS
 Quedan separados BE-S2-07/08: selección/aplicación de referencias y snapshot de contexto, interpretación, validación por profesional, bloqueo/corrección de resultados validados, finalización y cierre clínico/financiero. Tampoco hay informes, entrega, conversiones de unidades ni frontend. Añadir estados de captura posteriores exige ampliar deliberadamente CHECK/triggers y reglas de autorización: no se abre edición de resultados validados por anticipado.
 
 Despliegue posterior autorizado: migración habitual y actualización explícita del catálogo mediante `RolePermissionSeeder`, coordinación con consumidores del campo operativo añadido y el contrato decimal/revisión. Esta sesión no ejecuta esos pasos en entornos operativos y deja cambios sin commit/push para revisión.
+
+## Actualización posterior — BE-S2-07 (2026-10-11)
+
+BE-S2-07 implementa validación explícita, política configurable, autorización profesional, resolución de referencias y rectificación auditada. Mantiene precisión decimal y captura preliminar; validated impide el PUT ordinario hasta rectificación. Cada transición clínica avanza la revisión del agregado y distingue la revisión aprobada. Los permisos validate/rectify no se asignan automáticamente por ser owner/administrator.
+
+El informe y las cifras anteriores corresponden a esta entrega histórica. Para el contrato vigente consultar [BE-S2-07 — Validación de resultados clínicos](BE-S2-07-validacion-resultados-clinicos.md). El inventario ampliado es de 112 rutas Laravel, 104 operaciones OpenAPI y 60 permisos (97 rutas protegidas por permiso). RolePermissionSeeder permanece independiente; esta ampliación no ejecuta migraciones/seeders en entornos operativos ni commit/push. La verificación final se documenta en BE-S2-07.
+
+
+## Actualización posterior — BE-S2-08 (2026-10-11)
+
+BE-S2-08 incorpora resolución individual explícita, excepciones solicitadas y decididas por usuarios independientes y cierre clínico con evidencia inmutable. Una validación vigente no finaliza automáticamente una línea. Las líneas resueltas bloquean la rectificación ordinaria; el PATCH de estado no completa órdenes. Se aprobó el cierre explícito desde pending cuando absolutamente todas las líneas tienen excepciones aprobadas, conservando su origen y sin inventar procesamiento. La composición, publicaciones, resultados y excepciones legacy históricas permanecen intactos.
+
+Se conserva la independencia financiera del cierre y se añade un escenario demo propio e idempotente. El catálogo vigente contiene 66 permisos y seis roles; las escrituras clínicas nuevas requieren concesión explícita. Las cifras anteriores corresponden a esta entrega histórica; el contrato y la verificación ampliados se documentan en [BE-S2-08 — Finalización clínica](BE-S2-08-finalizacion-clinica-ordenes.md). No se ejecutan estos cambios en entornos operativos ni commit/push.

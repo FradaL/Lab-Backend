@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\ReportDelivery\CommercialComplianceProvider;
+use App\ReportDelivery\UnavailableCommercialComplianceProvider;
 use App\Tenancy\CurrentLaboratory;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -19,6 +21,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(CurrentLaboratory::class);
+        $this->app->bind(CommercialComplianceProvider::class, UnavailableCommercialComplianceProvider::class);
 
         $testingRequested = $this->app->environment('testing')
             || Env::get('APP_ENV') === 'testing';
@@ -33,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('report-verification', fn (Request $request) => Limit::perMinute(30)->by($request->ip()));
         RateLimiter::for('login', function (Request $request): Limit {
             $email = Str::lower((string) $request->input('email'));
 

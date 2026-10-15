@@ -47,9 +47,9 @@ final class ProtectedDomainAuthorizationTest extends TestCase
         ksort($expected);
 
         $this->assertSame($expected, $actual);
-        $this->assertCount(88, $actual);
+        $this->assertCount(122, $actual);
         $this->assertEmpty(array_diff(array_values($actual), RbacCatalog::PERMISSIONS));
-        $this->assertSame(24, collect(Route::getRoutes()->getRoutes())
+        $this->assertSame(47, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
             ->filter(fn (IlluminateRoute $route): bool => collect($route->gatherMiddleware())
                 ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')))
@@ -401,6 +401,40 @@ final class ProtectedDomainAuthorizationTest extends TestCase
             'GET api/v1/laboratory-orders/{order}/exams/{line}/results' => 'results.view',
             'PUT api/v1/laboratory-orders/{order}/exams/{line}/results' => 'results.capture',
             'GET api/v1/laboratory-orders/{order}/exams/{line}/results/history' => 'results.view_history',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/exceptions' => 'orders.clinical_exceptions.request',
+            'GET api/v1/laboratory-orders/{order}/exams/{line}/exceptions' => 'orders.clinical_exceptions.view',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/exceptions/{exception}/approve' => 'orders.clinical_exceptions.approve',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/exceptions/{exception}/reject' => 'orders.clinical_exceptions.approve',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/finalize' => 'orders.exams.clinical_finalize',
+            'POST api/v1/laboratory-orders/{order}/finalize' => 'orders.clinical_finalize',
+            'GET api/v1/laboratory-orders/{order}/clinical-finalization' => 'orders.clinical_finalization.view',
+            'GET api/v1/laboratory-orders/{order}/reports/{report}/download' => 'reports.download',
+            'GET api/v1/laboratory-orders/{order}/reports/{report}' => 'reports.view_history',
+            'GET api/v1/laboratory-orders/{order}/reports' => 'reports.view_history',
+            'POST api/v1/laboratory-orders/{order}/reports' => 'reports.issue',
+            'GET api/v1/laboratory-orders/{order}/reports/{report}/delivery-eligibility' => 'reports.delivery.evaluate',
+            'POST api/v1/laboratory-orders/{order}/reports/{report}/delivery-exceptions' => 'reports.delivery.prepare',
+            'GET api/v1/laboratory-orders/{order}/reports/{report}/delivery-exceptions' => 'reports.delivery_exceptions.view',
+            'POST api/v1/laboratory-orders/{order}/reports/{report}/delivery-exceptions/{exception}/authorize' => 'reports.delivery_exceptions.authorize',
+            'POST api/v1/laboratory-orders/{order}/reports/{report}/delivery-exceptions/{exception}/revoke' => 'reports.delivery_exceptions.authorize',
+            'POST api/v1/laboratory-orders/{order}/reports/{report}/delivery-preparations' => 'reports.delivery.prepare',
+            'GET api/v1/laboratory-orders/{order}/reports/{report}/delivery-preparations/{preparation}/download' => 'reports.delivery.prepare',
+            'POST api/v1/laboratory-orders/{order}/reports/{report}/deliveries' => 'reports.delivery.confirm',
+            'GET api/v1/laboratory-orders/{order}/reports/{report}/deliveries' => 'reports.delivery_history.view',
+            'POST api/v1/laboratory/report-settings/logo' => 'reports.settings.edit',
+            'PUT api/v1/laboratory/report-settings' => 'reports.settings.edit',
+            'GET api/v1/laboratory/report-settings' => 'reports.settings.view',
+            'GET api/v1/laboratory/report-delivery-policy' => 'reports.delivery_policy.view',
+            'PUT api/v1/laboratory/report-delivery-policy' => 'reports.delivery_policy.manage',
+            'GET api/v1/laboratory/validation-policy' => 'results.validation_policy.manage',
+            'PUT api/v1/laboratory/validation-policy' => 'results.validation_policy.manage',
+            'GET api/v1/laboratory/validation-professionals' => 'results.professionals.manage',
+            'POST api/v1/laboratory/validation-professionals' => 'results.professionals.manage',
+            'POST api/v1/laboratory/validation-professionals/{professional}/authorize' => 'results.professionals.manage',
+            'POST api/v1/laboratory/validation-professionals/{professional}/revoke' => 'results.professionals.manage',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/results/validate' => 'results.validate',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/results/rectify' => 'results.rectify',
+            'GET api/v1/laboratory-orders/{order}/exams/{line}/results/validations' => 'results.validation_history',
             'GET api/v1/laboratory-orders/{order}/samples' => 'samples.view',
             'POST api/v1/laboratory-orders/{order}/samples/collect' => 'samples.collect',
             'POST api/v1/laboratory-orders/{order}/samples/receive' => 'samples.receive',

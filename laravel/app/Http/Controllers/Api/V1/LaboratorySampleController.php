@@ -235,7 +235,10 @@ class LaboratorySampleController extends Controller
     {
         Gate::forUser($request->user())->authorize('orders.view');
 
-        return response()->json(['data' => $this->service->operational($this->current->get(), $order)]);
+        $data = $this->service->operational($this->current->get(), $order);
+        $data['clinical_finalization']['can_finalize'] = $data['clinical_finalization']['eligible'] && $request->user()->can('orders.clinical_finalize');
+
+        return response()->json(['data' => $data]);
     }
 
     #[OA\Post(

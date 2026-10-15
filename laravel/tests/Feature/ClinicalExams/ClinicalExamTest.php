@@ -170,6 +170,14 @@ class ClinicalExamTest extends TestCase
         $composition = require database_path('migrations/2026_10_10_000002_add_order_clinical_composition.php');
         $physical = require database_path('migrations/2026_10_10_000004_add_physical_sample_operations.php');
         $resultsMigration = require database_path('migrations/2026_10_11_000001_create_clinical_order_results.php');
+        $validationMigration = require database_path('migrations/2026_10_11_000002_add_clinical_result_validation.php');
+        $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
+        $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
+        $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $deliveryMigration->down();
+        $reportMigration->down();
+        $finalizationMigration->down();
+        $validationMigration->down();
         $resultsMigration->down();
         $physical->down();
         $composition->down();
@@ -177,6 +185,10 @@ class ClinicalExamTest extends TestCase
         $composition->up();
         $physical->up();
         $resultsMigration->up();
+        $validationMigration->up();
+        $finalizationMigration->up();
+        $reportMigration->up();
+        $deliveryMigration->up();
         $before = $line->refresh()->getRawOriginal();
         $version = app(ClinicalExamService::class)->fork($this->lab, $this->actor, $legacy->id, null);
         $this->assertSame('active', $legacy->refresh()->status);
@@ -376,6 +388,14 @@ class ClinicalExamTest extends TestCase
         $composition = require database_path('migrations/2026_10_10_000002_add_order_clinical_composition.php');
         $physical = require database_path('migrations/2026_10_10_000004_add_physical_sample_operations.php');
         $resultsMigration = require database_path('migrations/2026_10_11_000001_create_clinical_order_results.php');
+        $validationMigration = require database_path('migrations/2026_10_11_000002_add_clinical_result_validation.php');
+        $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
+        $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
+        $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $deliveryMigration->down();
+        $reportMigration->down();
+        $finalizationMigration->down();
+        $validationMigration->down();
         $resultsMigration->down();
         $physical->down();
         $composition->down();
@@ -392,6 +412,10 @@ class ClinicalExamTest extends TestCase
         $composition->up();
         $physical->up();
         $resultsMigration->up();
+        $validationMigration->up();
+        $finalizationMigration->up();
+        $reportMigration->up();
+        $deliveryMigration->up();
         $this->assertNull($line->refresh()->clinical_version_id);
         $this->getJson("/api/v1/laboratory-exams/{$exam->id}/versions/current")->assertOk()->assertJsonPath('data', null);
     }

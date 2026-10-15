@@ -77,7 +77,7 @@ final class LaboratoryOrderIndexTest extends TestCase
         $item = $response->json('data.0');
 
         $this->assertSame([
-            'id', 'code', 'ordered_at', 'status', 'branch', 'patient', 'doctor',
+            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'clinical_finalization', 'branch', 'patient', 'doctor',
             'commercial_client', 'exam_count', 'currency', 'total', 'created_by',
         ], array_keys($item));
         $this->assertSame(['id', 'name'], array_keys($item['branch']));

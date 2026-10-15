@@ -20,6 +20,7 @@ use App\Models\SampleType;
 use App\Models\Subscription;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -338,7 +339,7 @@ class PhysicalSampleTest extends TestCase
         $this->postJson("$base/exams/$noneLine->id/start")->assertOk();
         $this->postJson("$base/exams/$line->id/start")->assertOk();
         $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 1);
-        $this->patchJson("$base/status", ['status' => 'completed'])->assertConflict()->assertJsonPath('code', 'order_clinical_completion_pending');
+        $this->patchJson("$base/status", ['status' => 'completed'])->assertConflict()->assertJsonPath('code', 'clinical_finalization_required');
     }
 
     public function test_start_and_order_audit_failure_roll_back_dependencies_markers_and_order_transition(): void
@@ -364,19 +365,32 @@ class PhysicalSampleTest extends TestCase
     public function test_schema_upgrade_preserves_published_snapshots_historical_fields_and_pending_requirements(): void
     {
         [$lab, $actor, $branch, $type, $order, $line] = $this->scenario();
-        $beforeOrder = $order->fresh()->getRawOriginal();
-        $beforeLine = $line->fresh()->getRawOriginal();
+        $beforeOrder = Arr::except($order->fresh()->getRawOriginal(), ['clinical_revision']);
+        $beforeLine = Arr::except($line->fresh()->getRawOriginal(), ['report_area_snapshot']);
         $beforeRequirements = DB::table('laboratory_order_sample_requirements')->orderBy('id')->get()->toJson();
         $beforeVersions = DB::table('laboratory_exam_versions')->orderBy('id')->get()->toJson();
         $beforeLegacy = DB::table('laboratory_order_legacy_exams')->orderBy('laboratory_exam_id')->get()->toJson();
         $migration = require database_path('migrations/2026_10_10_000004_add_physical_sample_operations.php');
         $resultsMigration = require database_path('migrations/2026_10_11_000001_create_clinical_order_results.php');
+        $validationMigration = require database_path('migrations/2026_10_11_000002_add_clinical_result_validation.php');
+        $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
+        $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
+        $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $deliveryMigration->down();
+        $reportMigration->down();
+        $finalizationMigration->down();
+        $validationMigration->down();
         $resultsMigration->down();
         $migration->down();
         $migration->up();
         $resultsMigration->up();
-        $this->assertSame($beforeOrder, $order->fresh()->getRawOriginal());
-        $this->assertSame($beforeLine, $line->fresh()->getRawOriginal());
+        $validationMigration->up();
+        $finalizationMigration->up();
+        $reportMigration->up();
+        $deliveryMigration->up();
+        $this->assertSame($beforeOrder, Arr::except($order->fresh()->getRawOriginal(), ['clinical_revision']));
+        $this->assertSame($beforeLine, Arr::except($line->fresh()->getRawOriginal(), ['report_area_snapshot']));
+        $this->assertNull($line->fresh()->report_area_snapshot); // A pre-report line receives no invented area backfill.
         $this->assertSame($beforeRequirements, DB::table('laboratory_order_sample_requirements')->orderBy('id')->get()->toJson());
         $this->assertSame($beforeVersions, DB::table('laboratory_exam_versions')->orderBy('id')->get()->toJson());
         $this->assertSame($beforeLegacy, DB::table('laboratory_order_legacy_exams')->orderBy('laboratory_exam_id')->get()->toJson());

@@ -5,7 +5,10 @@ namespace App\ClinicalResults;
 use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\ClinicalExams\ClinicalConflict;
+use App\ClinicalFinalization\ClinicalFinalizationGuard;
 use App\Models\AuditLog;
+use App\Models\ClinicalExceptionRequest;
+use App\Models\ClinicalLineResolution;
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
@@ -60,6 +63,7 @@ final class LaboratoryResultService
             // Recheck authorization after a possible wait on the order lock.
             $this->authorize($lab, $actor, 'results.capture');
             $line = $this->line($lab, $orderId, $lineId, true);
+            ClinicalFinalizationGuard::line($order, $line);
             if ($order->status !== 'in_process' || $line->processing_started_at === null || $line->clinicalVersion?->status !== 'published') {
                 throw new ClinicalConflict('result_capture_unavailable', 'Capture requires an explicitly started line with its published version in an order in process.');
             }
@@ -150,7 +154,7 @@ final class LaboratoryResultService
         $filled = $total - count($pending);
 
         return ['revision' => $line->resultCapture?->revision ?? 0, 'status' => $filled === 0 ? 'empty' : ($pending === [] ? 'complete' : 'partial'),
-            'clinical_status' => 'preliminary', 'required_count' => $total, 'captured_count' => $filled, 'pending_count' => count($pending), 'complete' => $total > 0 && $pending === [], 'pending_parameters' => $pending, 'validation_errors' => []];
+            'clinical_status' => $line->resultCapture?->status ?? 'preliminary', 'required_count' => $total, 'captured_count' => $filled, 'pending_count' => count($pending), 'complete' => $total > 0 && $pending === [], 'pending_parameters' => $pending, 'validation_errors' => []];
     }
 
     private function line(Laboratory $lab, int $orderId, int $lineId, bool $lock = false): LaboratoryOrderExam
@@ -166,13 +170,40 @@ final class LaboratoryResultService
     private function document(LaboratoryOrder $order, LaboratoryOrderExam $line): array
     {
         $values = $line->results->keyBy('parameter_code');
-        $available = $order->status === 'in_process' && $line->processing_started_at !== null && $line->clinicalVersion?->status === 'published';
+        $started = $order->status === 'in_process' && $line->processing_started_at !== null && $line->clinicalVersion?->status === 'published';
+        $resolved = array_key_exists('clinical_revision', $order->getAttributes()) ? ClinicalLineResolution::where('laboratory_order_exam_id', $line->id)->first() : null;
+        $exceptionPending = array_key_exists('clinical_revision', $order->getAttributes()) && ClinicalExceptionRequest::where('laboratory_order_exam_id', $line->id)->where('status', 'pending')->exists();
+        $available = $resolved === null && $started && ($line->resultCapture?->status ?? 'preliminary') === 'preliminary';
+        $validation = $line->resultCapture?->lastValidation;
+        $referenceRequirements = [];
+        foreach ($line->clinicalVersion?->configuration['parameters'] ?? [] as $p) {
+            foreach ($p['references'] ?? [] as $rule) {
+                if (isset($rule['age_min_days']) || isset($rule['age_max_days'])) {
+                    $referenceRequirements[] = 'age_days';
+                }
+                if (isset($rule['sex'])) {
+                    $referenceRequirements[] = 'sex';
+                }
+                foreach (array_keys($rule['conditions'] ?? []) as $key) {
+                    $referenceRequirements[] = 'conditions.'.$key;
+                }
+            }
+        }
 
         return ['laboratory_order_id' => $order->id, 'laboratory_order_exam_id' => $line->id, 'laboratory_exam_id' => $line->laboratory_exam_id,
             'exam_code' => $line->exam_code, 'exam_name' => $line->exam_name, 'clinical_version_id' => $line->clinical_version_id,
             'clinical_version_number' => $line->clinicalVersion?->number, 'configuration_hash' => $line->clinicalVersion?->configuration_hash,
             'processing_started_at' => $line->processing_started_at?->toISOString(), 'capture_available' => $available,
-            'blocking_reasons' => $available ? [] : ['explicit_started_published_line_in_processing_order_required'],
+            'blocking_reasons' => $available ? [] : ($resolved !== null ? ['clinical_line_resolved'] : ($started ? ['validated_capture_requires_rectification'] : ['explicit_started_published_line_in_processing_order_required'])),
+            'clinical_resolution' => $resolved === null ? null : ['id' => $resolved->id, 'resolution_type' => $resolved->resolution_type, 'resolved_at' => $resolved->resolved_at->toISOString()],
+            'clinical_exception_pending' => $exceptionPending,
+            'clinical_status' => $line->resultCapture?->status ?? 'preliminary',
+            'validated_revision' => $validation?->approved_revision,
+            'validation' => $validation === null ? null : ['id' => $validation->id, 'validated_by' => $validation->validated_by,
+                'professional_id' => $validation->professional_id, 'validation_policy' => $validation->validation_policy,
+                'validated_at' => $validation->validated_at->toISOString(), 'is_current' => $line->resultCapture->status === 'validated'],
+            'reference_requirements' => array_values(array_unique($referenceRequirements)),
+            'applied_references' => $validation?->reference_snapshot ?? [],
             'progress' => self::progress($line), 'parameters' => array_map(function ($parameter) use ($values) {
                 $row = $values->get($parameter['code']);
 

@@ -6,6 +6,7 @@ use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\Audit\OrderAuditEvents;
 use App\ClinicalExams\ClinicalConflict;
+use App\ClinicalFinalization\ClinicalFinalizationGuard;
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
@@ -52,6 +53,10 @@ final class RemoveExamFromLaboratoryOrder
                 abort(404, 'Resource not found.');
             }
 
+            if (array_key_exists('clinical_revision', $order->getAttributes()) && $orderExam->clinicalExceptions()->exists()) {
+                throw new ClinicalConflict('order_exam_has_clinical_activity', 'An exception history prevents removal of its clinical line.');
+            }
+            ClinicalFinalizationGuard::line($order, $orderExam);
             $requirements = $orderExam->sampleRequirements()->lockForUpdate()->get();
             if ($orderExam->clinical_activity_started_at !== null || $requirements->contains(
                 fn ($requirement): bool => $requirement->status !== 'pending' || $requirement->clinical_activity_started_at !== null,

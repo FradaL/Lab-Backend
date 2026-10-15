@@ -189,6 +189,15 @@ final class LaboratoryOrderAuditTest extends TestCase
         }
         $lineFactory->create(['laboratory_order_id' => $order->id, 'unit_price' => '0.00']);
 
+        if ($to === 'completed') {
+            $this->request($actor, $laboratory)->patchJson("/api/v1/laboratory-orders/{$order->id}/status", ['status' => $to])
+                ->assertConflict()->assertJsonPath('code', 'clinical_finalization_required');
+            $this->assertSame($from, $order->fresh()->status);
+            $this->assertDatabaseCount('audit_logs', 0);
+
+            return;
+        }
+
         $this->request($actor, $laboratory)
             ->patchJson("/api/v1/laboratory-orders/{$order->id}/status", ['status' => $to])
             ->assertOk();

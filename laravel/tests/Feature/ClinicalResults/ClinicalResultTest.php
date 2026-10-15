@@ -236,13 +236,27 @@ class ClinicalResultTest extends TestCase
         $migration = require database_path('migrations/2026_10_11_000001_create_clinical_order_results.php');
         $physical = require database_path('migrations/2026_10_10_000004_add_physical_sample_operations.php');
         $composition = require database_path('migrations/2026_10_10_000002_add_order_clinical_composition.php');
+        $validationMigration = require database_path('migrations/2026_10_11_000002_add_clinical_result_validation.php');
+        $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
+        $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
+        $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $deliveryMigration->down();
+        $reportMigration->down();
+        $finalizationMigration->down();
+        $validationMigration->down();
         $migration->down();
         $physical->down();
         $composition->down();
         $composition->up();
         $physical->up();
         $migration->up();
+        $validationMigration->up();
+        $finalizationMigration->up();
+        $reportMigration->up();
+        $deliveryMigration->up();
         $this->getJson($url)->assertOk()->assertJsonPath('data.parameters', [])->assertJsonPath('data.capture_available', false);
+        $this->putJson('/api/v1/laboratory/validation-policy', ['validation_policy' => 'permission_based'])->assertOk();
+        $this->postJson($url.'/validate', ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11']])->assertConflict()->assertJsonPath('code', 'result_validation_unavailable');
         $this->putJson($url, $this->input())->assertConflict()->assertJsonPath('code', 'result_capture_unavailable');
     }
 

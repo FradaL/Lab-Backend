@@ -5,6 +5,8 @@ namespace App\ClinicalExams;
 use App\Actions\LaboratoryOrders\TransitionLaboratoryOrderStatus;
 use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
+use App\ClinicalFinalization\ClinicalFinalizationGuard;
+use App\ClinicalFinalization\ClinicalResolutionService;
 use App\ClinicalResults\LaboratoryResultService;
 use App\Http\Resources\Api\V1\LaboratoryOrderResource;
 use App\Http\Resources\Api\V1\LaboratorySampleResource;
@@ -234,7 +236,7 @@ final class LaboratorySampleService
         $data = $this->input('associate', $data);
 
         return $this->transaction(function () use ($lab, $actor, $orderId, $sampleId, $data): LaboratorySample {
-            $this->order($lab, $orderId);
+            $order = $this->order($lab, $orderId);
             $sample = $this->sample($lab, $orderId, $sampleId, true);
             $requirements = LaboratoryOrderSampleRequirement::forLaboratory($lab)->where('laboratory_order_id', $orderId)->whereIn('id', $data['sample_requirement_ids'])->orderBy('id')->lockForUpdate()->get();
             if ($requirements->count() !== count($data['sample_requirement_ids'])) {
@@ -242,6 +244,8 @@ final class LaboratorySampleService
             }
             $candidates = $this->compatibility->candidates($lab, $sample)->keyBy('sample_requirement_id');
             foreach ($requirements as $requirement) {
+                $line = LaboratoryOrderExam::forLaboratory($lab)->findOrFail($requirement->laboratory_order_exam_id);
+                ClinicalFinalizationGuard::line($order, $line);
                 $existing = $sample->associations()->where('sample_requirement_id', $requirement->id)->whereNull('released_at')->first();
                 if ($existing !== null) {
                     continue;
@@ -273,9 +277,12 @@ final class LaboratorySampleService
         $data = $this->input('release', $data);
 
         return $this->transaction(function () use ($lab, $actor, $orderId, $sampleId, $associationId, $data): LaboratorySample {
-            $this->order($lab, $orderId);
+            $order = $this->order($lab, $orderId);
             $sample = $this->sample($lab, $orderId, $sampleId, true);
             $association = $sample->associations()->whereKey($associationId)->lockForUpdate()->firstOrFail();
+            $requirement = LaboratoryOrderSampleRequirement::forLaboratory($lab)->findOrFail($association->sample_requirement_id);
+            $line = LaboratoryOrderExam::forLaboratory($lab)->findOrFail($requirement->laboratory_order_exam_id);
+            ClinicalFinalizationGuard::line($order, $line);
             if ($association->released_at !== null) {
                 if ($association->release_reason !== $data['reason']) {
                     throw new ClinicalConflict('sample_release_conflict', 'This association was released with another reason.');
@@ -300,6 +307,7 @@ final class LaboratorySampleService
         return $this->transaction(function () use ($lab, $actor, $orderId, $lineId): LaboratoryOrderExam {
             $order = $this->order($lab, $orderId);
             $line = LaboratoryOrderExam::forLaboratory($lab)->where('laboratory_order_id', $orderId)->whereKey($lineId)->lockForUpdate()->firstOrFail();
+            ClinicalFinalizationGuard::line($order, $line);
             if ($line->processing_started_at !== null) {
                 return $line;
             }
@@ -349,14 +357,15 @@ final class LaboratorySampleService
     {
         return $this->transaction(function () use ($lab, $orderId): array {
             $order = LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->sharedLock()->firstOrFail();
-            $lines = $order->orderExams()->with(['clinicalVersion', 'sampleRequirements', 'resultCapture:id,laboratory_order_exam_id,revision,status', 'results:id,laboratory_order_exam_id,parameter_code'])->orderBy('id')->get();
+            $order->load('clinicalFinalization');
+            $lines = $order->orderExams()->with(['clinicalVersion', 'sampleRequirements', 'resultCapture:id,laboratory_order_exam_id,revision,status', 'clinicalResolution:id,laboratory_order_exam_id,resolution_type,resolved_by,resolved_at', 'clinicalExceptions:id,laboratory_order_exam_id,status', 'results:id,laboratory_order_exam_id,parameter_code'])->orderBy('id')->get();
             $samples = LaboratorySample::forLaboratory($lab)->where('laboratory_order_id', $orderId)->with(['events', 'associations'])->orderBy('id')->get();
             $assessments = $this->compatibility->assessments($lab, $orderId);
             $qualified = $assessments->filter(fn ($row) => $row->released_at === null && $row->sample_status === 'accepted' && $row->errors === '[]')->groupBy('sample_requirement_id');
             $assessments = $assessments->groupBy('sample_requirement_id');
             $dependencies = LaboratorySampleProcessingDependency::forLaboratory($lab)->where('laboratory_order_id', $orderId)->orderBy('id')->get()->groupBy('laboratory_order_exam_id');
 
-            return ['laboratory_order_id' => $orderId, 'order_number' => $order->code, 'status' => $order->status,
+            return ['clinical_finalization' => ClinicalResolutionService::progress($order, $lines), 'laboratory_order_id' => $orderId, 'order_number' => $order->code, 'status' => $order->status,
                 'order' => LaboratoryOrderResource::make($order->load(['patient', 'doctor', 'branch', 'createdBy']))->resolve(),
                 'samples' => LaboratorySampleResource::collection($samples)->resolve(),
                 'exams' => $lines->map(function ($line) use ($qualified, $assessments, $dependencies, $order): array {
@@ -379,7 +388,8 @@ final class LaboratorySampleService
                     return ['id' => $line->id, 'clinical_version_id' => $line->clinical_version_id,
                         'clinical_configuration_source' => $line->clinical_configuration_source ?? 'historical',
                         'operational_status' => $line->processing_started_at !== null ? 'started' : ($complete && $blockers === [] ? 'ready' : 'pending_samples'),
-                        'can_start' => $line->processing_started_at === null && $complete && $blockers === [] && in_array($order->status, ['pending', 'in_process'], true),
+                        'clinical_resolution' => $line->clinicalResolution === null ? null : ['id' => $line->clinicalResolution->id, 'resolution_type' => $line->clinicalResolution->resolution_type, 'resolved_by' => $line->clinicalResolution->resolved_by, 'resolved_at' => $line->clinicalResolution->resolved_at->toISOString()],
+                        'can_start' => $line->clinicalResolution === null && $line->processing_started_at === null && $complete && $blockers === [] && in_array($order->status, ['pending', 'in_process'], true),
                         'processing_dependencies' => $dependencies->get($line->id)?->map(fn ($dependency) => ['association_id' => $dependency->association_id, 'decision' => $dependency->decision])->all() ?? [],
                         'blocking_requirement_ids' => $blockers, 'blocking_reasons' => $published ? (! $complete ? ['materialized_requirements_incomplete'] : ($blockers === [] ? [] : ['no_adequate_accepted_sample'])) : ['published_clinical_version_required'],
                         'processing_started_at' => $line->processing_started_at?->toISOString(), 'processing_started_by' => $line->processing_started_by,

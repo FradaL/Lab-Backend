@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\V1\Auth\AvailableLaboratoryController;
 use App\Http\Controllers\Api\V1\Auth\CurrentAuthorizationController;
 use App\Http\Controllers\Api\V1\BranchController;
 use App\Http\Controllers\Api\V1\ClinicalExamController;
+use App\Http\Controllers\Api\V1\ClinicalFinalizationController;
+use App\Http\Controllers\Api\V1\ClinicalReportController;
 use App\Http\Controllers\Api\V1\CommercialClientController;
 use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
 use App\Http\Controllers\Api\V1\DashboardController;
@@ -18,12 +20,15 @@ use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PriceListController;
 use App\Http\Controllers\Api\V1\PriceListExamController;
 use App\Http\Controllers\Api\V1\PricingResolutionController;
+use App\Http\Controllers\Api\V1\ReportDeliveryController;
+use App\Http\Controllers\Api\V1\ResultValidationController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
     Route::get('/health', HealthCheckController::class);
+    Route::get('/report-verifications/{token}', [ClinicalReportController::class, 'verify'])->middleware('throttle:report-verification');
 
     Route::prefix('auth')->group(function (): void {
         Route::post('/login', [AuthController::class, 'login'])
@@ -37,6 +42,25 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::middleware('saas')->group(function (): void {
+        Route::get('/laboratory/report-settings', [ClinicalReportController::class, 'settings'])->middleware('can:reports.settings.view');
+        Route::put('/laboratory/report-settings', [ClinicalReportController::class, 'updateSettings'])->middleware('can:reports.settings.edit');
+        Route::post('/laboratory/report-settings/logo', [ClinicalReportController::class, 'logo'])->middleware('can:reports.settings.edit');
+        Route::post('/laboratory-orders/{order}/reports', [ClinicalReportController::class, 'issue'])->middleware('can:reports.issue')->whereNumber('order');
+        Route::get('/laboratory-orders/{order}/reports', [ClinicalReportController::class, 'history'])->middleware('can:reports.view_history')->whereNumber('order');
+        Route::get('/laboratory-orders/{order}/reports/{report}', [ClinicalReportController::class, 'show'])->middleware('can:reports.view_history')->whereNumber(['order', 'report']);
+        Route::get('/laboratory-orders/{order}/reports/{report}/download', [ClinicalReportController::class, 'download'])->middleware('can:reports.download')->whereNumber(['order', 'report']);
+        Route::get('/laboratory/report-delivery-policy', [ReportDeliveryController::class, 'policy'])->middleware('can:reports.delivery_policy.view');
+        Route::put('/laboratory/report-delivery-policy', [ReportDeliveryController::class, 'updatePolicy'])->middleware('can:reports.delivery_policy.manage');
+        Route::get('/laboratory-orders/{order}/reports/{report}/delivery-eligibility', [ReportDeliveryController::class, 'eligibility'])->middleware('can:reports.delivery.evaluate')->whereNumber(['order', 'report']);
+        Route::post('/laboratory-orders/{order}/reports/{report}/delivery-exceptions', [ReportDeliveryController::class, 'requestException'])->middleware('can:reports.delivery.prepare')->whereNumber(['order', 'report']);
+        Route::get('/laboratory-orders/{order}/reports/{report}/delivery-exceptions', [ReportDeliveryController::class, 'exceptions'])->middleware('can:reports.delivery_exceptions.view')->whereNumber(['order', 'report']);
+        Route::post('/laboratory-orders/{order}/reports/{report}/delivery-exceptions/{exception}/authorize', [ReportDeliveryController::class, 'authorizeException'])->middleware('can:reports.delivery_exceptions.authorize')->whereNumber(['order', 'report', 'exception']);
+        Route::post('/laboratory-orders/{order}/reports/{report}/delivery-exceptions/{exception}/revoke', [ReportDeliveryController::class, 'revokeException'])->middleware('can:reports.delivery_exceptions.authorize')->whereNumber(['order', 'report', 'exception']);
+        Route::post('/laboratory-orders/{order}/reports/{report}/delivery-preparations', [ReportDeliveryController::class, 'prepare'])->middleware('can:reports.delivery.prepare')->whereNumber(['order', 'report']);
+        Route::get('/laboratory-orders/{order}/reports/{report}/delivery-preparations/{preparation}/download', [ReportDeliveryController::class, 'downloadPreparation'])->middleware('can:reports.delivery.prepare')->whereNumber(['order', 'report', 'preparation']);
+        Route::post('/laboratory-orders/{order}/reports/{report}/deliveries', [ReportDeliveryController::class, 'deliver'])->middleware('can:reports.delivery.confirm')->whereNumber(['order', 'report']);
+        Route::get('/laboratory-orders/{order}/reports/{report}/deliveries', [ReportDeliveryController::class, 'history'])->middleware('can:reports.delivery_history.view')->whereNumber(['order', 'report']);
+
         Route::get('/auth/authorization', CurrentAuthorizationController::class);
         Route::get('/dashboard', DashboardController::class)
             ->middleware('can:orders.view');
@@ -158,6 +182,24 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('/laboratory-exams/{laboratoryExam}/status', [LaboratoryExamController::class, 'updateStatus'])
             ->middleware('can:laboratory_exams.change_status')
             ->whereNumber('laboratoryExam');
+        Route::post('/laboratory-orders/{order}/exams/{line}/exceptions', [ClinicalFinalizationController::class, 'requestException'])->middleware('can:orders.clinical_exceptions.request')->whereNumber(['order', 'line']);
+        Route::get('/laboratory-orders/{order}/exams/{line}/exceptions', [ClinicalFinalizationController::class, 'exceptions'])->middleware('can:orders.clinical_exceptions.view')->whereNumber(['order', 'line']);
+        Route::post('/laboratory-orders/{order}/exams/{line}/exceptions/{exception}/approve', [ClinicalFinalizationController::class, 'approve'])->middleware('can:orders.clinical_exceptions.approve')->whereNumber(['order', 'line', 'exception']);
+        Route::post('/laboratory-orders/{order}/exams/{line}/exceptions/{exception}/reject', [ClinicalFinalizationController::class, 'reject'])->middleware('can:orders.clinical_exceptions.approve')->whereNumber(['order', 'line', 'exception']);
+        Route::post('/laboratory-orders/{order}/exams/{line}/finalize', [ClinicalFinalizationController::class, 'finalizeLine'])->middleware('can:orders.exams.clinical_finalize')->whereNumber(['order', 'line']);
+        Route::post('/laboratory-orders/{order}/finalize', [ClinicalFinalizationController::class, 'finalizeOrder'])->middleware('can:orders.clinical_finalize')->whereNumber(['order']);
+        Route::get('/laboratory-orders/{order}/clinical-finalization', [ClinicalFinalizationController::class, 'show'])->middleware('can:orders.clinical_finalization.view')->whereNumber(['order']);
+
+        Route::get('/laboratory/validation-policy', [ResultValidationController::class, 'policy'])->middleware('can:results.validation_policy.manage');
+        Route::put('/laboratory/validation-policy', [ResultValidationController::class, 'setPolicy'])->middleware('can:results.validation_policy.manage');
+        Route::get('/laboratory/validation-professionals', [ResultValidationController::class, 'professionals'])->middleware('can:results.professionals.manage');
+        Route::post('/laboratory/validation-professionals', [ResultValidationController::class, 'register'])->middleware('can:results.professionals.manage');
+        Route::post('/laboratory/validation-professionals/{professional}/authorize', [ResultValidationController::class, 'authorizeProfessional'])->middleware('can:results.professionals.manage')->whereNumber('professional');
+        Route::post('/laboratory/validation-professionals/{professional}/revoke', [ResultValidationController::class, 'revokeProfessional'])->middleware('can:results.professionals.manage')->whereNumber('professional');
+        Route::post('/laboratory-orders/{order}/exams/{line}/results/validate', [ResultValidationController::class, 'validateResults'])->middleware('can:results.validate')->whereNumber(['order', 'line']);
+        Route::post('/laboratory-orders/{order}/exams/{line}/results/rectify', [ResultValidationController::class, 'rectify'])->middleware('can:results.rectify')->whereNumber(['order', 'line']);
+        Route::get('/laboratory-orders/{order}/exams/{line}/results/validations', [ResultValidationController::class, 'history'])->middleware('can:results.validation_history')->whereNumber(['order', 'line']);
+
         Route::get('/laboratory-orders/{order}/exams/{line}/results/history', [LaboratoryResultController::class, 'history'])
             ->middleware('can:results.view_history')->whereNumber(['order', 'line']);
         Route::get('/laboratory-orders/{order}/exams/{line}/results', [LaboratoryResultController::class, 'show'])

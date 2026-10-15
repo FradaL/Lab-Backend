@@ -341,3 +341,9 @@ Las instrucciones v1 en texto libre no se interpretan automáticamente: cuando e
 [BE-S2-06 — Captura de resultados clínicos](BE-S2-06-captura-resultados-clinicos.md) persiste valores preliminares por línea y código de parámetro, usando exclusivamente la publicación histórica fijada por BE-S2-04. Conserva tipos, restricciones, unidades, opciones, referencias y su snapshot de parámetro. No altera los documentos publicados ni introduce parámetros opcionales: los esquemas actuales no declaran esa propiedad, por lo que su completitud técnica exige todos los parámetros publicados.
 
 La selección/aplicación de referencias, contexto de interpretación y resolución autorizada siguen pendientes de integración clínica posterior. Capturar valores no evalúa rangos ni significa validación/finalización. El contenido nuevo del dataset está explícitamente identificado como ficticio y se publica con el servicio existente, sin modificar exámenes o líneas anteriores.
+
+## Actualización posterior — BE-S2-07 (2026-10-11)
+
+BE-S2-07 implementa la resolución de referencias y snapshots de contexto al validar, usando únicamente la versión histórica de cada línea y el reference_context explícito aprobado. No convierte gender ni inventa rangos o condiciones; la configuración publicada permanece inmutable.
+
+El informe y las cifras anteriores corresponden a esta entrega histórica. Para el contrato vigente consultar [BE-S2-07 — Validación de resultados clínicos](BE-S2-07-validacion-resultados-clinicos.md). El inventario ampliado es de 112 rutas Laravel, 104 operaciones OpenAPI y 60 permisos (97 rutas protegidas por permiso). RolePermissionSeeder permanece independiente; esta ampliación no ejecuta migraciones/seeders en entornos operativos ni commit/push. La verificación final se documenta en BE-S2-07.

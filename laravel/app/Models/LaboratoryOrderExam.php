@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'unit_price',
     'exam_code',
     'exam_name',
+    'report_area_snapshot',
     'price_list_name',
     'clinical_version_id',
     'clinical_configuration_source',
@@ -72,11 +73,22 @@ class LaboratoryOrderExam extends Model
         return $this->hasMany(LaboratoryOrderResult::class);
     }
 
+    public function clinicalResolution(): HasOne
+    {
+        return $this->hasOne(ClinicalLineResolution::class);
+    }
+
+    public function clinicalExceptions(): HasMany
+    {
+        return $this->hasMany(ClinicalExceptionRequest::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
         return [
             'unit_price' => 'decimal:2',
+            'report_area_snapshot' => 'array',
             'clinical_activity_started_at' => 'immutable_datetime',
             'processing_started_at' => 'immutable_datetime',
         ];

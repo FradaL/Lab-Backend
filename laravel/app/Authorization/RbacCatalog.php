@@ -26,7 +26,12 @@ final class RbacCatalog
         'commercial_price_assignments.view', 'commercial_price_assignments.manage',
         'pricing.resolve',
         'orders.view', 'orders.create', 'orders.add_exam', 'orders.remove_exam', 'orders.manage_discount', 'orders.change_status',
+        'orders.clinical_finalize', 'orders.exams.clinical_finalize', 'orders.clinical_exceptions.request', 'orders.clinical_exceptions.approve', 'orders.clinical_exceptions.view', 'orders.clinical_finalization.view',
         'results.view', 'results.capture', 'results.edit', 'results.view_history',
+        'results.validate', 'results.rectify', 'results.validation_history', 'results.validation_policy.manage', 'results.professionals.manage',
+        'reports.view_history', 'reports.issue', 'reports.download', 'reports.settings.view', 'reports.settings.edit',
+        'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'reports.delivery.evaluate', 'reports.delivery_history.view',
+        'reports.delivery.prepare', 'reports.delivery.confirm', 'reports.delivery_exceptions.authorize', 'reports.delivery_exceptions.view',
         'samples.view', 'samples.collect', 'samples.receive', 'samples.evaluate', 'samples.associate', 'orders.start_exam',
     ];
 
@@ -66,8 +71,8 @@ final class RbacCatalog
     public static function rolePermissions(): array
     {
         return [
-            'owner' => self::PERMISSIONS,
-            'administrator' => self::PERMISSIONS,
+            'owner' => array_values(array_diff(self::PERMISSIONS, ['results.validate', 'results.rectify', 'orders.clinical_finalize', 'orders.exams.clinical_finalize', 'orders.clinical_exceptions.request', 'orders.clinical_exceptions.approve', 'reports.view_history', 'reports.issue', 'reports.download', 'reports.settings.view', 'reports.settings.edit', 'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'reports.delivery.evaluate', 'reports.delivery_history.view', 'reports.delivery.prepare', 'reports.delivery.confirm', 'reports.delivery_exceptions.authorize', 'reports.delivery_exceptions.view'])),
+            'administrator' => array_values(array_diff(self::PERMISSIONS, ['results.validate', 'results.rectify', 'orders.clinical_finalize', 'orders.exams.clinical_finalize', 'orders.clinical_exceptions.request', 'orders.clinical_exceptions.approve', 'reports.view_history', 'reports.issue', 'reports.download', 'reports.settings.view', 'reports.settings.edit', 'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'reports.delivery.evaluate', 'reports.delivery_history.view', 'reports.delivery.prepare', 'reports.delivery.confirm', 'reports.delivery_exceptions.authorize', 'reports.delivery_exceptions.view'])),
             'receptionist' => self::RECEPTIONIST_PERMISSIONS,
             'cashier' => self::CASHIER_PERMISSIONS,
             'laboratory_technician' => self::LABORATORY_TECHNICIAN_PERMISSIONS,
@@ -77,8 +82,8 @@ final class RbacCatalog
 
     public static function assertValid(): void
     {
-        if (count(self::PERMISSIONS) !== 55 || count(array_unique(self::PERMISSIONS)) !== 55) {
-            throw new LogicException('The RBAC catalog must contain exactly 55 unique permissions.');
+        if (count(self::PERMISSIONS) !== 79 || count(array_unique(self::PERMISSIONS)) !== 79) {
+            throw new LogicException('The RBAC catalog must contain exactly 79 unique permissions.');
         }
 
         $matrix = self::rolePermissions();

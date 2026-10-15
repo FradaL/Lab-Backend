@@ -5,6 +5,7 @@ namespace App\Actions\LaboratoryOrders;
 use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\Audit\OrderAuditEvents;
+use App\ClinicalReports\ReportIdentity;
 use App\Models\Branch;
 use App\Models\CommercialClient;
 use App\Models\Doctor;
@@ -16,6 +17,7 @@ use App\Models\PriceList;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -95,6 +97,7 @@ final class CreateLaboratoryOrder
             /** @var Patient $patient */
             /** @var PriceList $priceList */
             $order = $laboratory->orders()->create([
+                ...(Schema::hasColumn('laboratory_orders', 'report_identity_snapshot') ? ['report_identity_snapshot' => ReportIdentity::snapshot($patient, $branch, 'order_creation', $creator->id)] : []),
                 'branch_id' => $branch->getKey(),
                 'patient_id' => $patient->getKey(),
                 'doctor_id' => $doctor?->getKey(),
