@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\Audit\MasterDataAuditEvents;
+use App\ClinicalExams\ClinicalConflict;
+use App\ClinicalExams\ClinicalExamService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LaboratoryExam\ActiveLaboratoryExamRequest;
 use App\Http\Requests\Api\V1\LaboratoryExam\IndexLaboratoryExamRequest;
@@ -444,8 +446,13 @@ class LaboratoryExamController extends Controller
         }
 
         DB::transaction(function () use ($request, $statusRequest, $laboratory, $exam, $auditWriter): void {
+            $exam = LaboratoryExam::forLaboratory($laboratory)->whereKey($exam->id)->lockForUpdate()->firstOrFail();
             $oldStatus = $exam->status;
             $exam->status = $statusRequest->validated($request)['status'];
+            $clinical = app(ClinicalExamService::class);
+            if ($exam->status === 'active' && $clinical->state($laboratory, $exam->id) !== null && $clinical->current($laboratory, $exam->id) === null) {
+                throw new ClinicalConflict('clinical_exam_unavailable', 'Publish a clinical version before activating this exam.');
+            }
 
             if (! $exam->isDirty('status')) {
                 return;
@@ -460,7 +467,7 @@ class LaboratoryExamController extends Controller
                 ['status' => $exam->status],
             ));
         });
-        $exam->load([
+        $exam->refresh()->load([
             'laboratoryArea:id,code,name',
             'sampleType:id,name',
         ]);

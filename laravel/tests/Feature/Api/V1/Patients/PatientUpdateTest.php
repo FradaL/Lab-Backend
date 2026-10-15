@@ -428,7 +428,7 @@ class PatientUpdateTest extends TestCase
             'status' => Patient::STATUS_ACTIVE,
             'notes' => 'Observaciones del paciente',
             ...$attributes,
-        ]);
+        ])->refresh();
     }
 
     private function assertPatientUnchanged(Patient $patient): void

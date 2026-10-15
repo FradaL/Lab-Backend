@@ -237,7 +237,7 @@ final class LaboratoryOrderHistoricalSnapshotTest extends TestCase
             'currency' => 'GTQ',
             'status' => PriceList::STATUS_ACTIVE,
         ]);
-        $exam = LaboratoryExam::factory()->for($laboratory)->create([
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
             'code' => 'GLU',
             'name' => 'Glucosa',
             'status' => LaboratoryExam::STATUS_ACTIVE,

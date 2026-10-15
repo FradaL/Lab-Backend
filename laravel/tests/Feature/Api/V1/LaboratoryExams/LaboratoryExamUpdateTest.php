@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1\LaboratoryExams;
 
+use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Models\Laboratory;
 use App\Models\LaboratoryArea;
 use App\Models\LaboratoryExam;
@@ -793,10 +794,10 @@ class LaboratoryExamUpdateTest extends TestCase
         $this->assertResponseDoesNotLeak($responses[2], ['SECRET-CROSS', (string) $labB->id]);
     }
 
-    public function test_patch_route_is_exact_numeric_and_no_future_routes_exist(): void
+    public function test_legacy_patch_route_remains_exact_numeric(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-exams'))
+            ->filter(fn ($route): bool => str_starts_with($route->getActionName(), LaboratoryExamController::class.'@'))
             ->values();
 
         $this->assertCount(6, $routes);

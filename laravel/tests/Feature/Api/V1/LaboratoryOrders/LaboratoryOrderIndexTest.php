@@ -62,7 +62,7 @@ final class LaboratoryOrderIndexTest extends TestCase
             'currency' => 'GTQ',
             'total' => '175.00',
         ]);
-        $exam = LaboratoryExam::factory()->for($laboratory)->create();
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create();
         LaboratoryOrderExam::factory()->count(3)->for($laboratory)->create([
             'laboratory_order_id' => $order->id,
             'laboratory_exam_id' => $exam->id,
@@ -77,7 +77,7 @@ final class LaboratoryOrderIndexTest extends TestCase
         $item = $response->json('data.0');
 
         $this->assertSame([
-            'id', 'code', 'ordered_at', 'status', 'branch', 'patient', 'doctor',
+            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'clinical_finalization', 'branch', 'patient', 'doctor',
             'commercial_client', 'exam_count', 'currency', 'total', 'created_by',
         ], array_keys($item));
         $this->assertSame(['id', 'name'], array_keys($item['branch']));
@@ -278,10 +278,13 @@ final class LaboratoryOrderIndexTest extends TestCase
         $this->indexRequest($user, $laboratory, ['per_page' => 100])->assertOk();
 
         foreach (['branches', 'patients', 'doctors', 'users'] as $table) {
-            $this->assertCount(1, collect($queries)->filter(
+            $this->assertCount($table === 'users' ? 2 : 1, collect($queries)->filter(
                 fn (string $sql): bool => str_contains($sql, "from \"{$table}\""),
-            ), "Expected one eager-load query for {$table}.");
+            ), "Expected constant reads for {$table}, including the user activation check.");
         }
+        $this->assertCount(1, collect($queries)->filter(
+            fn (string $sql): bool => str_starts_with($sql, 'select "is_active" from "users"'),
+        ));
         $orderQueries = collect($queries)->filter(
             fn (string $sql): bool => str_contains($sql, 'from "laboratory_orders"'),
         );

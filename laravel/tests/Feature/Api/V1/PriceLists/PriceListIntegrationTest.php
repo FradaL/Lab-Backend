@@ -423,7 +423,7 @@ class PriceListIntegrationTest extends TestCase
         }
         $this->assertSame('3.1.0', $document['openapi']);
         $this->assertSame(10, $this->operationCount($document, '/api/v1/price-lists'));
-        $this->assertSame(6, $this->operationCount($document, '/api/v1/laboratory-exams'));
+        $this->assertSame(15, $this->operationCount($document, '/api/v1/laboratory-exams'));
         $this->assertSame(
             ['id', 'name', 'description', 'currency', 'is_default', 'status', 'created_at', 'updated_at'],
             array_keys($document['components']['schemas']['PriceList']['properties']),

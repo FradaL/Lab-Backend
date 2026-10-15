@@ -17,11 +17,14 @@ final class StoreLaboratoryOrderRequest extends FormRequest
         'price_list_id',
         'ordered_at',
         'notes',
+        'exams',
     ];
 
     public function authorize(): bool
     {
-        return true;
+        $exams = $this->originalPayload()['exams'] ?? [];
+
+        return ! is_array($exams) || $exams === [] || ($this->user()?->can('orders.add_exam') ?? false);
     }
 
     /** @return array<string, array<int, mixed>> */
@@ -41,6 +44,24 @@ final class StoreLaboratoryOrderRequest extends FormRequest
                 $this->strictDateTimeRule($payload),
             ],
             'notes' => ['present', 'nullable', 'string'],
+            'exams' => [
+                'sometimes', 'array', 'list', 'max:50',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    $original = json_decode($this->getContent());
+                    if (! is_object($original) || ! is_array($original->exams ?? null)) {
+                        $fail('El campo exams debe ser un arreglo JSON.');
+                    }
+                },
+            ],
+            'exams.*' => ['required', 'array:laboratory_exam_id'],
+            'exams.*.laboratory_exam_id' => [
+                'required',
+                function (string $attribute, mixed $value, Closure $fail) use ($payload): void {
+                    if (! is_int($value) || $value < 1 || data_get($payload, $attribute) !== $value) {
+                        $fail("El campo {$attribute} debe ser un entero positivo.");
+                    }
+                },
+            ],
         ];
     }
 

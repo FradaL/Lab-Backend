@@ -6,13 +6,14 @@ use App\Actions\LaboratoryOrders\AddExamToLaboratoryOrder;
 use App\Actions\LaboratoryOrders\RemoveExamFromLaboratoryOrder;
 use App\Actions\LaboratoryOrders\RemoveLaboratoryOrderDiscount;
 use App\Actions\LaboratoryOrders\SetLaboratoryOrderDiscount;
-use App\Actions\LaboratoryOrders\TransitionLaboratoryOrderStatus;
+use App\ClinicalExams\LaboratorySampleService;
 use App\Models\Laboratory;
 use App\Models\LaboratoryExam;
 use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
+use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -22,6 +23,12 @@ use Throwable;
 final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    protected function tearDown(): void
+    {
+        $this->clearPermissionTeam();
+        parent::tearDown();
+    }
 
     public function test_concurrent_discount_put_and_add_leave_economics_consistent(): void
     {
@@ -178,12 +185,14 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
     {
         $this->requirePostgreSqlConcurrencySupport();
         [$laboratory, $order, $exam] = $this->context();
-        $this->line($laboratory, $order, $exam, '200.00');
+        $line = $this->line($laboratory, $order, $exam, '200.00');
+        $actor = $this->createLaboratoryMember($laboratory);
+        $this->assignDirectLaboratoryPermission($actor, $laboratory, 'orders.start_exam');
         $order->update(['subtotal' => '200.00', 'total' => '200.00']);
 
         $results = $this->runConcurrently($laboratory, $order, $exam, [
             'discount' => ['action' => 'set', 'type' => 'percentage', 'value' => '10.00'],
-            'transition' => ['action' => 'transition'],
+            'transition' => ['action' => 'start', 'line_id' => $line->id, 'actor_id' => $actor->id],
         ]);
 
         $this->assertSame('ok', $results['transition']);
@@ -196,7 +205,7 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
             $this->assertConsistentEconomics($order, null, null, '200.00', '0.00', '200.00');
         }
 
-        DB::table('laboratory_order_exams')->where('laboratory_order_id', $order->id)->delete();
+        // Isolated migration-test cleanup: preserve clinical evidence until the schema is rolled back.
         DB::table('laboratory_orders')->where('id', $order->id)->update(['status' => LaboratoryOrder::STATUS_PENDING]);
     }
 
@@ -213,7 +222,7 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
             'currency' => 'GTQ',
             'status' => LaboratoryOrder::STATUS_PENDING,
         ]);
-        $exam = LaboratoryExam::factory()->for($laboratory)->create(['status' => LaboratoryExam::STATUS_ACTIVE]);
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create(['status' => LaboratoryExam::STATUS_ACTIVE]);
         PriceListExam::factory()->for($laboratory)->create([
             'price_list_id' => $priceList->id,
             'laboratory_exam_id' => $exam->id,
@@ -235,7 +244,7 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
     }
 
     /**
-     * @param  array<string, array{action: string, type?: string, value?: string, line_id?: int}>  $jobs
+     * @param  array<string, array{action: string, type?: string, value?: string, line_id?: int, actor_id?: int}>  $jobs
      * @return array<string, string>
      */
     private function runConcurrently(Laboratory $laboratory, LaboratoryOrder $order, LaboratoryExam $exam, array $jobs): array
@@ -260,6 +269,7 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
                     DB::reconnect();
                     try {
                         $currentLaboratory = Laboratory::query()->findOrFail($laboratory->id);
+                        setPermissionsTeamId($currentLaboratory->id);
                         match ($job['action']) {
                             'set' => app(SetLaboratoryOrderDiscount::class)->execute(
                                 $currentLaboratory,
@@ -270,11 +280,7 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
                             'remove' => app(RemoveLaboratoryOrderDiscount::class)->execute($currentLaboratory, $order->id),
                             'add' => app(AddExamToLaboratoryOrder::class)->execute($currentLaboratory, $order->id, $exam->id),
                             'delete_line' => app(RemoveExamFromLaboratoryOrder::class)->execute($currentLaboratory, $order->id, $job['line_id']),
-                            'transition' => app(TransitionLaboratoryOrderStatus::class)->execute(
-                                $currentLaboratory,
-                                $order->id,
-                                LaboratoryOrder::STATUS_IN_PROCESS,
-                            ),
+                            'start' => app(LaboratorySampleService::class)->start($currentLaboratory, User::findOrFail($job['actor_id']), $order->id, $job['line_id']),
                         };
                         $result = 'ok';
                     } catch (ValidationException) {

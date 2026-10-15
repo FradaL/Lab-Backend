@@ -17,83 +17,86 @@ class SaasFoundationSeeder extends Seeder
      */
     public function run(): void
     {
-        $plan = Plan::query()->updateOrCreate(
-            ['code' => 'DEMO'],
-            [
-                'name' => 'Demo',
-                'price' => 0,
-                'billing_period' => 'monthly',
-                'status' => 'active',
-            ],
-        );
+        DemoDataset::run(function (): void {
+            $plan = DemoDataset::create(Plan::class,
+                ['code' => 'DEMO'],
+                [
+                    'name' => 'Demo',
+                    'price' => 0,
+                    'billing_period' => 'monthly',
+                    'status' => 'active',
+                ],
+            );
 
-        $laboratory = Laboratory::query()->updateOrCreate(
-            ['nit' => '000000000001'],
-            [
-                'name' => 'Laboratorio Demo Donqer',
-                'legal_name' => 'Laboratorio Demo Donqer, S.A.',
-                'phone' => '+50222000000',
-                'email' => 'demo@donqerlab.test',
-                'address' => 'Ciudad de Guatemala',
-                'timezone' => 'America/Guatemala',
-                'currency' => 'GTQ',
-                'is_active' => true,
-            ],
-        );
+            $laboratory = DemoDataset::create(Laboratory::class,
+                ['nit' => '000000000001'],
+                [
+                    'name' => 'Laboratorio Demo Donqer',
+                    'legal_name' => 'Laboratorio Demo Donqer, S.A.',
+                    'phone' => '+50222000000',
+                    'email' => 'demo@donqerlab.test',
+                    'address' => 'Ciudad de Guatemala',
+                    'timezone' => 'America/Guatemala',
+                    'currency' => 'GTQ',
+                    'is_active' => true,
+                ],
+            );
 
-        Branch::query()->updateOrCreate(
-            [
-                'laboratory_id' => $laboratory->id,
-                'code' => 'MAIN',
-            ],
-            [
-                'name' => 'Sucursal Principal',
-                'phone' => '+50222000000',
-                'email' => 'principal@donqerlab.test',
-                'address' => 'Ciudad de Guatemala',
-                'is_main' => true,
-                'status' => 'active',
-            ],
-        );
+            DemoDataset::create(Branch::class,
+                [
+                    'laboratory_id' => $laboratory->id,
+                    'code' => 'MAIN',
+                ],
+                [
+                    'name' => 'Sucursal Principal',
+                    'phone' => '+50222000000',
+                    'email' => 'principal@donqerlab.test',
+                    'address' => 'Ciudad de Guatemala',
+                    'is_main' => true,
+                    'status' => 'active',
+                ],
+            );
 
-        Branch::query()->updateOrCreate(
-            [
-                'laboratory_id' => $laboratory->id,
-                'code' => 'ZONE10',
-            ],
-            [
-                'name' => 'Sucursal Zona 10',
-                'phone' => '+50222000010',
-                'email' => 'zona10@donqerlab.test',
-                'address' => 'Zona 10, Ciudad de Guatemala',
-                'is_main' => false,
-                'status' => 'active',
-            ],
-        );
+            DemoDataset::create(Branch::class,
+                [
+                    'laboratory_id' => $laboratory->id,
+                    'code' => 'ZONE10',
+                ],
+                [
+                    'name' => 'Sucursal Zona 10',
+                    'phone' => '+50222000010',
+                    'email' => 'zona10@donqerlab.test',
+                    'address' => 'Zona 10, Ciudad de Guatemala',
+                    'is_main' => false,
+                    'status' => 'active',
+                ],
+            );
 
-        Subscription::query()->updateOrCreate(
-            [
-                'plan_id' => $plan->id,
-                'laboratory_id' => $laboratory->id,
-                'starts_at' => '2026-01-01 00:00:00',
-            ],
-            [
-                'status' => Subscription::STATUS_ACTIVE,
-                'ends_at' => null,
-                'trial_ends_at' => null,
-            ],
-        );
+            DemoDataset::create(Subscription::class,
+                [
+                    'plan_id' => $plan->id,
+                    'laboratory_id' => $laboratory->id,
+                    'starts_at' => '2026-01-01 00:00:00',
+                ],
+                [
+                    'status' => Subscription::STATUS_ACTIVE,
+                    'ends_at' => null,
+                    'trial_ends_at' => null,
+                ],
+            );
 
-        User::query()
-            ->whereIn('email', ['admin@donqerlab.test', 'reception@donqerlab.test'])
-            ->each(function (User $user) use ($laboratory): void {
-                LaboratoryUser::query()->updateOrCreate(
-                    [
-                        'laboratory_id' => $laboratory->id,
-                        'user_id' => $user->id,
-                    ],
-                    ['is_active' => true],
-                );
-            });
+            User::query()
+                ->whereIn('email', ['admin@donqerlab.test', 'reception@donqerlab.test'])
+                ->each(function (User $user) use ($laboratory): void {
+                    DemoDataset::assertOwned($user);
+                    DemoDataset::create(LaboratoryUser::class,
+                        [
+                            'laboratory_id' => $laboratory->id,
+                            'user_id' => $user->id,
+                        ],
+                        ['is_active' => true],
+                    );
+                });
+        });
     }
 }
