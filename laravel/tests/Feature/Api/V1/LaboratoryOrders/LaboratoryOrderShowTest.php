@@ -34,7 +34,7 @@ final class LaboratoryOrderShowTest extends TestCase
         $response = $this->request($user, $laboratory, $order)->assertOk();
 
         $this->assertSame([
-            'id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor',
+            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'clinical_finalization', 'notes', 'patient', 'doctor',
             'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type',
             'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by',
             'created_at', 'updated_at',
@@ -277,10 +277,13 @@ final class LaboratoryOrderShowTest extends TestCase
         $this->request($user, $laboratory, $order)->assertOk();
 
         foreach (['laboratory_orders', 'patients', 'doctors', 'branches', 'users'] as $table) {
-            $this->assertCount(1, collect($queries)->filter(
+            $this->assertCount($table === 'users' ? 2 : 1, collect($queries)->filter(
                 fn (string $sql): bool => str_contains($sql, "from \"{$table}\""),
-            ), "Expected exactly one read from {$table}.");
+            ), "Expected constant reads from {$table}, including the user activation check.");
         }
+        $this->assertCount(1, collect($queries)->filter(
+            fn (string $sql): bool => str_starts_with($sql, 'select "is_active" from "users"'),
+        ));
         foreach (['commercial_clients', 'price_lists', 'commercial_client_price_lists', 'price_list_exams', 'laboratory_order_exams'] as $table) {
             $this->assertFalse(collect($queries)->contains(fn (string $sql): bool => str_contains($sql, $table)));
         }
@@ -311,6 +314,7 @@ final class LaboratoryOrderShowTest extends TestCase
     {
         $routes = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
+            ->filter(fn ($route): bool => $route->getAction('controller') !== null && str_starts_with($route->getAction('controller'), LaboratoryOrderController::class.'@'))
             ->values();
 
         $this->assertCount(9, $routes);
@@ -335,8 +339,8 @@ final class LaboratoryOrderShowTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(69, $operationCount);
-        $this->assertCount(77, Route::getRoutes()->getRoutes());
+        $this->assertSame(130, $operationCount);
+        $this->assertCount(138, Route::getRoutes()->getRoutes());
         $this->assertSame(['get'], array_keys($path));
         $parameter = collect($operation['parameters'])->firstWhere('name', 'laboratoryOrder');
         $this->assertSame('path', $parameter['in']);

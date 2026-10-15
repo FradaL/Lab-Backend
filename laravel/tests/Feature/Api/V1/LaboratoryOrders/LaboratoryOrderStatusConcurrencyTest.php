@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\V1\LaboratoryOrders;
 
 use App\Actions\LaboratoryOrders\TransitionLaboratoryOrderStatus;
+use App\ClinicalExams\ClinicalConflict;
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -48,7 +49,8 @@ final class LaboratoryOrderStatusConcurrencyTest extends TestCase
             LaboratoryOrder::STATUS_CANCELLED,
         ]);
         $this->assertSame(1, collect($results)->filter(fn (string $result): bool => $result === 'ok')->count());
-        $this->assertSame(1, collect($results)->filter(fn (string $result): bool => $result === 'validation')->count());
+        $this->assertContains($results[LaboratoryOrder::STATUS_COMPLETED], ['clinical_finalization_required', 'validation']);
+        $this->assertSame('ok', $results[LaboratoryOrder::STATUS_CANCELLED]);
         $this->assertNotContains('error', $results);
 
         DB::table('laboratory_orders')->where('id', $order->id)->update(['status' => LaboratoryOrder::STATUS_PENDING]);
@@ -82,6 +84,8 @@ final class LaboratoryOrderStatusConcurrencyTest extends TestCase
                         $laboratory = Laboratory::query()->findOrFail($order->laboratory_id);
                         app(TransitionLaboratoryOrderStatus::class)->execute($laboratory, $order->id, $target);
                         $result = 'ok';
+                    } catch (ClinicalConflict $exception) {
+                        $result = $exception->errorCode;
                     } catch (ValidationException) {
                         $result = 'validation';
                     } catch (Throwable $exception) {

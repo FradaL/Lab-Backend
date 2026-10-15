@@ -13,24 +13,24 @@ class PatientSeeder extends Seeder
      */
     public function run(): void
     {
-        $laboratory = Laboratory::query()
-            ->where('nit', '000000000001')
-            ->firstOrFail();
+        DemoDataset::run(function (): void {
+            $laboratory = DemoDataset::owned(Laboratory::class, ['nit' => '000000000001']);
 
-        foreach (range(1, 20) as $patientNumber) {
-            $affiliationNumber = sprintf('DEMO-%04d', $patientNumber);
-            $attributes = Patient::factory()->make([
-                'laboratory_id' => $laboratory->id,
-                'affiliation_number' => $affiliationNumber,
-            ])->getAttributes();
-
-            Patient::query()->firstOrCreate(
-                [
+            foreach (range(1, 20) as $patientNumber) {
+                $affiliationNumber = sprintf('DEMO-%04d', $patientNumber);
+                $attributes = Patient::factory()->make([
                     'laboratory_id' => $laboratory->id,
                     'affiliation_number' => $affiliationNumber,
-                ],
-                $attributes,
-            );
-        }
+                ])->getAttributes();
+
+                DemoDataset::create(Patient::class,
+                    [
+                        'laboratory_id' => $laboratory->id,
+                        'affiliation_number' => $affiliationNumber,
+                    ],
+                    $attributes,
+                );
+            }
+        });
     }
 }

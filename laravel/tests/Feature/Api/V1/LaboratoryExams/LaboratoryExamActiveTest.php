@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1\LaboratoryExams;
 
+use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Models\Laboratory;
 use App\Models\LaboratoryArea;
 use App\Models\LaboratoryExam;
@@ -317,7 +318,7 @@ class LaboratoryExamActiveTest extends TestCase
     public function test_active_route_precedes_numeric_show_and_inventory_is_exact(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-exams'))
+            ->filter(fn ($route): bool => str_starts_with($route->getActionName(), LaboratoryExamController::class.'@'))
             ->values();
         $this->assertCount(6, $routes);
         $this->assertSame([

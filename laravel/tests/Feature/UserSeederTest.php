@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -13,8 +14,8 @@ class UserSeederTest extends TestCase
 
     public function test_demo_users_are_seeded_idempotently_with_hashed_passwords(): void
     {
-        $this->seed();
-        $this->seed();
+        $this->seed([UserSeeder::class]);
+        $this->seed([UserSeeder::class]);
 
         $this->assertDatabaseCount('users', 2);
 

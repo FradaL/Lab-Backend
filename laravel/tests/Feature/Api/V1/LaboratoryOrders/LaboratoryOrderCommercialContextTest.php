@@ -119,7 +119,7 @@ final class LaboratoryOrderCommercialContextTest extends TestCase
         [$user, $laboratory, $branch, $patient, $client, $priceList] = $this->context();
         $orderId = $this->createOrder($user, $laboratory, $branch, $patient, $client, $priceList)
             ->assertCreated()->json('data.id');
-        $exam = LaboratoryExam::factory()->for($laboratory)->create([
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
             'code' => 'GLU',
             'name' => 'Glucosa',
             'status' => LaboratoryExam::STATUS_ACTIVE,

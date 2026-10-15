@@ -215,7 +215,7 @@ final class LaboratoryOrderSearchTest extends TestCase
             $page2->json('data.*.status'),
         ));
         $this->assertSame([
-            'id', 'code', 'ordered_at', 'status', 'branch', 'patient', 'doctor',
+            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'clinical_finalization', 'branch', 'patient', 'doctor',
             'commercial_client', 'exam_count', 'currency', 'total', 'created_by',
         ], array_keys($page1->json('data.0')));
 

@@ -32,7 +32,7 @@ final class LaboratoryOrderExamConcurrencyTest extends TestCase
         $this->assertSame('ok', $results['transition']);
         $this->assertContains($results['add'], ['ok', 'validation']);
         $order->refresh();
-        $this->assertSame(LaboratoryOrder::STATUS_IN_PROCESS, $order->status);
+        $this->assertSame(LaboratoryOrder::STATUS_CANCELLED, $order->status);
         $this->assertSame($results['add'] === 'ok' ? 1 : 0, DB::table('laboratory_order_exams')->count());
         $this->assertSame($results['add'] === 'ok' ? '35.00' : '0.00', $order->subtotal);
         $this->assertSame($order->subtotal, $order->total);
@@ -82,7 +82,7 @@ final class LaboratoryOrderExamConcurrencyTest extends TestCase
             'currency' => 'GTQ',
             'status' => LaboratoryOrder::STATUS_PENDING,
         ]);
-        $exam = LaboratoryExam::factory()->for($laboratory)->create([
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
             'status' => LaboratoryExam::STATUS_ACTIVE,
         ]);
         PriceListExam::factory()->for($laboratory)->create([
@@ -129,7 +129,7 @@ final class LaboratoryOrderExamConcurrencyTest extends TestCase
                             app(TransitionLaboratoryOrderStatus::class)->execute(
                                 $currentLaboratory,
                                 $order->id,
-                                LaboratoryOrder::STATUS_IN_PROCESS,
+                                LaboratoryOrder::STATUS_CANCELLED,
                             );
                         } else {
                             app(AddExamToLaboratoryOrder::class)->execute(

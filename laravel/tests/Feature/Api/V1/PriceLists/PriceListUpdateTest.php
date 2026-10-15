@@ -566,7 +566,7 @@ class PriceListUpdateTest extends TestCase
             ->filter(fn (array $path, string $name): bool => str_starts_with($name, '/api/v1/laboratory-exams'))
             ->sum(fn (array $path): int => count(array_intersect_key($path, array_flip(['get', 'post', 'patch', 'delete']))));
         $this->assertSame(10, $priceListOperations);
-        $this->assertSame(6, $examOperations);
+        $this->assertSame(15, $examOperations);
     }
 
     private function assertInvalidField(array $payload, string $field): void

@@ -20,7 +20,7 @@ class AvailablePriceListExamResource extends JsonResource
                 'code' => $this->laboratoryExam->laboratoryArea->code,
                 'name' => $this->laboratoryExam->laboratoryArea->name,
             ],
-            'sample_type' => [
+            'sample_type' => $this->laboratoryExam->sampleType === null ? null : [
                 'id' => $this->laboratoryExam->sampleType->id,
                 'name' => $this->laboratoryExam->sampleType->name,
             ],

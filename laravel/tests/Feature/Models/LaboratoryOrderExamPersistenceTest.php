@@ -9,6 +9,7 @@ use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
 use App\Tenancy\CurrentLaboratory;
+use Database\Factories\LaboratoryExamFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,6 +69,12 @@ class LaboratoryOrderExamPersistenceTest extends TestCase
             'price_list_name',
             'created_at',
             'updated_at',
+            'clinical_version_id',
+            'clinical_configuration_source',
+            'clinical_activity_started_at',
+            'processing_started_at',
+            'processing_started_by',
+            'report_area_snapshot',
         ], Schema::getColumnListing('laboratory_order_exams'));
     }
 
@@ -374,7 +381,13 @@ class LaboratoryOrderExamPersistenceTest extends TestCase
             'unit_price',
             'exam_code',
             'exam_name',
+            'report_area_snapshot',
             'price_list_name',
+            'clinical_version_id',
+            'clinical_configuration_source',
+            'clinical_activity_started_at',
+            'processing_started_at',
+            'processing_started_by',
         ], $model->getFillable());
         $this->assertSame(['*'], $model->getGuarded());
         $this->assertSame([], $model->getGlobalScopes());
@@ -395,7 +408,7 @@ class LaboratoryOrderExamPersistenceTest extends TestCase
         $order = LaboratoryOrder::factory()->for($laboratory)->create([
             'price_list_id' => $priceList->id,
         ]);
-        $exam = LaboratoryExam::factory()->for($laboratory)->create($examAttributes);
+        $exam = LaboratoryExam::factory()->for($laboratory)->orderable()->create($examAttributes);
 
         return [$laboratory, $order, $exam, $priceList];
     }
@@ -417,6 +430,8 @@ class LaboratoryOrderExamPersistenceTest extends TestCase
             'laboratory_exam_id' => $exam->id,
             'price_list_id' => $priceList->id,
             'unit_price' => '50.00',
+            'clinical_version_id' => LaboratoryExamFactory::publishedVersion($exam),
+            'clinical_configuration_source' => 'published_version',
             'exam_code' => $exam->code,
             'exam_name' => $exam->name,
             'price_list_name' => $priceList->name,

@@ -7,6 +7,7 @@ use App\Models\LaboratoryExam;
 use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -14,6 +15,14 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class LaboratoryOrderExamFactory extends Factory
 {
+    /** Fixture for the order transition action after an explicit sample-free line start. */
+    public function processingStarted(): static
+    {
+        return $this->afterCreating(function (LaboratoryOrderExam $line): void {
+            $line->update(['clinical_activity_started_at' => now(), 'processing_started_at' => now(), 'processing_started_by' => User::factory()->create()->id]);
+        });
+    }
+
     /** @return array<string, mixed> */
     public function definition(): array
     {
@@ -29,6 +38,10 @@ class LaboratoryOrderExamFactory extends Factory
                 ->findOrFail($attributes['laboratory_order_id'])
                 ->price_list_id,
             'unit_price' => fake()->randomElement(['0.00', '12.34', '50.00', '999.99']),
+            'clinical_version_id' => fn (array $attributes): int => LaboratoryExamFactory::publishedVersion(
+                LaboratoryExam::query()->findOrFail($attributes['laboratory_exam_id']),
+            ),
+            'clinical_configuration_source' => 'published_version',
             'exam_code' => fn (array $attributes): string => LaboratoryExam::query()
                 ->findOrFail($attributes['laboratory_exam_id'])
                 ->code,

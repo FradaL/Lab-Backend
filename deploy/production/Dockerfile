@@ -26,10 +26,14 @@ FROM php:8.4-fpm-bookworm AS php-base
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libicu-dev \
+        libpng-dev \
+        libjpeg62-turbo-dev \
         libpq-dev \
         libzip-dev \
         unzip \
+    && docker-php-ext-configure gd --with-jpeg \
     && docker-php-ext-install -j1 \
+        gd \
         intl \
         opcache \
         pcntl \

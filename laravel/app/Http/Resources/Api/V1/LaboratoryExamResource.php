@@ -24,7 +24,7 @@ class LaboratoryExamResource extends JsonResource
                 'code' => $this->laboratoryArea->code,
                 'name' => $this->laboratoryArea->name,
             ],
-            'sample_type' => [
+            'sample_type' => $this->sampleType === null ? null : [
                 'id' => $this->sampleType->id,
                 'name' => $this->sampleType->name,
             ],

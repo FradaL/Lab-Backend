@@ -101,6 +101,8 @@ class LaboratoryOrderPersistenceTest extends TestCase
             'price_list_name',
             'discount_type',
             'discount_value',
+            'clinical_revision',
+            'report_identity_snapshot',
         ], Schema::getColumnListing('laboratory_orders'));
     }
 
@@ -391,6 +393,8 @@ class LaboratoryOrderPersistenceTest extends TestCase
             'code',
             'ordered_at',
             'status',
+            'clinical_revision',
+            'report_identity_snapshot',
             'notes',
             'subtotal',
             'discount',

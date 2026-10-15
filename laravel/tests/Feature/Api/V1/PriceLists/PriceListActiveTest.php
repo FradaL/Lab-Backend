@@ -405,7 +405,7 @@ class PriceListActiveTest extends TestCase
 
         $this->assertSame('3.1.0', $document['openapi']);
         $this->assertSame(10, $priceListOperations);
-        $this->assertSame(6, $examOperations);
+        $this->assertSame(15, $examOperations);
         $this->assertCount(0, collect($operation['parameters'])->where('in', 'query'));
         $this->assertArrayNotHasKey('requestBody', $operation);
         $this->assertSame([200, 400, 401, 403, 404, 422], array_keys($operation['responses']));

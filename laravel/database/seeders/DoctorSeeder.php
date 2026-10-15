@@ -13,24 +13,24 @@ class DoctorSeeder extends Seeder
      */
     public function run(): void
     {
-        $laboratory = Laboratory::query()
-            ->where('nit', '000000000001')
-            ->firstOrFail();
+        DemoDataset::run(function (): void {
+            $laboratory = DemoDataset::owned(Laboratory::class, ['nit' => '000000000001']);
 
-        foreach (range(1, 20) as $doctorNumber) {
-            $licenseNumber = sprintf('DEMO-MED-%04d', $doctorNumber);
-            $attributes = Doctor::factory()->make([
-                'laboratory_id' => $laboratory->id,
-                'license_number' => $licenseNumber,
-            ])->getAttributes();
-
-            Doctor::query()->firstOrCreate(
-                [
+            foreach (range(1, 20) as $doctorNumber) {
+                $licenseNumber = sprintf('DEMO-MED-%04d', $doctorNumber);
+                $attributes = Doctor::factory()->make([
                     'laboratory_id' => $laboratory->id,
                     'license_number' => $licenseNumber,
-                ],
-                $attributes,
-            );
-        }
+                ])->getAttributes();
+
+                DemoDataset::create(Doctor::class,
+                    [
+                        'laboratory_id' => $laboratory->id,
+                        'license_number' => $licenseNumber,
+                    ],
+                    $attributes,
+                );
+            }
+        });
     }
 }

@@ -17,6 +17,8 @@ final class LaboratoryOrderListResource extends JsonResource
             'code' => $this->code,
             'ordered_at' => $this->ordered_at?->format('Y-m-d H:i:s'),
             'status' => $this->status,
+            'clinical_revision' => $this->clinical_revision,
+            'clinical_finalization' => $this->whenLoaded('clinicalFinalization', fn () => $this->clinicalFinalization === null ? null : ['id' => $this->clinicalFinalization->id, 'finalized_by' => $this->clinicalFinalization->finalized_by, 'finalized_at' => $this->clinicalFinalization->finalized_at->toISOString()]),
             'branch' => [
                 'id' => $this->branch->id,
                 'name' => $this->branch->name,

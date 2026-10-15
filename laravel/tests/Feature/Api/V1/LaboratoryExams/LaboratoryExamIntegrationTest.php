@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1\LaboratoryExams;
 
+use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Models\Laboratory;
 use App\Models\LaboratoryArea;
 use App\Models\LaboratoryExam;
@@ -286,7 +287,7 @@ class LaboratoryExamIntegrationTest extends TestCase
     public function test_runtime_and_openapi_inventories_match_the_six_endpoint_contract(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-exams'))
+            ->filter(fn ($route): bool => str_starts_with($route->getActionName(), LaboratoryExamController::class.'@'))
             ->map(fn ($route): array => [
                 'method' => collect($route->methods())->first(fn (string $method): bool => $method !== 'HEAD'),
                 'path' => '/'.$route->uri(),
@@ -307,7 +308,7 @@ class LaboratoryExamIntegrationTest extends TestCase
         $this->assertSame('3.1.0', $document['openapi']);
 
         $operations = collect($document['paths'])
-            ->filter(fn (array $path, string $name): bool => str_starts_with($name, '/api/v1/laboratory-exams'))
+            ->filter(fn (array $path, string $name): bool => in_array($name, ['/api/v1/laboratory-exams', '/api/v1/laboratory-exams/active', '/api/v1/laboratory-exams/{laboratoryExam}', '/api/v1/laboratory-exams/{laboratoryExam}/status'], true))
             ->flatMap(fn (array $path, string $name): array => collect($path)
                 ->filter(fn (mixed $operation, string $method): bool => in_array($method, ['get', 'post', 'patch'], true))
                 ->map(fn (array $operation, string $method): array => [

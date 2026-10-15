@@ -511,7 +511,7 @@ class PriceListShowTest extends TestCase
 
         $this->assertSame('3.1.0', $document['openapi']);
         $this->assertSame(10, $priceListOperations);
-        $this->assertSame(6, $examOperations);
+        $this->assertSame(15, $examOperations);
         $this->assertSame('priceList', $pathParameter['name']);
         $this->assertTrue($pathParameter['required']);
         $this->assertSame('integer', $pathParameter['schema']['type']);

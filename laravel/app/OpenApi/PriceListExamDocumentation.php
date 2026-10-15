@@ -16,7 +16,7 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'code', type: 'string', maxLength: 30, example: 'HEM-001'),
         new OA\Property(property: 'name', type: 'string', maxLength: 150, example: 'Hematología completa'),
         new OA\Property(property: 'laboratory_area', ref: '#/components/schemas/LaboratoryExamAreaSummary'),
-        new OA\Property(property: 'sample_type', ref: '#/components/schemas/LaboratoryExamSampleTypeSummary'),
+        new OA\Property(property: 'sample_type', oneOf: [new OA\Schema(ref: '#/components/schemas/LaboratoryExamSampleTypeSummary'), new OA\Schema(type: 'null')]),
     ],
     type: 'object',
 )]
@@ -167,7 +167,7 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'name', type: 'string', maxLength: 150, example: 'Hemograma completo'),
         new OA\Property(property: 'price', description: 'Precio unitario configurado, serializado con dos decimales.', type: 'string', pattern: '^\\d+\\.\\d{2}$', example: '75.00'),
         new OA\Property(property: 'laboratory_area', ref: '#/components/schemas/LaboratoryExamAreaSummary'),
-        new OA\Property(property: 'sample_type', ref: '#/components/schemas/LaboratoryExamSampleTypeSummary'),
+        new OA\Property(property: 'sample_type', oneOf: [new OA\Schema(ref: '#/components/schemas/LaboratoryExamSampleTypeSummary'), new OA\Schema(type: 'null')]),
     ],
     type: 'object',
     additionalProperties: false,

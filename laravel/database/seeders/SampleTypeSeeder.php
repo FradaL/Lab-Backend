@@ -13,18 +13,18 @@ class SampleTypeSeeder extends Seeder
      */
     public function run(): void
     {
-        $laboratory = Laboratory::query()
-            ->where('nit', '000000000001')
-            ->firstOrFail();
+        DemoDataset::run(function (): void {
+            $laboratory = DemoDataset::owned(Laboratory::class, ['nit' => '000000000001']);
 
-        foreach (['Sangre', 'Orina', 'Heces', 'Hisopado nasofaríngeo'] as $name) {
-            SampleType::query()->updateOrCreate(
-                [
-                    'laboratory_id' => $laboratory->id,
-                    'name' => $name,
-                ],
-                ['status' => SampleType::STATUS_ACTIVE],
-            );
-        }
+            foreach (['Sangre', 'Orina', 'Heces', 'Hisopado nasofaríngeo'] as $name) {
+                DemoDataset::create(SampleType::class,
+                    [
+                        'laboratory_id' => $laboratory->id,
+                        'name' => $name,
+                    ],
+                    ['status' => SampleType::STATUS_ACTIVE],
+                );
+            }
+        });
     }
 }

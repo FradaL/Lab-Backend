@@ -29,6 +29,13 @@ return [
     */
 
     'disks' => [
+        'clinical_reports' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/clinical-reports'),
+            'visibility' => 'private',
+            'serve' => false,
+            'throw' => true,
+        ],
 
         'local' => [
             'driver' => 'local',

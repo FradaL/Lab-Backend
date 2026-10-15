@@ -1,0 +1,40 @@
+services:
+  postgres-testing:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: donqer_lab_testing
+      POSTGRES_USER: donqer_lab_testing
+      POSTGRES_PASSWORD: testing-only-isolated-postgres
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks: [testing]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U donqer_lab_testing -d donqer_lab_testing"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  tests:
+    image: ${DONQER_TEST_PHP_IMAGE:-donqer-lab-workspace}
+    working_dir: /var/www
+    env_file: ../../laravel/.env.testing.example
+    environment:
+      APP_CONFIG_CACHE: /tmp/config.php
+      APP_ROUTES_CACHE: /tmp/routes.php
+      APP_EVENTS_CACHE: /tmp/events.php
+      APP_SERVICES_CACHE: /tmp/services.php
+      APP_PACKAGES_CACHE: /tmp/packages.php
+    volumes:
+      - ../../laravel:/var/www:ro
+      - ../../laravel/.env.testing.example:/var/www/.env:ro
+    tmpfs:
+      - /var/www/storage
+      - /var/www/bootstrap/cache
+    networks: [testing]
+    depends_on:
+      postgres-testing:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c", 'mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache; exec "$@"', "--"]
+    command: [php, vendor/bin/phpunit, --do-not-cache-result]
+networks:
+  testing:
+    internal: true

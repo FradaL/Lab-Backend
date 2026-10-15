@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'laboratory_id',
@@ -23,6 +24,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'code',
     'ordered_at',
     'status',
+    'clinical_revision',
+    'report_identity_snapshot',
     'notes',
     'subtotal',
     'discount',
@@ -116,11 +119,18 @@ class LaboratoryOrder extends Model
         return $this->hasMany(LaboratoryOrderExam::class);
     }
 
+    public function clinicalFinalization(): HasOne
+    {
+        return $this->hasOne(ClinicalOrderFinalization::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
         return [
             'ordered_at' => 'datetime',
+            'clinical_revision' => 'integer',
+            'report_identity_snapshot' => 'array',
             'subtotal' => 'decimal:2',
             'discount' => 'decimal:2',
             'discount_value' => 'decimal:2',

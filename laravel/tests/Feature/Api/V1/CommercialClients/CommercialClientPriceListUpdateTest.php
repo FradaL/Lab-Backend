@@ -404,7 +404,7 @@ class CommercialClientPriceListUpdateTest extends TestCase
             'price_list_id' => $priceList->id,
             'starts_at' => '2026-01-01',
             'ends_at' => '2026-12-31',
-        ]);
+        ])->refresh();
     }
 
     private function request(

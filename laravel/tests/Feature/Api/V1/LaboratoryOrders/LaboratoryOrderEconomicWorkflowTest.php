@@ -59,6 +59,9 @@ final class LaboratoryOrderEconomicWorkflowTest extends TestCase
             'subtotal', 'discount_type', 'discount_value', 'discount', 'taxes', 'total', 'created_by',
             'commercial_client_id', 'commercial_client_name', 'commercial_client_type', 'price_list_name', 'currency',
         ]);
+        $this->assignDirectLaboratoryPermission($user, $laboratory, 'orders.start_exam');
+        $this->request($user, $laboratory, 'post', "/api/v1/laboratory-orders/{$order->id}/exams/{$line100->id}/start")
+            ->assertOk()->assertJsonPath('data.operational_status', 'started');
         $this->request($user, $laboratory, 'patch', "/api/v1/laboratory-orders/{$order->id}/status", ['status' => 'in_process'])
             ->assertOk()->assertJsonPath('data.total', '100.00');
         $this->assertSame($beforeTransition, $order->fresh()->only(array_keys($beforeTransition)));
@@ -191,7 +194,7 @@ final class LaboratoryOrderEconomicWorkflowTest extends TestCase
         $priceEntries = [];
 
         foreach ($prices as $index => $price) {
-            $exam = LaboratoryExam::factory()->for($laboratory)->create([
+            $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
                 'code' => 'Q'.($index + 1), 'name' => 'Examen '.($index + 1), 'status' => LaboratoryExam::STATUS_ACTIVE,
             ]);
             $exams[] = $exam;

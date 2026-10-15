@@ -8,6 +8,8 @@ use App\Models\LaboratoryUser;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\User;
+use Database\Seeders\SaasFoundationSeeder;
+use Database\Seeders\UserSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -124,8 +126,8 @@ class SaasFoundationModelTest extends TestCase
 
     public function test_seeders_are_idempotent_for_saas_foundation_data(): void
     {
-        $this->seed();
-        $this->seed();
+        $this->seed([UserSeeder::class, SaasFoundationSeeder::class]);
+        $this->seed([UserSeeder::class, SaasFoundationSeeder::class]);
 
         $this->assertDatabaseCount('users', 2);
         $this->assertDatabaseCount('plans', 1);
