@@ -625,7 +625,7 @@ final class LaboratoryOrderController extends Controller
         path: '/api/v1/laboratory-orders',
         operationId: 'laboratoryOrdersStore',
         summary: 'Crear orden de laboratorio',
-        description: 'Crea atómicamente cabecera, líneas opcionales (máximo 50), snapshots y requisitos individuales. Omitir exams o enviar [] conserva la cabecera vacía; incluir líneas exige orders.create y orders.add_exam. Devuelve cabecera, totales y exams; no crea muestras físicas. Crea una orden pendiente en el laboratorio actual. La lista de precios es una selección explícita y el servidor captura el nombre/tipo del cliente comercial, el nombre de la lista y su moneda como contexto histórico. ordered_at se interpreta como fecha y hora local conforme al contrato Y-m-d H:i:s y se persiste sin conversión de zona horaria.',
+        description: 'Crea atómicamente cabecera, líneas opcionales (máximo 50), snapshots, requisitos individuales y un descuento opcional. Omitir exams o enviar [] conserva la cabecera vacía; incluir líneas exige orders.create y orders.add_exam. Incluir discount exige además orders.manage_discount y reutiliza exactamente las reglas del PUT de descuento. Devuelve cabecera, totales definitivos y exams; no crea muestras físicas. Crea una orden pendiente en el laboratorio actual. La lista de precios es una selección explícita y el servidor captura el nombre/tipo del cliente comercial, el nombre de la lista y su moneda como contexto histórico. ordered_at se interpreta como fecha y hora local conforme al contrato Y-m-d H:i:s y se persiste sin conversión de zona horaria.',
         security: [['sanctumCookie' => []]],
         tags: ['Laboratory Orders'],
         parameters: [
@@ -662,7 +662,7 @@ final class LaboratoryOrderController extends Controller
         $order = $createLaboratoryOrder->execute(
             $currentLaboratory->get(),
             $creator,
-            $request->validated(),
+            $request->creationAttributes(),
         );
 
         return LaboratoryOrderResource::make($order)

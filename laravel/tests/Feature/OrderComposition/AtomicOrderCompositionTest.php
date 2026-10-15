@@ -21,6 +21,7 @@ use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
@@ -124,6 +125,221 @@ class AtomicOrderCompositionTest extends TestCase
         $this->patchJson('/api/v1/laboratory-orders/'.$data['id'].'/status', ['status' => 'in_process'])->assertConflict();
         $this->postJson('/api/v1/laboratory-orders/'.$data['id'].'/exams/'.$data['exams'][2]['id'].'/start')->assertOk();
         $this->patchJson('/api/v1/laboratory-orders/'.$data['id'].'/status', ['status' => 'in_process'])->assertOk();
+    }
+
+    public function test_creation_applies_percentage_discount_to_multiple_repeated_exams(): void
+    {
+        [$exam, $version] = $this->publishedExam(true);
+
+        $data = $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            'exams' => $this->selections($exam, 3),
+            'discount' => ['type' => 'percentage', 'value' => 10],
+        ])->assertCreated()
+            ->assertJsonPath('data.subtotal', '75.00')
+            ->assertJsonPath('data.discount_type', 'percentage')
+            ->assertJsonPath('data.discount_value', '10.00')
+            ->assertJsonPath('data.discount', '7.50')
+            ->assertJsonPath('data.taxes', '0.00')
+            ->assertJsonPath('data.total', '67.50')
+            ->assertJsonPath('data.currency', 'GTQ')
+            ->json('data');
+
+        $this->assertCount(3, $data['exams']);
+        $this->assertSame([$version->id, $version->id, $version->id], array_column($data['exams'], 'clinical_version_id'));
+        $this->assertCount(6, LaboratoryOrderSampleRequirement::all());
+        $this->assertDatabaseHas('laboratory_orders', [
+            'id' => $data['id'],
+            'subtotal' => '75.00',
+            'discount_type' => 'percentage',
+            'discount_value' => '10.00',
+            'discount' => '7.50',
+            'taxes' => '0.00',
+            'total' => '67.50',
+        ]);
+        $this->assertSame(1, AuditLog::where('event', 'order.created')->count());
+        $this->assertSame(3, AuditLog::where('event', 'order_exam.added')->count());
+        $this->assertSame(1, AuditLog::where('event', 'order.discount_set')->count());
+    }
+
+    public function test_creation_preserves_discount_intent_on_empty_order_and_clamps_amount_to_subtotal(): void
+    {
+        $empty = $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            'discount' => ['type' => 'amount', 'value' => '100'],
+        ])->assertCreated()
+            ->assertJsonPath('data.exams', [])
+            ->assertJsonPath('data.subtotal', '0.00')
+            ->assertJsonPath('data.discount_type', 'amount')
+            ->assertJsonPath('data.discount_value', '100.00')
+            ->assertJsonPath('data.discount', '0.00')
+            ->assertJsonPath('data.total', '0.00')
+            ->json('data');
+
+        [$exam] = $this->publishedExam();
+        $limited = $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            'exams' => $this->selections($exam),
+            'discount' => ['type' => 'amount', 'value' => '100.00'],
+        ])->assertCreated()
+            ->assertJsonPath('data.subtotal', '25.00')
+            ->assertJsonPath('data.discount_value', '100.00')
+            ->assertJsonPath('data.discount', '25.00')
+            ->assertJsonPath('data.total', '0.00')
+            ->json('data');
+
+        $this->assertDatabaseHas('laboratory_orders', ['id' => $empty['id'], 'discount_value' => '100.00', 'discount' => '0.00']);
+        $this->assertDatabaseHas('laboratory_orders', ['id' => $limited['id'], 'discount_value' => '100.00', 'discount' => '25.00']);
+    }
+
+    public function test_creation_requires_each_permission_before_writing(): void
+    {
+        [$exam] = $this->publishedExam();
+        $user = $this->createLaboratoryMember($this->lab);
+        $this->assignDirectLaboratoryPermission($user, $this->lab, 'orders.create');
+        $this->actingAs($user);
+
+        $this->postJson('/api/v1/laboratory-orders', $this->header)->assertCreated();
+        $orderCount = LaboratoryOrder::count();
+        $auditCount = AuditLog::count();
+
+        $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            'discount' => ['type' => 'percentage', 'value' => '10.00'],
+        ])->assertForbidden();
+        $this->assertSame($orderCount, LaboratoryOrder::count());
+        $this->assertSame($auditCount, AuditLog::count());
+
+        $this->assignDirectLaboratoryPermission($user, $this->lab, 'orders.manage_discount');
+        $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            'discount' => ['type' => 'percentage', 'value' => '10.00'],
+        ])->assertCreated();
+        $orderCount = LaboratoryOrder::count();
+        $auditCount = AuditLog::count();
+
+        $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            'exams' => $this->selections($exam),
+            'discount' => ['type' => 'percentage', 'value' => '10.00'],
+        ])->assertForbidden();
+        $this->assertSame($orderCount, LaboratoryOrder::count());
+        $this->assertSame($auditCount, AuditLog::count());
+    }
+
+    #[DataProvider('invalidCreationDiscounts')]
+    public function test_invalid_creation_discount_is_rejected_without_writes(mixed $discount, array $errorFields): void
+    {
+        $auditCount = AuditLog::count();
+
+        $this->postJson('/api/v1/laboratory-orders', $this->header + ['discount' => $discount])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors($errorFields);
+
+        $this->assertDatabaseCount('laboratory_orders', 0);
+        $this->assertSame($auditCount, AuditLog::count());
+    }
+
+    public static function invalidCreationDiscounts(): array
+    {
+        return [
+            'null' => [null, ['discount.type', 'discount.value']],
+            'empty object' => [(object) [], ['discount.type', 'discount.value']],
+            'list' => [[], ['discount.type', 'discount.value']],
+            'missing value' => [['type' => 'percentage'], ['discount.value']],
+            'unknown key' => [['type' => 'percentage', 'value' => '10.00', 'subtotal' => '50.00'], ['discount.subtotal']],
+            'unknown type' => [['type' => 'fixed', 'value' => '10.00'], ['discount.type']],
+            'zero' => [['type' => 'amount', 'value' => 0], ['discount.value']],
+            'percentage over range' => [['type' => 'percentage', 'value' => '100.01'], ['discount.value']],
+            'json float' => [['type' => 'amount', 'value' => 10.5], ['discount.value']],
+            'too many decimals' => [['type' => 'amount', 'value' => '10.001'], ['discount.value']],
+            'amount overflow' => [['type' => 'amount', 'value' => '10000000000.00'], ['discount.value']],
+        ];
+    }
+
+    public function test_discount_application_failure_rolls_back_header_lines_requirements_and_audits(): void
+    {
+        [$exam] = $this->publishedExam(true);
+        $auditCount = AuditLog::count();
+        $event = 'eloquent.updating: '.LaboratoryOrder::class;
+        Event::listen($event, static function (LaboratoryOrder $order): void {
+            if ($order->isDirty('discount_type')) {
+                throw new RuntimeException('forced discount failure');
+            }
+        });
+        $this->withoutExceptionHandling();
+
+        try {
+            $this->postJson('/api/v1/laboratory-orders', $this->header + [
+                'exams' => $this->selections($exam, 2),
+                'discount' => ['type' => 'amount', 'value' => '10.00'],
+            ]);
+            $this->fail('Discount failure must abort creation.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('forced discount failure', $exception->getMessage());
+        } finally {
+            Event::forget($event);
+        }
+
+        $this->assertDatabaseCount('laboratory_orders', 0);
+        $this->assertDatabaseCount('laboratory_order_exams', 0);
+        $this->assertDatabaseCount('laboratory_order_sample_requirements', 0);
+        $this->assertSame($auditCount, AuditLog::count());
+    }
+
+    public function test_discount_audit_failure_rolls_back_entire_creation(): void
+    {
+        [$exam] = $this->publishedExam(true);
+        $auditCount = AuditLog::count();
+        AuditLog::creating(static function (AuditLog $event): void {
+            if ($event->event === 'order.discount_set') {
+                throw new RuntimeException('discount audit failure');
+            }
+        });
+        $this->withoutExceptionHandling();
+
+        try {
+            $this->postJson('/api/v1/laboratory-orders', $this->header + [
+                'exams' => $this->selections($exam),
+                'discount' => ['type' => 'percentage', 'value' => '10.00'],
+            ]);
+            $this->fail('Discount audit failure must abort creation.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('discount audit failure', $exception->getMessage());
+        } finally {
+            AuditLog::flushEventListeners();
+        }
+
+        $this->assertDatabaseCount('laboratory_orders', 0);
+        $this->assertDatabaseCount('laboratory_order_exams', 0);
+        $this->assertDatabaseCount('laboratory_order_sample_requirements', 0);
+        $this->assertSame($auditCount, AuditLog::count());
+    }
+
+    public function test_embedded_discount_recalculates_after_composition_changes_and_standalone_endpoints_remain_compatible(): void
+    {
+        [$exam, $version] = $this->publishedExam();
+        $data = $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            'exams' => $this->selections($exam, 2),
+            'discount' => ['type' => 'amount', 'value' => '30.00'],
+        ])->assertCreated()->json('data');
+        $firstLine = $data['exams'][0]['id'];
+        $price = PriceListExam::query()
+            ->where('price_list_id', $this->prices->id)
+            ->where('laboratory_exam_id', $exam->id)
+            ->sole();
+        $price->update(['price' => '40.00']);
+
+        $this->postJson('/api/v1/laboratory-orders/'.$data['id'].'/exams', ['laboratory_exam_id' => $exam->id])
+            ->assertCreated()
+            ->assertJsonPath('data.unit_price', '40.00')
+            ->assertJsonPath('data.clinical_version_id', $version->id);
+        $this->assertOrderEconomics($data['id'], '90.00', 'amount', '30.00', '30.00', '60.00');
+
+        $this->deleteJson('/api/v1/laboratory-orders/'.$data['id'].'/exams/'.$firstLine)->assertNoContent();
+        $this->assertOrderEconomics($data['id'], '65.00', 'amount', '30.00', '30.00', '35.00');
+        $this->assertSame(['25.00', '40.00'], LaboratoryOrderExam::query()
+            ->where('laboratory_order_id', $data['id'])->orderBy('id')->pluck('unit_price')->all());
+
+        $this->putJson('/api/v1/laboratory-orders/'.$data['id'].'/discount', [
+            'type' => 'percentage', 'value' => '10',
+        ])->assertOk()->assertJsonPath('data.discount', '6.50')->assertJsonPath('data.total', '58.50');
+        $this->deleteJson('/api/v1/laboratory-orders/'.$data['id'].'/discount')
+            ->assertOk()->assertJsonPath('data.discount_type', null)->assertJsonPath('data.total', '65.00');
     }
 
     public function test_fifty_lines_are_allowed_and_fifty_one_roll_back_before_writing(): void
@@ -364,7 +580,10 @@ class AtomicOrderCompositionTest extends TestCase
     {
         [$exam] = $this->publishedExam(true);
         $auditCount = AuditLog::count();
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => [...$this->selections($exam), ['laboratory_exam_id' => PHP_INT_MAX]]])
+        $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            'exams' => [...$this->selections($exam), ['laboratory_exam_id' => PHP_INT_MAX]],
+            'discount' => ['type' => 'percentage', 'value' => '10.00'],
+        ])
             ->assertUnprocessable()->assertJsonValidationErrors('exams.1.laboratory_exam_id');
         $this->assertDatabaseCount('laboratory_orders', 0);
         $this->assertDatabaseCount('laboratory_order_exams', 0);
@@ -430,5 +649,22 @@ class AtomicOrderCompositionTest extends TestCase
         } catch (QueryException $exception) {
             $this->assertContains($exception->getCode(), ['23503', '23514']);
         }
+    }
+
+    private function assertOrderEconomics(
+        int $orderId,
+        string $subtotal,
+        ?string $type,
+        ?string $value,
+        string $discount,
+        string $total,
+    ): void {
+        $order = LaboratoryOrder::findOrFail($orderId);
+        $this->assertSame($subtotal, $order->subtotal);
+        $this->assertSame($type, $order->discount_type);
+        $this->assertSame($value, $order->discount_value);
+        $this->assertSame($discount, $order->discount);
+        $this->assertSame('0.00', $order->taxes);
+        $this->assertSame($total, $order->total);
     }
 }
