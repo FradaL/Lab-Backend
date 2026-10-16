@@ -257,3 +257,7 @@ Se conserva la independencia financiera del cierre y se añade un escenario demo
 ## Actualización posterior — BE-S2-09.1
 
 Creación/adición conservan prospectivamente identidad de paciente/sucursal y área para informes. Las columnas son internas, nullable e inmutables; no hay backfill ni cambio de corte legacy, snapshots clínicos/económicos o líneas históricas. DatabaseSeeder prepara evidencias ficticias de informes en un laboratorio propio; generar sus PDFs exige el seeder explícito separado LaboratoryReportIssuanceSeeder. Contrato y pruebas en [BE-S2-09.1](BE-S2-09.1-generacion-emision-informes.md).
+
+## Actualización posterior — BE-S2-04.1 (2026-10-15)
+
+La creación admite un descuento opcional junto con la cabecera y los exámenes, reutilizando el contrato, cálculo, bloqueo y auditoría del endpoint de descuentos dentro de la misma transacción exterior. El contrato definitivo, permisos combinados, casos límite y verificación se documentan en [BE-S2-04.1 — Descuento atómico en la creación de órdenes](BE-S2-04.1-descuento-atomico-creacion-ordenes.md).

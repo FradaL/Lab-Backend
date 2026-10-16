@@ -4,7 +4,9 @@ namespace App\Http\Requests\Api\V1\LaboratoryOrder;
 
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Validator;
+use stdClass;
 
 final class StoreLaboratoryOrderRequest extends FormRequest
 {
@@ -18,13 +20,23 @@ final class StoreLaboratoryOrderRequest extends FormRequest
         'ordered_at',
         'notes',
         'exams',
+        'discount',
     ];
+
+    /** @var array{type: string, value: string}|null */
+    private ?array $validatedDiscount = null;
 
     public function authorize(): bool
     {
-        $exams = $this->originalPayload()['exams'] ?? [];
+        $payload = $this->originalPayload();
+        $exams = $payload['exams'] ?? [];
+        $canAddExams = ! is_array($exams)
+            || $exams === []
+            || ($this->user()?->can('orders.add_exam') ?? false);
+        $canManageDiscount = ! array_key_exists('discount', $payload)
+            || ($this->user()?->can('orders.manage_discount') ?? false);
 
-        return ! is_array($exams) || $exams === [] || ($this->user()?->can('orders.add_exam') ?? false);
+        return $canAddExams && $canManageDiscount;
     }
 
     /** @return array<string, array<int, mixed>> */
@@ -62,6 +74,7 @@ final class StoreLaboratoryOrderRequest extends FormRequest
                     }
                 },
             ],
+            'discount' => ['sometimes'],
         ];
     }
 
@@ -75,8 +88,35 @@ final class StoreLaboratoryOrderRequest extends FormRequest
                         $validator->errors()->add($field, 'El campo no está permitido.');
                     }
                 }
+
+                if (! array_key_exists('discount', $this->originalPayload())) {
+                    return;
+                }
+
+                try {
+                    $this->validatedDiscount = app(UpdateLaboratoryOrderDiscountRequest::class)
+                        ->validatedPayload($this->originalDiscountPayload());
+                } catch (ValidationException $exception) {
+                    foreach ($exception->errors() as $field => $messages) {
+                        foreach ($messages as $message) {
+                            $validator->errors()->add("discount.{$field}", $message);
+                        }
+                    }
+                }
             },
         ];
+    }
+
+    /** @return array<string, mixed> */
+    public function creationAttributes(): array
+    {
+        $attributes = $this->validated();
+
+        if (array_key_exists('discount', $this->originalPayload())) {
+            $attributes['discount'] = $this->validatedDiscount;
+        }
+
+        return $attributes;
     }
 
     /**
@@ -117,5 +157,14 @@ final class StoreLaboratoryOrderRequest extends FormRequest
         $payload = json_decode($this->getContent(), true);
 
         return is_array($payload) ? $payload : [];
+    }
+
+    private function originalDiscountPayload(): mixed
+    {
+        $payload = json_decode($this->getContent(), false, 512, JSON_BIGINT_AS_STRING);
+
+        return $payload instanceof stdClass && property_exists($payload, 'discount')
+            ? $payload->discount
+            : null;
     }
 }

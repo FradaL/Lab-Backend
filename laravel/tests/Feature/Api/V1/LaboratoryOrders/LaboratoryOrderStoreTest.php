@@ -286,7 +286,7 @@ final class LaboratoryOrderStoreTest extends TestCase
     {
         return collect([
             'id', 'laboratory_id', 'code', 'status', 'subtotal', 'discount_type',
-            'discount_value', 'discount',
+            'discount_value',
             'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at',
             'exam_ids', 'exams', 'order_exams', 'items', 'discount_percentage',
             'tax_percentage', 'doctor_name', 'patient_name', 'commercial_client_name',
@@ -465,19 +465,21 @@ final class LaboratoryOrderStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(130, $operationCount);
+        $this->assertSame(137, $operationCount);
         // The test bootstrap omits Laravel's generated storage route; the real
         // CLI inventory is asserted separately and contains one additional route.
-        $this->assertCount(138, Route::getRoutes()->getRoutes());
+        $this->assertCount(145, Route::getRoutes()->getRoutes());
         $this->assertSame([
             'branch_id', 'patient_id', 'doctor_id', 'commercial_client_id',
             'price_list_id', 'ordered_at', 'notes',
         ], $input['required']);
-        $this->assertSame([...$input['required'], 'exams'], array_keys($input['properties']));
+        $this->assertSame([...$input['required'], 'exams', 'discount'], array_keys($input['properties']));
         $this->assertFalse($input['additionalProperties']);
         $this->assertSame(['integer', 'null'], $input['properties']['doctor_id']['type']);
         $this->assertSame(['integer', 'null'], $input['properties']['commercial_client_id']['type']);
         $this->assertSame(['string', 'null'], $input['properties']['notes']['type']);
+        $this->assertSame('#/components/schemas/UpdateLaboratoryOrderDiscountInput', $input['properties']['discount']['$ref']);
+        $this->assertStringContainsString('orders.manage_discount', $input['properties']['discount']['description']);
         $this->assertStringContainsString('histórico', $commercialClientOutput['properties']['name']['description']);
         $this->assertStringContainsString('histórico', $commercialClientOutput['properties']['type']['description']);
         $this->assertStringContainsString('histórico', $priceListOutput['properties']['name']['description']);

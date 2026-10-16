@@ -123,6 +123,7 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'ordered_at', description: 'Fecha y hora local persistida sin conversión de zona horaria.', type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$', example: '2026-10-03 14:30:00'),
         new OA\Property(property: 'notes', type: ['string', 'null'], example: 'Observaciones opcionales'),
         new OA\Property(property: 'exams', description: 'Opcional; omitido o [] crea cabecera vacía. Con líneas requiere también orders.add_exam. Repeticiones independientes, máximo 50.', type: 'array', maxItems: 50, items: new OA\Items(ref: '#/components/schemas/AddLaboratoryOrderExamInput')),
+        new OA\Property(property: 'discount', ref: '#/components/schemas/UpdateLaboratoryOrderDiscountInput', description: 'Opcional. Requiere orders.manage_discount y se aplica atómicamente después de componer las líneas. En una orden vacía conserva la intención y produce un descuento efectivo de 0.00.'),
     ],
     type: 'object',
     additionalProperties: false,
