@@ -25,6 +25,7 @@ class DatabaseSeeder extends Seeder
                 LaboratorySampleSeeder::class,
                 LaboratoryResultSeeder::class,
                 LaboratoryValidationSeeder::class,
+                LaboratoryUsersDemoSeeder::class,
                 LaboratoryFinalizationSeeder::class,
                 LaboratoryReportEvidenceSeeder::class,
                 LaboratoryReportDeliveryEvidenceSeeder::class,
