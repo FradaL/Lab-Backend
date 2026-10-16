@@ -19,6 +19,17 @@ final class UpdateLaboratoryOrderDiscountRequest
     public function validated(Request $request): array
     {
         $decoded = json_decode($request->getContent(), false, 512, JSON_BIGINT_AS_STRING);
+
+        return $this->validatedPayload($decoded);
+    }
+
+    /**
+     * Validate the exact discount object accepted by the standalone endpoint.
+     *
+     * @return array{type: string, value: string}
+     */
+    public function validatedPayload(mixed $decoded): array
+    {
         $payload = $decoded instanceof stdClass ? get_object_vars($decoded) : [];
 
         $validator = $this->validationFactory->make($payload, [

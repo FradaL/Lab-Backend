@@ -33,6 +33,7 @@ final class RbacCatalog
         'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'reports.delivery.evaluate', 'reports.delivery_history.view',
         'reports.delivery.prepare', 'reports.delivery.confirm', 'reports.delivery_exceptions.authorize', 'reports.delivery_exceptions.view',
         'samples.view', 'samples.collect', 'samples.receive', 'samples.evaluate', 'samples.associate', 'orders.start_exam',
+        'users.view', 'users.create', 'users.assign_role', 'users.change_status', 'roles.view',
     ];
 
     private const array RECEPTIONIST_PERMISSIONS = [
@@ -82,8 +83,8 @@ final class RbacCatalog
 
     public static function assertValid(): void
     {
-        if (count(self::PERMISSIONS) !== 79 || count(array_unique(self::PERMISSIONS)) !== 79) {
-            throw new LogicException('The RBAC catalog must contain exactly 79 unique permissions.');
+        if (count(self::PERMISSIONS) !== 84 || count(array_unique(self::PERMISSIONS)) !== 84) {
+            throw new LogicException('The RBAC catalog must contain exactly 84 unique permissions.');
         }
 
         $matrix = self::rolePermissions();

@@ -47,7 +47,7 @@ final class ProtectedDomainAuthorizationTest extends TestCase
         ksort($expected);
 
         $this->assertSame($expected, $actual);
-        $this->assertCount(122, $actual);
+        $this->assertCount(128, $actual);
         $this->assertEmpty(array_diff(array_values($actual), RbacCatalog::PERMISSIONS));
         $this->assertSame(47, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
@@ -432,6 +432,12 @@ final class ProtectedDomainAuthorizationTest extends TestCase
             'POST api/v1/laboratory/validation-professionals' => 'results.professionals.manage',
             'POST api/v1/laboratory/validation-professionals/{professional}/authorize' => 'results.professionals.manage',
             'POST api/v1/laboratory/validation-professionals/{professional}/revoke' => 'results.professionals.manage',
+            'GET api/v1/laboratory/users' => 'users.view',
+            'POST api/v1/laboratory/users' => 'users.create',
+            'GET api/v1/laboratory/users/{user}' => 'users.view',
+            'PATCH api/v1/laboratory/users/{user}/role' => 'users.assign_role',
+            'PATCH api/v1/laboratory/users/{user}/status' => 'users.change_status',
+            'GET api/v1/laboratory/roles' => 'roles.view',
             'POST api/v1/laboratory-orders/{order}/exams/{line}/results/validate' => 'results.validate',
             'POST api/v1/laboratory-orders/{order}/exams/{line}/results/rectify' => 'results.rectify',
             'GET api/v1/laboratory-orders/{order}/exams/{line}/results/validations' => 'results.validation_history',

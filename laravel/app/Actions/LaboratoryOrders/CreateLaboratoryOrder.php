@@ -28,6 +28,7 @@ final class CreateLaboratoryOrder
     public function __construct(
         private readonly AuditWriter $auditWriter,
         private readonly AddExamToLaboratoryOrder $addExam,
+        private readonly SetLaboratoryOrderDiscount $setDiscount,
     ) {}
 
     /**
@@ -39,7 +40,8 @@ final class CreateLaboratoryOrder
      *     price_list_id: int,
      *     ordered_at: string,
      *     notes: ?string,
-     *     exams?: list<array{laboratory_exam_id: int}>
+     *     exams?: list<array{laboratory_exam_id: int}>,
+     *     discount?: array{type: string, value: string}
      * }  $attributes
      */
     public function execute(Laboratory $laboratory, User $creator, array $attributes): LaboratoryOrder
@@ -47,6 +49,9 @@ final class CreateLaboratoryOrder
         $exams = $attributes['exams'] ?? [];
         if ($exams !== []) {
             Gate::forUser($creator)->authorize('orders.add_exam');
+        }
+        if (array_key_exists('discount', $attributes)) {
+            Gate::forUser($creator)->authorize('orders.manage_discount');
         }
 
         return DB::transaction(function () use ($laboratory, $creator, $attributes, $exams): LaboratoryOrder {
@@ -152,6 +157,18 @@ final class CreateLaboratoryOrder
                         ->mapWithKeys(fn ($messages, $field) => ["exams.$index.$field" => $messages])->all());
                 }
             }
+
+            if (array_key_exists('discount', $attributes)) {
+                $discount = $attributes['discount'];
+                $order = $this->setDiscount->execute(
+                    $laboratory,
+                    $order->id,
+                    $discount['type'],
+                    $discount['value'],
+                    $creator,
+                );
+            }
+
             $order->refresh();
             $order->setRelation('orderExams', collect($lines));
 

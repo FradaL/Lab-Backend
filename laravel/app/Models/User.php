@@ -38,6 +38,12 @@ class User extends Authenticatable
         return $this->hasMany(LaboratoryOrder::class, 'created_by');
     }
 
+    /** @return HasMany<ValidationProfessional, $this> */
+    public function validationProfessionals(): HasMany
+    {
+        return $this->hasMany(ValidationProfessional::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *
@@ -48,6 +54,10 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'is_active' => 'boolean',
+            'membership_is_active' => 'boolean',
+            'membership_is_default' => 'boolean',
+            'membership_created_at' => 'datetime',
+            'membership_updated_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
