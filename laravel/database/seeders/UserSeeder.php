@@ -13,26 +13,28 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
-        $users = [
-            [
-                'name' => 'Administrador Demo',
-                'email' => 'admin@donqerlab.test',
-            ],
-            [
-                'name' => 'Recepción Demo',
-                'email' => 'reception@donqerlab.test',
-            ],
-        ];
-
-        foreach ($users as $user) {
-            User::query()->updateOrCreate(
-                ['email' => $user['email']],
+        DemoDataset::run(function (): void {
+            $users = [
                 [
-                    'name' => $user['name'],
-                    'password' => Hash::make('password'),
-                    'is_active' => true,
+                    'name' => 'Administrador Demo',
+                    'email' => 'admin@donqerlab.test',
                 ],
-            );
-        }
+                [
+                    'name' => 'Recepción Demo',
+                    'email' => 'reception@donqerlab.test',
+                ],
+            ];
+
+            foreach ($users as $user) {
+                DemoDataset::create(User::class,
+                    ['email' => $user['email']],
+                    [
+                        'name' => $user['name'],
+                        'password' => Hash::make('password'),
+                        'is_active' => true,
+                    ],
+                );
+            }
+        });
     }
 }

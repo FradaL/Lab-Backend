@@ -223,7 +223,7 @@ class CommercialClientPriceListStoreTest extends TestCase
             'starts_at' => '2026-01-01',
             'ends_at' => '2026-12-31',
         ]);
-        $original = $existing->getAttributes();
+        $original = $existing->fresh()->getAttributes();
 
         $this->request($user, $laboratory, $client->id, [
             'price_list_id' => $otherPriceList->id,
@@ -368,7 +368,7 @@ class CommercialClientPriceListStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertCount(69, $operations);
+        $this->assertCount(137, $operations);
         $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Commercial Client Price List Assignments', $item['tags'] ?? [], true)));
         $this->assertCount(6, $operations->filter(fn (array $item): bool => in_array('Commercial Clients', $item['tags'] ?? [], true)));
         $this->assertCount(5, $operations->filter(fn (array $item): bool => in_array('Exam Prices', $item['tags'] ?? [], true)));

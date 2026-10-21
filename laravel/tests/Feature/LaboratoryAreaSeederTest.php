@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Laboratory;
 use App\Models\LaboratoryArea;
+use Database\Seeders\LaboratoryAreaSeeder;
+use Database\Seeders\SaasFoundationSeeder;
+use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -13,8 +16,8 @@ class LaboratoryAreaSeederTest extends TestCase
 
     public function test_demo_laboratory_areas_are_seeded_idempotently(): void
     {
-        $this->seed();
-        $this->seed();
+        $this->seed([UserSeeder::class, SaasFoundationSeeder::class, LaboratoryAreaSeeder::class]);
+        $this->seed([UserSeeder::class, SaasFoundationSeeder::class, LaboratoryAreaSeeder::class]);
 
         $laboratory = Laboratory::query()
             ->where('nit', '000000000001')

@@ -234,7 +234,7 @@ final class LaboratoryOrderEconomicRecalculationTest extends TestCase
             'currency' => 'GTQ',
             'status' => LaboratoryOrder::STATUS_PENDING,
         ], $orderAttributes));
-        $exam = LaboratoryExam::factory()->for($laboratory)->create([
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
             'status' => LaboratoryExam::STATUS_ACTIVE,
         ]);
         $priceListExam = PriceListExam::factory()->for($laboratory)->create([

@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Laboratory;
 use App\Models\Patient;
+use Database\Seeders\PatientSeeder;
+use Database\Seeders\SaasFoundationSeeder;
+use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -13,8 +16,8 @@ class PatientSeederTest extends TestCase
 
     public function test_demo_patients_are_seeded_idempotently_for_the_demo_laboratory(): void
     {
-        $this->seed();
-        $this->seed();
+        $this->seed([UserSeeder::class, SaasFoundationSeeder::class, PatientSeeder::class]);
+        $this->seed([UserSeeder::class, SaasFoundationSeeder::class, PatientSeeder::class]);
 
         $laboratory = Laboratory::query()
             ->where('nit', '000000000001')

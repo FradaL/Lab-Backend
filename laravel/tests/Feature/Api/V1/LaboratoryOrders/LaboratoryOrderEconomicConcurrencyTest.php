@@ -73,7 +73,7 @@ final class LaboratoryOrderEconomicConcurrencyTest extends TestCase
             'currency' => 'GTQ',
             'status' => LaboratoryOrder::STATUS_PENDING,
         ]);
-        $exam = LaboratoryExam::factory()->for($laboratory)->create([
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
             'status' => LaboratoryExam::STATUS_ACTIVE,
         ]);
         PriceListExam::factory()->for($laboratory)->create([

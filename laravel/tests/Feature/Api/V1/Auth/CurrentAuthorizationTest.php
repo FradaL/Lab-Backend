@@ -130,7 +130,7 @@ final class CurrentAuthorizationTest extends TestCase
         $responseB = $this->request($user, $laboratoryB)->assertOk();
         $responseAAgain = $this->request($user, $laboratoryA)->assertOk();
 
-        $expectedAdmin = RbacCatalog::PERMISSIONS;
+        $expectedAdmin = RbacCatalog::rolePermissions()['administrator'];
         $expectedViewer = RbacCatalog::rolePermissions()['viewer'];
         sort($expectedAdmin);
         sort($expectedViewer);
@@ -288,7 +288,7 @@ final class CurrentAuthorizationTest extends TestCase
         }
         $this->createSubscription($laboratory);
         $this->seed(RolePermissionSeeder::class);
-        $allPermissions = RbacCatalog::PERMISSIONS;
+        $allPermissions = RbacCatalog::rolePermissions()['owner'];
         $receptionPermissions = array_values(array_unique(array_merge(
             RbacCatalog::rolePermissions()['receptionist'],
             RbacCatalog::rolePermissions()['cashier'],
@@ -384,7 +384,7 @@ final class CurrentAuthorizationTest extends TestCase
         $this->patientCreateRequest($user, $laboratory)->assertForbidden();
     }
 
-    public function test_route_is_tenant_aware_without_can_and_business_inventory_remains_61(): void
+    public function test_route_is_tenant_aware_without_can_and_business_inventory_includes_clinical_routes(): void
     {
         $route = collect(Route::getRoutes()->getRoutes())
             ->first(fn (IlluminateRoute $route): bool => $route->uri() === 'api/v1/auth/authorization');
@@ -394,7 +394,7 @@ final class CurrentAuthorizationTest extends TestCase
         $this->assertContains('saas', $route->gatherMiddleware());
         $this->assertFalse(collect($route->gatherMiddleware())
             ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')));
-        $this->assertSame(62, collect(Route::getRoutes()->getRoutes())
+        $this->assertSame(128, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/'))
             ->filter(fn (IlluminateRoute $route): bool => collect($route->gatherMiddleware())
                 ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')))

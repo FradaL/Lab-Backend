@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'timezone',
     'currency',
     'is_active',
+    'validation_policy',
 ])]
 class Laboratory extends Model
 {

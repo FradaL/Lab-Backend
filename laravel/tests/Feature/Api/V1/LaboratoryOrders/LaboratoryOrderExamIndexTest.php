@@ -67,7 +67,7 @@ final class LaboratoryOrderExamIndexTest extends TestCase
     public function test_repeated_lines_are_ordered_by_id_and_serialize_only_independent_snapshots(): void
     {
         [$user, $laboratory, $order, $glucose, $priceList, $price] = $this->activeContext();
-        $hemogram = LaboratoryExam::factory()->for($laboratory)->create(['code' => 'HEM', 'name' => 'Hemograma']);
+        $hemogram = LaboratoryExam::factory()->orderable()->for($laboratory)->create(['code' => 'HEM', 'name' => 'Hemograma']);
         $first = $this->line($laboratory, $order, $glucose, $priceList, [
             'unit_price' => '35.00',
             'exam_code' => 'GLU',
@@ -112,7 +112,7 @@ final class LaboratoryOrderExamIndexTest extends TestCase
             ->assertJsonPath('data.2.price_list.name', 'Particular anterior');
 
         foreach ($response->json('data') as $item) {
-            $this->assertSame(['id', 'exam', 'price_list', 'unit_price', 'created_at', 'updated_at'], array_keys($item));
+            $this->assertSame(['id', 'exam', 'price_list', 'unit_price', 'clinical_version_id', 'clinical_configuration_source', 'sample_requirements', 'created_at', 'updated_at'], array_keys($item));
             $this->assertSame(['id', 'code', 'name'], array_keys($item['exam']));
             $this->assertSame(['id', 'name'], array_keys($item['price_list']));
             foreach (['laboratory_id', 'laboratory_order_id', 'quantity', 'subtotal', 'discount', 'currency', 'status', 'current_price', 'price_list_exam_id'] as $field) {
@@ -312,7 +312,7 @@ final class LaboratoryOrderExamIndexTest extends TestCase
         )));
 
         $this->assertSame(['get', 'post'], array_keys($path));
-        $this->assertSame(69, $operationCount);
+        $this->assertSame(137, $operationCount);
         $this->assertArrayNotHasKey('requestBody', $operation);
         $this->assertSame('#/components/schemas/LaboratoryOrderExamCollectionResponse', $operation['responses']['200']['content']['application/json']['schema']['$ref']);
         $this->assertSame([200, 400, 401, 403, 404, 422], array_keys($operation['responses']));
@@ -339,7 +339,7 @@ final class LaboratoryOrderExamIndexTest extends TestCase
             'status' => LaboratoryOrder::STATUS_PENDING,
             'created_by' => $user->id,
         ], $orderAttributes));
-        $exam = LaboratoryExam::factory()->for($laboratory)->create([
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
             'code' => 'GLU',
             'name' => 'Glucosa',
             'status' => LaboratoryExam::STATUS_ACTIVE,

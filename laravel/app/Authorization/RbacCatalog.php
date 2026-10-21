@@ -19,12 +19,21 @@ final class RbacCatalog
         'laboratory_areas.view', 'laboratory_areas.create', 'laboratory_areas.update', 'laboratory_areas.change_status',
         'sample_types.view', 'sample_types.create', 'sample_types.update', 'sample_types.change_status',
         'laboratory_exams.view', 'laboratory_exams.create', 'laboratory_exams.update', 'laboratory_exams.change_status',
+        'laboratory_exams.create_draft', 'laboratory_exams.edit_draft', 'laboratory_exams.publish', 'laboratory_exams.import_template',
         'commercial_clients.view', 'commercial_clients.create', 'commercial_clients.update', 'commercial_clients.change_status',
         'price_lists.view', 'price_lists.create', 'price_lists.update', 'price_lists.change_status', 'price_lists.set_default',
         'exam_prices.view', 'exam_prices.manage',
         'commercial_price_assignments.view', 'commercial_price_assignments.manage',
         'pricing.resolve',
         'orders.view', 'orders.create', 'orders.add_exam', 'orders.remove_exam', 'orders.manage_discount', 'orders.change_status',
+        'orders.clinical_finalize', 'orders.exams.clinical_finalize', 'orders.clinical_exceptions.request', 'orders.clinical_exceptions.approve', 'orders.clinical_exceptions.view', 'orders.clinical_finalization.view',
+        'results.view', 'results.capture', 'results.edit', 'results.view_history',
+        'results.validate', 'results.rectify', 'results.validation_history', 'results.validation_policy.manage', 'results.professionals.manage',
+        'reports.view_history', 'reports.issue', 'reports.download', 'reports.settings.view', 'reports.settings.edit',
+        'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'reports.delivery.evaluate', 'reports.delivery_history.view',
+        'reports.delivery.prepare', 'reports.delivery.confirm', 'reports.delivery_exceptions.authorize', 'reports.delivery_exceptions.view',
+        'samples.view', 'samples.collect', 'samples.receive', 'samples.evaluate', 'samples.associate', 'orders.start_exam',
+        'users.view', 'users.create', 'users.assign_role', 'users.change_status', 'roles.view',
     ];
 
     private const array RECEPTIONIST_PERMISSIONS = [
@@ -63,8 +72,8 @@ final class RbacCatalog
     public static function rolePermissions(): array
     {
         return [
-            'owner' => self::PERMISSIONS,
-            'administrator' => self::PERMISSIONS,
+            'owner' => array_values(array_diff(self::PERMISSIONS, ['results.validate', 'results.rectify', 'orders.clinical_finalize', 'orders.exams.clinical_finalize', 'orders.clinical_exceptions.request', 'orders.clinical_exceptions.approve', 'reports.view_history', 'reports.issue', 'reports.download', 'reports.settings.view', 'reports.settings.edit', 'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'reports.delivery.evaluate', 'reports.delivery_history.view', 'reports.delivery.prepare', 'reports.delivery.confirm', 'reports.delivery_exceptions.authorize', 'reports.delivery_exceptions.view'])),
+            'administrator' => array_values(array_diff(self::PERMISSIONS, ['results.validate', 'results.rectify', 'orders.clinical_finalize', 'orders.exams.clinical_finalize', 'orders.clinical_exceptions.request', 'orders.clinical_exceptions.approve', 'reports.view_history', 'reports.issue', 'reports.download', 'reports.settings.view', 'reports.settings.edit', 'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'reports.delivery.evaluate', 'reports.delivery_history.view', 'reports.delivery.prepare', 'reports.delivery.confirm', 'reports.delivery_exceptions.authorize', 'reports.delivery_exceptions.view'])),
             'receptionist' => self::RECEPTIONIST_PERMISSIONS,
             'cashier' => self::CASHIER_PERMISSIONS,
             'laboratory_technician' => self::LABORATORY_TECHNICIAN_PERMISSIONS,
@@ -74,8 +83,8 @@ final class RbacCatalog
 
     public static function assertValid(): void
     {
-        if (count(self::PERMISSIONS) !== 41 || count(array_unique(self::PERMISSIONS)) !== 41) {
-            throw new LogicException('The RBAC catalog must contain exactly 41 unique permissions.');
+        if (count(self::PERMISSIONS) !== 84 || count(array_unique(self::PERMISSIONS)) !== 84) {
+            throw new LogicException('The RBAC catalog must contain exactly 84 unique permissions.');
         }
 
         $matrix = self::rolePermissions();

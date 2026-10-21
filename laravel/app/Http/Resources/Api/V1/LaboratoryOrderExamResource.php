@@ -24,6 +24,9 @@ final class LaboratoryOrderExamResource extends JsonResource
                 'name' => $this->price_list_name,
             ],
             'unit_price' => $this->unit_price,
+            'clinical_version_id' => $this->clinical_version_id,
+            'clinical_configuration_source' => $this->clinical_configuration_source ?? 'historical',
+            'sample_requirements' => LaboratoryOrderSampleRequirementResource::collection($this->whenLoaded('sampleRequirements')),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

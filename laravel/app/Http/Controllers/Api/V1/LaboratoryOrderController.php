@@ -99,11 +99,13 @@ final class LaboratoryOrderController extends Controller
                 'code',
                 'ordered_at',
                 'status',
+                'clinical_revision',
                 'currency',
                 'total',
                 'created_by',
             ])
             ->with([
+                'clinicalFinalization',
                 'branch:id,name',
                 'patient:id,first_names,last_names',
                 'doctor:id,first_names,last_names',
@@ -222,6 +224,7 @@ final class LaboratoryOrderController extends Controller
         $listRequest->validated($request);
 
         $orderExams = LaboratoryOrderExam::forLaboratory($laboratory)
+            ->with('sampleRequirements.operationalSatisfaction')
             ->where('laboratory_order_id', $order->id)
             ->orderBy('id')
             ->get();
@@ -233,7 +236,7 @@ final class LaboratoryOrderController extends Controller
         path: '/api/v1/laboratory-orders/{laboratoryOrder}/exams',
         operationId: 'laboratoryOrdersAddExam',
         summary: 'Agregar una solicitud de examen a una orden',
-        description: 'Agrega una nueva línea independiente a una orden pendiente. La operación permite repetir el mismo examen, bloquea la orden para serializarse con cambios de estado y captura los valores vigentes del examen, lista y precio como snapshots.',
+        description: 'Fija una versión clínica publicada y requisitos independientes por línea; solo permite null por la lista cerrada de compatibilidad legacy. Agrega una nueva línea independiente a una orden pendiente. La operación permite repetir el mismo examen, bloquea la orden para serializarse con cambios de estado y captura los valores vigentes del examen, lista y precio como snapshots.',
         security: [['sanctumCookie' => []]],
         tags: ['Laboratory Orders'],
         parameters: [
@@ -263,6 +266,7 @@ final class LaboratoryOrderController extends Controller
                 ]),
             ),
             new OA\Response(response: 404, description: 'La orden no existe o no pertenece al laboratorio actual.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(response: 409, description: 'Conflicto de disponibilidad o actividad clínica; code estable, incluido clinical_exam_unavailable.', content: new OA\JsonContent(ref: '#/components/schemas/ClinicalExamConflict')),
             new OA\Response(response: 422, description: 'El payload o las reglas operativas de la orden y sus catálogos no son válidos.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
         ],
     )]
@@ -329,6 +333,7 @@ final class LaboratoryOrderController extends Controller
                 ]),
             ),
             new OA\Response(response: 404, description: 'La orden o la solicitud de examen no existe dentro del laboratorio y orden actuales.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(response: 409, description: 'Conflicto de disponibilidad o actividad clínica; code estable, incluido clinical_exam_unavailable.', content: new OA\JsonContent(ref: '#/components/schemas/ClinicalExamConflict')),
             new OA\Response(response: 422, description: 'La orden ya no está pendiente o el body contiene campos no permitidos.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
         ],
     )]
@@ -500,7 +505,7 @@ final class LaboratoryOrderController extends Controller
         path: '/api/v1/laboratory-orders/{laboratoryOrder}/status',
         operationId: 'laboratoryOrdersUpdateStatus',
         summary: 'Cambiar estado global de una orden de laboratorio',
-        description: 'Ejecuta el workflow explícito de la orden. Permite pending a in_process o cancelled, e in_process a completed o cancelled. Repetir el estado actual es un no-op idempotente. Completed y cancelled son terminales. La transición se serializa mediante un row lock tenant-aware.',
+        description: 'El inicio exige líneas y al menos una versión publicada sin muestra física; las líneas legacy y requisitos pendientes no habilitan procesamiento. Ejecuta el workflow explícito de la orden. Permite pending a in_process o cancelled, e in_process a completed o cancelled. Repetir el estado actual es un no-op idempotente. Completed y cancelled son terminales. La transición se serializa mediante un row lock tenant-aware.',
         security: [['sanctumCookie' => []]],
         tags: ['Laboratory Orders'],
         parameters: [
@@ -530,6 +535,7 @@ final class LaboratoryOrderController extends Controller
                 ]),
             ),
             new OA\Response(response: 404, description: 'La orden no existe o no pertenece al laboratorio actual.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(response: 409, description: 'Conflicto de disponibilidad o actividad clínica; code estable, incluido clinical_exam_unavailable.', content: new OA\JsonContent(ref: '#/components/schemas/ClinicalExamConflict')),
             new OA\Response(response: 422, description: 'El payload no es válido o la transición solicitada no está permitida.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
         ],
     )]
@@ -599,6 +605,7 @@ final class LaboratoryOrderController extends Controller
 
         $order = LaboratoryOrder::forLaboratory($currentLaboratory->get())
             ->with([
+                'clinicalFinalization',
                 'patient',
                 'doctor',
                 'branch',
@@ -618,7 +625,7 @@ final class LaboratoryOrderController extends Controller
         path: '/api/v1/laboratory-orders',
         operationId: 'laboratoryOrdersStore',
         summary: 'Crear orden de laboratorio',
-        description: 'Crea una orden pendiente en el laboratorio actual. La lista de precios es una selección explícita y el servidor captura el nombre/tipo del cliente comercial, el nombre de la lista y su moneda como contexto histórico. ordered_at se interpreta como fecha y hora local conforme al contrato Y-m-d H:i:s y se persiste sin conversión de zona horaria.',
+        description: 'Crea atómicamente cabecera, líneas opcionales (máximo 50), snapshots, requisitos individuales y un descuento opcional. Omitir exams o enviar [] conserva la cabecera vacía; incluir líneas exige orders.create y orders.add_exam. Incluir discount exige además orders.manage_discount y reutiliza exactamente las reglas del PUT de descuento. Devuelve cabecera, totales definitivos y exams; no crea muestras físicas. Crea una orden pendiente en el laboratorio actual. La lista de precios es una selección explícita y el servidor captura el nombre/tipo del cliente comercial, el nombre de la lista y su moneda como contexto histórico. ordered_at se interpreta como fecha y hora local conforme al contrato Y-m-d H:i:s y se persiste sin conversión de zona horaria.',
         security: [['sanctumCookie' => []]],
         tags: ['Laboratory Orders'],
         parameters: [
@@ -629,7 +636,7 @@ final class LaboratoryOrderController extends Controller
             content: new OA\JsonContent(ref: '#/components/schemas/CreateLaboratoryOrderInput'),
         ),
         responses: [
-            new OA\Response(response: 201, description: 'Orden creada correctamente.', content: new OA\JsonContent(ref: '#/components/schemas/LaboratoryOrderResponse')),
+            new OA\Response(response: 201, description: 'Orden y composición creadas atómicamente.', content: new OA\JsonContent(ref: '#/components/schemas/LaboratoryOrderCreationResponse')),
             new OA\Response(ref: '#/components/responses/LaboratoryContextRequired', response: 400),
             new OA\Response(response: 401, description: 'La solicitud no tiene una sesión autenticada.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
             new OA\Response(
@@ -640,6 +647,7 @@ final class LaboratoryOrderController extends Controller
                     new OA\Schema(ref: '#/components/schemas/SubscriptionAccessError'),
                 ]),
             ),
+            new OA\Response(response: 409, description: 'Conflicto de disponibilidad o actividad clínica; code estable, incluido clinical_exam_unavailable.', content: new OA\JsonContent(ref: '#/components/schemas/ClinicalExamConflict')),
             new OA\Response(response: 422, description: 'El payload, las referencias o sus estados operativos no son válidos.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
         ],
     )]
@@ -654,7 +662,7 @@ final class LaboratoryOrderController extends Controller
         $order = $createLaboratoryOrder->execute(
             $currentLaboratory->get(),
             $creator,
-            $request->validated(),
+            $request->creationAttributes(),
         );
 
         return LaboratoryOrderResource::make($order)

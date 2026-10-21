@@ -31,7 +31,7 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
     public function test_removing_one_repeated_exam_targets_only_its_order_exam_id(): void
     {
         [$user, $laboratory, $order, $glucose, $priceList] = $this->activeContext();
-        $hemogram = LaboratoryExam::factory()->for($laboratory)->create();
+        $hemogram = LaboratoryExam::factory()->orderable()->for($laboratory)->create();
         $firstGlucose = $this->line($laboratory, $order, $glucose, $priceList, [
             'unit_price' => '35.00',
             'exam_name' => 'Glucosa original',
@@ -335,9 +335,9 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
         )));
 
         $this->assertSame(['delete'], array_keys($path));
-        $this->assertSame(69, $operationCount);
+        $this->assertSame(137, $operationCount);
         $this->assertArrayNotHasKey('requestBody', $operation);
-        $this->assertSame([204, 400, 401, 403, 404, 422], array_keys($operation['responses']));
+        $this->assertSame([204, 400, 401, 403, 404, 409, 422], array_keys($operation['responses']));
         $this->assertStringContainsString('no el identificador del examen', strtolower($operation['description']));
     }
 
@@ -358,7 +358,7 @@ final class LaboratoryOrderExamDestroyTest extends TestCase
             'status' => LaboratoryOrder::STATUS_PENDING,
             'created_by' => $user->id,
         ], $orderAttributes));
-        $exam = LaboratoryExam::factory()->for($laboratory)->create([
+        $exam = LaboratoryExam::factory()->orderable()->for($laboratory)->create([
             'code' => 'GLU',
             'name' => 'Glucosa',
             'status' => LaboratoryExam::STATUS_ACTIVE,
