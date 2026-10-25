@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\CommercialClientController;
 use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DoctorController;
+use App\Http\Controllers\Api\V1\GlobalClinicalReasonController;
 use App\Http\Controllers\Api\V1\LaboratoryAreaController;
 use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Http\Controllers\Api\V1\LaboratoryOrderController;
@@ -25,11 +26,29 @@ use App\Http\Controllers\Api\V1\PriceListExamController;
 use App\Http\Controllers\Api\V1\PricingResolutionController;
 use App\Http\Controllers\Api\V1\ReportDeliveryController;
 use App\Http\Controllers\Api\V1\ResultValidationController;
+use App\Http\Controllers\Api\V1\SaasAccessController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
+    Route::prefix('platform/clinical-reasons')->middleware(['auth:sanctum', 'user.active'])->group(function (): void {
+        Route::get('/', [GlobalClinicalReasonController::class, 'index'])->middleware('saas.capability:saas.clinical_reasons.view');
+        Route::post('/', [GlobalClinicalReasonController::class, 'store'])->middleware('saas.capability:saas.clinical_reasons.create');
+        Route::get('/{reason}', [GlobalClinicalReasonController::class, 'show'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.view');
+        Route::get('/{reason}/versions', [GlobalClinicalReasonController::class, 'history'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.view');
+        Route::get('/{reason}/events', [GlobalClinicalReasonController::class, 'events'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.view');
+        Route::post('/{reason}/versions', [GlobalClinicalReasonController::class, 'publish'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.publish');
+        Route::post('/{reason}/activation', [GlobalClinicalReasonController::class, 'activation'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.manage');
+    });
+    Route::prefix('platform/access')->middleware(['auth:sanctum', 'user.active', 'saas.capability:saas.access.manage'])->group(function (): void {
+        Route::get('/capabilities', [SaasAccessController::class, 'capabilities']);
+        Route::get('/users', [SaasAccessController::class, 'users']);
+        Route::get('/users/{user}/capabilities', [SaasAccessController::class, 'assignments'])->whereNumber('user');
+        Route::post('/users/{user}/capabilities', [SaasAccessController::class, 'grant'])->whereNumber('user');
+        Route::post('/users/{user}/capabilities/{assignment}/revoke', [SaasAccessController::class, 'revoke'])->whereNumber(['user', 'assignment']);
+        Route::get('/history', [SaasAccessController::class, 'history']);
+    });
     Route::get('/health', HealthCheckController::class);
     Route::get('/report-verifications/{token}', [ClinicalReportController::class, 'verify'])->middleware('throttle:report-verification');
     Route::post('/laboratory-user-invitations/{token}/accept', LaboratoryUserInvitationController::class)
