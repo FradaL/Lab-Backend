@@ -13,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\ClinicalResults\ClinicalResultScenario;
+use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
 class ValidationPersistenceTest extends TestCase
@@ -66,6 +67,7 @@ class ValidationPersistenceTest extends TestCase
 
     public function test_demo_second_execution_preserves_validation_rectification_and_manual_policy_changes(): void
     {
+        StructuredClinicalReasonFixture::prepareDemoCatalog();
         $this->seed(DatabaseSeeder::class);
         $tables = DB::select("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename");
         $snapshot = function () use ($tables) {

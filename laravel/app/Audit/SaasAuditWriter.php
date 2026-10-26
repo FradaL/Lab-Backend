@@ -3,6 +3,7 @@
 namespace App\Audit;
 
 use App\Models\GlobalClinicalReason;
+use App\Models\GlobalClinicalReasonImpact;
 use App\Models\GlobalClinicalReasonVersion;
 use App\Models\SaasAuditLog;
 use App\Models\User;
@@ -10,6 +11,18 @@ use Illuminate\Support\Str;
 
 final class SaasAuditWriter
 {
+    public function recordImpact(GlobalClinicalReasonImpact $impact, User $actor): SaasAuditLog
+    {
+        return SaasAuditLog::create([
+            'operation_id' => (string) Str::uuid(), 'actor_type' => 'user', 'actor_id' => $actor->id,
+            'action' => 'saas.clinical_reasons.impact_declared', 'source' => 'service', 'result' => 'succeeded',
+            'capability_code' => 'saas.clinical_reasons.classify_impact', 'justification' => $impact->justification,
+            'global_impact_declaration_id' => $impact->id,
+            'old_values' => ['previous_id' => $impact->previous_id],
+            'new_values' => ['impact_id' => $impact->id, 'reason_id' => $impact->reason_id, 'version_id' => $impact->version_id, 'revision' => $impact->revision, 'classification' => $impact->classification],
+        ])->refresh();
+    }
+
     public function recordGlobalReason(User $actor, GlobalClinicalReason $reason, GlobalClinicalReasonVersion $version, ?GlobalClinicalReasonVersion $previous, string $capability, string $action): SaasAuditLog
     {
         return SaasAuditLog::create([

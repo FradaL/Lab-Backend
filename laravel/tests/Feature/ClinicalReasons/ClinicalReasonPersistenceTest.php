@@ -164,6 +164,14 @@ class ClinicalReasonPersistenceTest extends TestCase
     public function test_unused_migration_can_roll_back_and_reapply_without_removing_be08(): void
     {
         $governance = require database_path('migrations/2026_10_25_073106_extend_saas_audit_for_global_clinical_reasons.php');
+        $adoptions = require database_path('migrations/2026_10_25_081429_create_laboratory_clinical_reason_adoptions.php');
+        $impacts = require database_path('migrations/2026_10_25_081115_create_global_clinical_reason_impacts.php');
+        $integration = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $localIntegration = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $localIntegration->down();
+        $integration->down();
+        $adoptions->down();
+        $impacts->down();
         $governance->down();
         $migration = require database_path('migrations/2026_10_25_062239_create_clinical_reason_identities_and_versions.php');
         $migration->down();
@@ -173,6 +181,10 @@ class ClinicalReasonPersistenceTest extends TestCase
         $this->assertTrue(Schema::hasTable('clinical_line_resolutions'));
         $migration->up();
         $governance->up();
+        $impacts->up();
+        $adoptions->up();
+        $integration->up();
+        $localIntegration->up();
         $this->assertDatabaseCount('global_clinical_reasons', 0);
         $this->assertDatabaseCount('laboratory_clinical_reason_versions', 0);
     }

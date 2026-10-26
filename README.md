@@ -61,6 +61,12 @@ docker compose exec workspace php artisan db:seed
 docker compose exec workspace php artisan test
 ```
 
+## Catálogo para excepciones del dataset clínico
+
+Las solicitudes clínicas nuevas requieren una referencia estructurada y justificación separada; el dataset demo utiliza origen global adoptado. Antes de ejecutar el dataset completo, un operador SaaS autorizado debe preparar un motivo global **FICTICIO**, activo, de clase `terminal_candidate` y con impacto clasificado que permita su uso. Configurar su ID efectivo en `SAAS_DEMO_CLINICAL_REASON_ID`; los escenarios demo lo seleccionan individualmente mediante el servicio de adopción. No se crean accesos o facultades SaaS automáticamente.
+
+Sin catálogo/configuración válidos, `db:seed` falla con diagnóstico y revierte el dataset; no se generan solicitudes de texto libre. El contrato, la nueva migración (sin aplicación automática a desarrollo/producción), la compatibilidad histórica y las pruebas están en [BE-EXC-02.3-I](docs/sprint-2/BE-EXC-02.3-I-integracion-clinica.md). Las solicitudes anteriores conservan su texto e historia, sin inferir motivos por nombre; BE-EXC-02.4 añade [administración e integración local](docs/sprint-2/BE-EXC-02.4-motivos-locales.md) con versión original y revisión explícita, sin adopción ni impacto SaaS. El dataset demo conserva su configuración global explícita.
+
 ## Usuarios demo
 
 Los seeders crean dos usuarios exclusivamente para desarrollo local:

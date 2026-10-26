@@ -24,7 +24,7 @@ final class GlobalClinicalReasonManager
 
     public const MANAGE = 'saas.clinical_reasons.manage';
 
-    public function __construct(private SaasAccessAuthority $authority, private ClinicalReasonVersionStore $versions, private SaasAuditWriter $audit) {}
+    public function __construct(private SaasAccessAuthority $authority, private ClinicalReasonVersionStore $versions, private SaasAuditWriter $audit, private ClinicalReasonReviewStore $reviews) {}
 
     public function index(?User $actor): array
     {
@@ -92,6 +92,7 @@ final class GlobalClinicalReasonManager
             }
             $definition = $previous->only(['name', 'description', 'classification', 'evidence_requirements']);
             $version = $this->versions->appendGlobal($reasonId, $actor, $previous->number, $definition + ['is_active' => $input['is_active'], 'change_reason' => $input['change_reason']]);
+            $this->reviews->forDeactivation($version, $actor);
 
             return $this->result($actor, $previous->reason, $version, $previous, self::MANAGE, 'saas.clinical_reasons.activation_changed');
         });

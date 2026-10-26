@@ -72,7 +72,7 @@ final class SaasAccessManager
 
     public function history(?User $actor): array
     {
-        return $this->authorized($actor, fn () => $this->page(SaasAuditLog::whereNull('global_reason_id')->orderByDesc('id')->paginate(50)));
+        return $this->authorized($actor, fn () => $this->page(SaasAuditLog::whereNull('global_reason_id')->whereNull('global_impact_declaration_id')->orderByDesc('id')->paginate(50)));
     }
 
     public function grant(?User $actor, int $userId, array $input): SaasCapabilityAssignment

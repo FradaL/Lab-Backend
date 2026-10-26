@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
 
-#[Fillable(['operation_id', 'actor_type', 'actor_id', 'actor_label', 'affected_user_id', 'capability_code', 'action', 'source', 'result', 'justification', 'old_values', 'new_values', 'global_reason_id', 'global_reason_version_id', 'previous_global_reason_version_id'])]
+#[Fillable(['operation_id', 'actor_type', 'actor_id', 'actor_label', 'affected_user_id', 'capability_code', 'action', 'source', 'result', 'justification', 'old_values', 'new_values', 'global_reason_id', 'global_reason_version_id', 'previous_global_reason_version_id', 'global_impact_declaration_id'])]
 class SaasAuditLog extends Model
 {
     public $timestamps = false;

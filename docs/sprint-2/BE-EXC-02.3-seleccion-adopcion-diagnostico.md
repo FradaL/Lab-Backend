@@ -1,5 +1,32 @@
 # BE-EXC-02.3 — Selección y adopción: diagnóstico y decisiones necesarias
 
+## Actualización posterior — BE-EXC-02.3-I
+
+La [integración clínica 02.3-I](BE-EXC-02.3-I-integracion-clinica.md), del 2026-10-25, incorpora referencia global adoptada obligatoria para nuevas solicitudes y aplica la política de catálogo en solicitud/aprobación BE08 dentro de su transacción. Conserva la referencia original, historial, snapshots e informes; los IDs de solicitudes anteriores quedan en un conjunto sellado sin asociación inferida a catálogo. Local depende de 02.4; evidencia/viabilidad integral conserva BE-EXC-03/04. El informe enlazado registra resultados y límites de verificación. No se acredita producción ni se declara terminado todo el alcance de excepciones.
+
+El contenido inferior se conserva como expediente del corte anterior a 02.3-I: sus payloads con reason libre y sus menciones de integración pendiente no describen el contrato actual para nuevas solicitudes. La justificación nueva se recibe separadamente y reason se deriva de la versión seleccionada. Consultar el informe y OpenAPI vigentes antes de integrar consumidores.
+
+## Estado vigente — implementación autorizada D1–D6
+
+Fecha: **2026-10-25**. La solicitud «DONQER LAB — BE-EXC-02.3 — Selección, adopción y revisión de motivos clínicos globales por laboratorio», adjunto `bbb3a9aa-6acf-4494-936b-fc3b79664fcb`, aprueba expresamente D1–D6 y sustituye los pendientes generales del diagnóstico anterior. No cambia DF-019 APROBADO 1.3 ni reescribe sus antecedentes.
+
+Decisiones aplicadas: declaraciones separadas, explícitas e inmutables con estados unclassified/non_restrictive/restrictive; facultad exacta `saas.clinical_reasons.classify_impact`; permiso tenant exacto `clinical_reasons.review_impact`, independiente del rol; obligaciones persistentes aunque cambie la adopción o se corrija el impacto; bloqueos sólo del motivo dependiente; selección/adopción individual sin sincronización.
+
+Ratificaciones adicionales comunicadas por el PO en esta misma conversación mediante respuestas explícitas a tres preguntas:
+
+1. Evaluación clínica obligatoria y resultado favorable/non_favorable: sólo favorable levanta el bloqueo de esa revisión; no sustituye una aprobación de excepción.
+2. Declaración restrictiva afecta a toda adopción previa de esa identidad; cambiar versión o corregir impacto conserva obligaciones. Las primeras incorporaciones también comprueban restricciones vigentes, incluidas adopciones de versiones antiguas.
+3. Sin clasificación: se permite lectura/adopción administrativa, pero se impide uso clínico dependiente hasta clasificación explícita; no se fabrica una declaración restrictiva ni una revisión ficticia.
+
+La auditoría inicial queda confirmada: persisten las identidades/versiones globales, JSON de evidencia y vigencia de 02.1/B; autorización SaaS A y tenant Teams son ámbitos distintos; AuditWriter exige laboratorio real y SaasAuditWriter sirve al proveedor. Las tablas locales son motivos personalizados, no adopciones. BE08 sigue recibiendo `reason` libre; no puede inferirse vínculo global por coincidencia textual.
+
+Se implementan declaraciones, selecciones, historia, obligaciones, evaluaciones y una política estructurada reutilizable. La protección real en requestException/decideException **queda pendiente de integración** porque no existe referencia estructurada en esas solicitudes. No se declara BE-EXC-02.3 completamente terminado ni se reabre D1–D6 como decisiones pendientes. Véase [informe de implementación](BE-EXC-02.3-implementacion.md) para contratos, evidencia ejecutada, alcance y cambio mínimo de integración.
+
+## Antecedente conservado — diagnóstico anterior a D1–D6
+
+Los estados y propuestas que siguen son el corte previo a las aprobaciones anteriores. Sus nombres sugeridos de facultades y sus preguntas no representan el contrato vigente. Se conservan como evidencia del motivo de detención original.
+
+
 Fecha: **2026-10-25**. Estado: **AUDITORÍA PREVIA COMPLETADA; IMPLEMENTACIÓN PENDIENTE**. Este documento no declara completado BE-EXC-02.3. La propuesta técnica y las políticas nuevas siguientes no están aprobadas ni implementadas.
 
 Fuente: solicitud «DONQER LAB — BE-EXC-02.3 — Selección y adopción individual de motivos clínicos globales por laboratorio», adjunto `4aa70de5-8ae9-4104-ba3a-7c03db6a89a9`. Se activan sus criterios explícitos de detención de los apartados 2, 5 y 6. Se documentan evidencia y alternativas antes de implementar la clasificación/revisión dependiente.

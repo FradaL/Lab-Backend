@@ -81,7 +81,7 @@ class SaasAccessTest extends TestCase
         $this->assertDatabaseCount('model_has_roles', 0);
         $this->assertDatabaseCount('model_has_permissions', 0);
         $this->assertSame([SaasAccessAuthority::MANAGE], SaasCapabilityAssignment::where('user_id', $user->id)->pluck('capability_code')->all());
-        $this->assertSame(5, SaasCapability::count());
+        $this->assertSame(6, SaasCapability::count());
         $audit = SaasAuditLog::sole();
         $this->assertNull($audit->actor_id);
         $this->assertSame('system', $audit->actor_type);

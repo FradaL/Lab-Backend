@@ -2,6 +2,7 @@
 
 namespace App\ClinicalExams;
 
+use App\Authorization\SaasAccessAuthority;
 use App\Models\GlobalClinicalReason;
 use App\Models\GlobalClinicalReasonVersion;
 use App\Models\Laboratory;
@@ -13,9 +14,11 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
-/** Low-level persistence only; SaaS/owner authorization belongs to the future application boundary. */
+/** Low-level persistence only; SaaS/owner authorization belongs to the application managers. */
 class ClinicalReasonVersionStore
 {
+    public function __construct(private SaasAccessAuthority $locks) {}
+
     public function appendGlobal(int $reasonId, User $actor, int $expectedNumber, array $definition): GlobalClinicalReasonVersion
     {
         $this->validate($definition, $expectedNumber);
@@ -33,6 +36,7 @@ class ClinicalReasonVersionStore
         $this->validate($definition, $expectedNumber);
 
         return DB::transaction(function () use ($laboratory, $reasonId, $actor, $expectedNumber, $definition): LaboratoryClinicalReasonVersion {
+            $this->locks->lock();
             $reason = LaboratoryClinicalReason::forLaboratory($laboratory)->whereKey($reasonId)->lockForUpdate()->firstOrFail();
             $number = $this->nextNumber($reason->versions()->max('number'), $expectedNumber);
 

@@ -281,12 +281,24 @@ class GlobalClinicalReasonAdministrationTest extends TestCase
         $admin = $this->admin();
         $before = SaasAuditLog::sole()->getRawOriginal();
         $migration = require database_path('migrations/2026_10_25_073106_extend_saas_audit_for_global_clinical_reasons.php');
+        $adoptions = require database_path('migrations/2026_10_25_081429_create_laboratory_clinical_reason_adoptions.php');
+        $impacts = require database_path('migrations/2026_10_25_081115_create_global_clinical_reason_impacts.php');
+        $integration = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $localIntegration = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $localIntegration->down();
+        $integration->down();
+        $adoptions->down();
+        $impacts->down();
         $migration->down();
         $this->assertDatabaseCount('saas_capabilities', 1);
         $migration->up();
+        $impacts->up();
+        $adoptions->up();
+        $integration->up();
+        $localIntegration->up();
 
         $this->assertSame($before, SaasAuditLog::sole()->getRawOriginal());
-        $this->assertDatabaseCount('saas_capabilities', 5);
+        $this->assertDatabaseCount('saas_capabilities', 6);
         $this->assertSame(['saas.access.manage'], DB::table('saas_capability_assignments')->where('user_id', $admin->id)->pluck('capability_code')->all());
     }
 
@@ -314,7 +326,7 @@ class GlobalClinicalReasonAdministrationTest extends TestCase
         $this->artisan('l5-swagger:generate')->assertExitCode(0);
         $doc = json_decode(file_get_contents(storage_path('api-docs/api-docs.json')), true, flags: JSON_THROW_ON_ERROR);
         $routes = collect(Route::getRoutes()->getRoutes())->filter(fn ($route) => str_starts_with($route->uri(), 'api/v1/platform/clinical-reasons'));
-        $this->assertCount(7, $routes);
+        $this->assertCount(10, $routes);
         foreach ($routes as $route) {
             $middleware = $route->gatherMiddleware();
             $this->assertContains('auth:sanctum', $middleware);
