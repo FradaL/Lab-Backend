@@ -57,7 +57,9 @@ final class LocalClinicalReasonController extends Controller
     {
         $r->validate(['page' => ['sometimes', 'integer', 'min:1']]);
 
-        return response()->json($this->manager->reviews($this->current->get(), $r->user(), $reason));
+        $r->validate(['exception_request_id' => ['sometimes', 'integer', 'min:1']]);
+
+        return response()->json($this->manager->reviews($this->current->get(), $r->user(), $reason, $r->has('exception_request_id') ? (int) $r->query('exception_request_id') : null));
     }
 
     public function resolutions(Request $r, int $reason, int $review): JsonResponse

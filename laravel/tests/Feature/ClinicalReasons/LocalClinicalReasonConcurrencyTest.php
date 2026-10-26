@@ -7,6 +7,7 @@ use App\ClinicalExams\ClinicalConflict;
 use App\ClinicalExams\LocalClinicalReasonManager;
 use App\ClinicalFinalization\ClinicalResolutionService;
 use App\Models\ClinicalExceptionLocalReasonReference;
+use App\Models\LaboratoryClinicalReasonVersion;
 use App\Models\LocalClinicalReasonReview;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -44,21 +45,30 @@ class LocalClinicalReasonConcurrencyTest extends TestCase
         if (! in_array('request', [$writer, $reader], true) && ! in_array('create', [$writer, $reader], true) && ! in_array('publish', [$writer, $reader], true)) {
             $request = $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => $reference, 'justification' => 'FICTICIO']);
         }
-        if (in_array('favorable', [$writer, $reader], true)) {
+        if (array_intersect(['favorable', 'non_favorable'], [$writer, $reader]) !== []) {
             $manager->activation($lab, $actor, $reference['reason_id'], ['expected_number' => 1, 'is_active' => false, 'change_reason' => 'FICTICIO']);
+        }
+        $other = null;
+        if ($reader === 'other_lab') {
+            [$otherLab, $otherActor] = $this->scenario(false);
+            $this->assignLaboratoryRole($otherActor, $otherLab, 'owner');
+            $otherData = $manager->create($otherLab, $otherActor, ['code' => 'ficticio', 'definition' => $definition])['data'];
+            $other = [$otherLab, $otherActor, $otherData];
+            setPermissionsTeamId($lab->id);
         }
         $review = LocalClinicalReasonReview::first();
         $revision = $order->fresh()->clinical_revision;
-        $operation = function (string $op) use ($lab, $actor, $order, $line, $reference, $approver, $service, $manager, $definition, $request, $review, $revision): void {
+        $operation = function (string $op) use ($lab, $actor, $order, $line, $reference, $approver, $service, $manager, $definition, $request, $review, $revision, $other): void {
             setPermissionsTeamId($lab->id);
             match ($op) {
                 'create' => $manager->create($lab, $actor, ['code' => 'concurrent', 'definition' => $definition]),
                 'publish' => $manager->publish($lab, $actor, $reference['reason_id'], ['expected_number' => 1, 'definition' => $definition]),
                 'deactivate' => $manager->activation($lab, $actor, $reference['reason_id'], ['expected_number' => 1, 'is_active' => false, 'change_reason' => 'FICTICIO']),
                 'reclassify' => $manager->publish($lab, $actor, $reference['reason_id'], ['expected_number' => 1, 'definition' => array_replace($definition, ['classification' => 'incidence_only'])]),
+                'other_lab' => $this->publishOtherLaboratory($other, $definition),
                 'request' => $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $revision, 'result_revision' => 0, 'reason_reference' => $reference, 'justification' => 'FICTICIO']),
                 'approve' => $service->decideException($lab, $approver, $order->id, $line->id, $request['exception']['id'], true, ['clinical_revision' => $revision, 'request_revision' => 1]),
-                'favorable' => $manager->resolve($lab, $approver, $reference['reason_id'], $review->id, ['expected_revision' => 0, 'outcome' => 'favorable', 'assessment' => 'FICTICIO: evaluación concurrente', 'justification' => 'FICTICIO']),
+                'favorable', 'non_favorable' => $manager->resolve($lab, $approver, $reference['reason_id'], $review->id, ['expected_revision' => 0, 'outcome' => $op, 'assessment' => 'FICTICIO: evaluación concurrente', 'justification' => 'FICTICIO']),
             };
         };
         $dir = sys_get_temp_dir().'/structured-clinical-race-'.bin2hex(random_bytes(8));
@@ -116,7 +126,11 @@ class LocalClinicalReasonConcurrencyTest extends TestCase
             $this->assertSame($expected, file_get_contents($dir.'/result'));
             $this->assertDatabaseCount('clinical_exception_requests', $request || in_array('request', [$writer, $reader]) && ($writer === 'request' || $expected === 'ok') ? 1 : 0);
             $this->assertDatabaseCount('clinical_line_resolutions', $writer === 'approve' || $reader === 'approve' && $expected === 'ok' ? 1 : 0);
-            $this->assertDatabaseCount('laboratory_clinical_reason_versions', 2);
+            $this->assertDatabaseCount('laboratory_clinical_reason_versions', $other !== null ? 4 : ($writer === 'approve' && $reader === 'approve' ? 1 : 2));
+            if ($other !== null) {
+                $this->assertSame(2, LaboratoryClinicalReasonVersion::forLaboratory($lab)->count());
+                $this->assertSame(2, LaboratoryClinicalReasonVersion::forLaboratory($other[0])->count());
+            }
             $context = ClinicalExceptionLocalReasonReference::first();
             if ($context !== null) {
                 $this->assertSame($reference['version_id'], $context->version_id);
@@ -136,6 +150,13 @@ class LocalClinicalReasonConcurrencyTest extends TestCase
         }
     }
 
+    private function publishOtherLaboratory(array $other, array $definition): void
+    {
+        [$lab, $actor, $data] = $other;
+        setPermissionsTeamId($lab->id);
+        app(LocalClinicalReasonManager::class)->publish($lab, $actor, $data['reason']->id, ['expected_number' => 1, 'definition' => $definition]);
+    }
+
     public static function races(): array
     {
         return [
@@ -148,6 +169,11 @@ class LocalClinicalReasonConcurrencyTest extends TestCase
             'approval before deactivation' => ['approve', 'deactivate', 'ok'],
             'classification before approval' => ['reclassify', 'approve', 'clinical_reason_use_blocked'],
             'favorable before approval' => ['favorable', 'approve', 'ok'],
+            'publication before request' => ['publish', 'request', 'clinical_reason_selection_conflict'],
+            'request before publication' => ['request', 'publish', 'ok'],
+            'different laboratory publications' => ['publish', 'other_lab', 'ok'],
+            'two local approvals' => ['approve', 'approve', 'clinical_revision_conflict'],
+            'non favorable before local approval' => ['non_favorable', 'approve', 'clinical_reason_use_blocked'],
             'duplicate assessment' => ['favorable', 'favorable', 'clinical_reason_review_revision_conflict'],
         ];
     }

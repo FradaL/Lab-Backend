@@ -6,6 +6,7 @@ use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\Authorization\ClinicalReasonTenantAuthority as Authority;
 use App\Models\AuditLog;
+use App\Models\ClinicalExceptionLocalReasonReference;
 use App\Models\Laboratory;
 use App\Models\LaboratoryClinicalReason;
 use App\Models\LaboratoryClinicalReasonVersion;
@@ -93,12 +94,15 @@ final class LocalClinicalReasonManager
         }, owner: true);
     }
 
-    public function reviews(Laboratory $lab, ?User $actor, int $reasonId): array
+    public function reviews(Laboratory $lab, ?User $actor, int $reasonId, ?int $requestId = null): array
     {
-        return $this->authority->run($lab, $actor, Authority::LOCAL_VIEW, function () use ($lab, $reasonId): array {
+        return $this->authority->run($lab, $actor, Authority::LOCAL_VIEW, function () use ($lab, $reasonId, $requestId): array {
             $this->reason($lab, $reasonId);
+            if ($requestId !== null) {
+                ClinicalExceptionLocalReasonReference::forLaboratory($lab)->where('reason_id', $reasonId)->where('exception_request_id', $requestId)->firstOrFail();
+            }
 
-            return $this->page(LocalClinicalReasonReview::forLaboratory($lab)->where('reason_id', $reasonId)->with('latestResolution')->orderBy('id')->paginate(50));
+            return $this->page(LocalClinicalReasonReview::forLaboratory($lab)->where('reason_id', $reasonId)->when($requestId !== null, fn ($query) => $query->where('exception_request_id', $requestId))->with('latestResolution')->orderBy('id')->paginate(50));
         });
     }
 

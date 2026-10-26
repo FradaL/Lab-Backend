@@ -37,7 +37,7 @@ final class ClinicalReasonTenantAuthority
 
     public function __construct(private SaasAccessAuthority $locks) {}
 
-    public function run(Laboratory $lab, ?User $actor, string $permission, Closure $operation, bool $owner = false): mixed
+    public function run(Laboratory $lab, ?User $actor, string|array $permission, Closure $operation, bool $owner = false): mixed
     {
         return DB::transaction(function () use ($lab, $actor, $permission, $operation, $owner): mixed {
             $this->locks->lock();
@@ -52,7 +52,11 @@ final class ClinicalReasonTenantAuthority
             DB::table('model_has_permissions')->where('laboratory_id', $lab->id)->where('model_id', $actor->id)->where('model_type', $actor->getMorphClass())->sharedLock()->get();
             app(PermissionRegistrar::class)->forgetCachedPermissions();
             $actor->unsetRelation('roles')->unsetRelation('permissions');
-            Gate::forUser($actor)->authorize($permission);
+            if (is_array($permission)) {
+                abort_unless(Gate::forUser($actor)->any($permission), 403);
+            } else {
+                Gate::forUser($actor)->authorize($permission);
+            }
             abort_if($owner && ! $actor->hasRole('owner'), 403, 'Explicit adoption belongs to the laboratory owner.');
 
             return $operation();

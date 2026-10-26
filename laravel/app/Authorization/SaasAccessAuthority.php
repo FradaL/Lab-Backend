@@ -19,6 +19,13 @@ final class SaasAccessAuthority
         DB::select('SELECT pg_advisory_xact_lock(182045,1)');
     }
 
+    public function capabilitiesFor(User $actor): array
+    {
+        return DB::table('saas_capability_assignments as a')->join('users as u', 'u.id', '=', 'a.user_id')
+            ->where('u.id', $actor->id)->where('u.is_active', true)->whereNull('a.revoked_at')
+            ->distinct()->orderBy('a.capability_code')->pluck('a.capability_code')->all();
+    }
+
     public function authorize(?User $actor, string $capability = self::MANAGE): void
     {
         abort_if($actor === null, 401, 'Authentication required.');

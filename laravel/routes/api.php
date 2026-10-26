@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\BranchController;
 use App\Http\Controllers\Api\V1\ClinicalExamController;
 use App\Http\Controllers\Api\V1\ClinicalFinalizationController;
 use App\Http\Controllers\Api\V1\ClinicalReasonAdoptionController;
+use App\Http\Controllers\Api\V1\ClinicalReasonReadController;
 use App\Http\Controllers\Api\V1\ClinicalReportController;
 use App\Http\Controllers\Api\V1\CommercialClientController;
 use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\Api\V1\SaasAccessController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
 use Illuminate\Support\Facades\Route;
+use Spatie\Permission\Middleware\PermissionMiddleware;
 
 Route::prefix('v1')->group(function (): void {
     Route::prefix('platform/clinical-reasons')->middleware(['auth:sanctum', 'user.active'])->group(function (): void {
@@ -72,6 +74,7 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::middleware('saas')->group(function (): void {
+        Route::get('/laboratory/clinical-reasons', ClinicalReasonReadController::class)->middleware(PermissionMiddleware::using(['clinical_reasons.adoptions.view', 'clinical_reasons.local.view']));
         Route::get('/laboratory/clinical-reasons/local', [LocalClinicalReasonController::class, 'index'])->middleware('can:clinical_reasons.local.view');
         Route::post('/laboratory/clinical-reasons/local', [LocalClinicalReasonController::class, 'store'])->middleware('can:clinical_reasons.local.create');
         Route::get('/laboratory/clinical-reasons/local/{reason}', [LocalClinicalReasonController::class, 'show'])->middleware('can:clinical_reasons.local.view')->whereNumber('reason');

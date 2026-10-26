@@ -5,6 +5,7 @@ namespace App\ClinicalFinalization;
 use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\ClinicalExams\ClinicalConflict;
+use App\ClinicalExams\ClinicalReasonEligibilityPolicy;
 use App\ClinicalValidation\ValidationAuthority;
 use App\Models\ClinicalExceptionDecision;
 use App\Models\ClinicalExceptionLocalReasonReference;
@@ -24,7 +25,7 @@ use Illuminate\Validation\ValidationException;
 
 final class ClinicalResolutionService
 {
-    public function __construct(private AuditWriter $audit, private ValidationAuthority $authority, private ClinicalExceptionReasonGuard $reasons) {}
+    public function __construct(private AuditWriter $audit, private ValidationAuthority $authority, private ClinicalExceptionReasonGuard $reasons, private ClinicalReasonEligibilityPolicy $eligibility) {}
 
     public function requestException(Laboratory $lab, User $actor, int $orderId, int $lineId, array $input): array
     {
@@ -125,16 +126,22 @@ final class ClinicalResolutionService
 
     public function exceptions(Laboratory $lab, User $actor, int $orderId, int $lineId): array
     {
-        $this->authority->permission($lab, $actor, 'orders.clinical_exceptions.view');
-        LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->firstOrFail();
-        LaboratoryOrderExam::forLaboratory($lab)->where('laboratory_order_id', $orderId)->whereKey($lineId)->firstOrFail();
-        $page = ClinicalExceptionRequest::forLaboratory($lab)->where('laboratory_order_exam_id', $lineId)->orderByDesc('id')->paginate(50);
-        $decisions = ClinicalExceptionDecision::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->get()->keyBy('exception_request_id');
+        return DB::transaction(function () use ($lab, $actor, $orderId, $lineId): array {
+            $this->reasons->lock();
+            $this->authority->permission($lab, $actor, 'orders.clinical_exceptions.view');
+            LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->firstOrFail();
+            LaboratoryOrderExam::forLaboratory($lab)->where('laboratory_order_id', $orderId)->whereKey($lineId)->firstOrFail();
+            $page = ClinicalExceptionRequest::forLaboratory($lab)->where('laboratory_order_exam_id', $lineId)->orderByDesc('id')->paginate(50);
+            $decisions = ClinicalExceptionDecision::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->get()->keyBy('exception_request_id');
 
-        $references = ClinicalExceptionReasonReference::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->with('version')->get()->keyBy('exception_request_id');
-        $references = $references->union(ClinicalExceptionLocalReasonReference::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->with('version')->get()->keyBy('exception_request_id'));
+            $references = ClinicalExceptionReasonReference::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->with('version')->get()->keyBy('exception_request_id');
+            $references = $references->union(ClinicalExceptionLocalReasonReference::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->with('version')->get()->keyBy('exception_request_id'));
 
-        return ['data' => $page->map(fn ($r) => $r->toArray() + ['decision' => $decisions->get($r->id)?->toArray(), 'reason_reference' => $references->get($r->id)?->representation()])->all(), 'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'per_page' => 50, 'total' => $page->total()]];
+            $pending = $page->where('status', 'pending')->pluck('id')->all();
+            $statuses = app(ClinicalReasonEligibilityPolicy::class)->approvalStatuses($lab, $references->toBase()->only($pending));
+
+            return ['data' => $page->map(fn ($r) => $r->toArray() + ['decision' => $decisions->get($r->id)?->toArray(), 'reason_reference' => $references->get($r->id)?->representation(), 'reason_eligibility' => $statuses[$r->id] ?? null])->all(), 'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'per_page' => 50, 'total' => $page->total()]];
+        });
     }
 
     public function finalizeOrder(Laboratory $lab, User $actor, int $orderId, array $input): array

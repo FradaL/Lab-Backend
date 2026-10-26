@@ -311,3 +311,11 @@ El health check responde HTTP 200 con:
 ```
 
 Los endpoints disponibles para autenticación son `POST /api/v1/auth/login`, `GET /api/v1/auth/me` y `POST /api/v1/auth/logout`.
+
+### Lecturas compartidas de motivos clínicos
+
+BE-EXC-02.5 incorpora GET `/api/v1/laboratory/clinical-reasons` para globales adoptados y locales del contexto autorizado, con referencia lista para BE08, elegibilidad informativa, filtros y paginación. Se reutilizan los permisos existentes por origen; el backend revalida al escribir. [Contratos y guía de integración](docs/sprint-2/BE-EXC-02.5-contratos-lectura.md) detallan los campos aditivos de pendientes, elegibilidad global y capacidades propias SaaS. Sin frontend ni aplicación de migraciones a entornos reales.
+
+## Validación integral del catálogo clínico
+
+[BE-EXC-02.6 — auditoría y recomendación de cierre técnico](docs/sprint-2/BE-EXC-02.6-validacion-integral.md) registra la suite completa en PostgreSQL, aislamiento, autoridades, integridad, concurrencia, contratos y medición. El cierre técnico del catálogo se distingue del alcance pendiente de evidencia, viabilidad, incidentes e informes BE-EXC-03/04/05; la decisión administrativa corresponde al Product Owner.

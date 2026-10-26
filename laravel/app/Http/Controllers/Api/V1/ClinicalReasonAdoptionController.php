@@ -65,7 +65,7 @@ final class ClinicalReasonAdoptionController extends Controller
 
     public function eligibility(Request $request, int $adoption): JsonResponse
     {
-        return response()->json(['data' => $this->eligibility->eligibility($this->current->get(), $request->user(), $adoption)]);
+        return response()->json(['data' => $this->eligibility->eligibility($this->current->get(), $request->user(), $adoption)])->header('Cache-Control', 'private, no-store');
     }
 
     public function reviews(Request $request, int $adoption): JsonResponse

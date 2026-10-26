@@ -37,7 +37,7 @@ final class ClinicalExceptionReasonGuard
             }
             $version = LaboratoryClinicalReasonVersion::forLaboratory($lab)->where('reason_id', $reference['reason_id'])->findOrFail($reference['version_id']);
             $eligibility = $this->policy->assertLocalAllowed($lab, $actor, $reference['reason_id'], $reference['version_id'], 'request');
-            $this->terminalCandidate($version);
+            $this->policy->assertTerminalCandidate($version);
 
             return [$version, $eligibility];
         }
@@ -53,7 +53,7 @@ final class ClinicalExceptionReasonGuard
         }
         $version = GlobalClinicalReasonVersion::where('reason_id', $reference['reason_id'])->findOrFail($reference['version_id']);
         $this->policy->assertAllowed($lab, $actor, $adoption->id, 'request');
-        $this->terminalCandidate($version);
+        $this->policy->assertTerminalCandidate($version);
 
         return [$version, $this->evidence($adoption->id, $adoption->reason_id)];
     }
@@ -63,7 +63,7 @@ final class ClinicalExceptionReasonGuard
         $reference = $this->reference($lab, $request->id);
         if ($reference instanceof ClinicalExceptionLocalReasonReference) {
             $eligibility = $this->policy->assertLocalAllowed($lab, $actor, $reference->reason_id, $reference->version_id, 'approve', $request->id);
-            $this->terminalCandidate($reference->version);
+            $this->policy->assertTerminalCandidate($reference->version);
 
             return ['reference' => $reference, 'eligibility' => $eligibility];
         }
@@ -75,7 +75,7 @@ final class ClinicalExceptionReasonGuard
             return ['reference' => null, 'eligibility' => ['source' => 'pre_integration_request', 'exception_request_id' => $request->id]];
         }
         $this->policy->assertAllowed($lab, $actor, $reference->adoption_id, 'approve');
-        $this->terminalCandidate($reference->version);
+        $this->policy->assertTerminalCandidate($reference->version);
 
         return ['reference' => $reference, 'eligibility' => $this->evidence($reference->adoption_id, $reference->reason_id)];
     }
@@ -92,13 +92,6 @@ final class ClinicalExceptionReasonGuard
     {
         return ClinicalExceptionReasonReference::forLaboratory($lab)->where('exception_request_id', $requestId)->with('version')->first()
             ?? ClinicalExceptionLocalReasonReference::forLaboratory($lab)->where('exception_request_id', $requestId)->with('version')->first();
-    }
-
-    private function terminalCandidate(GlobalClinicalReasonVersion|LaboratoryClinicalReasonVersion $version): void
-    {
-        if ($version->classification !== 'terminal_candidate') {
-            throw new ClinicalConflict('clinical_reason_not_terminal', 'An incidence-only reason cannot request a definitive exception resolution.');
-        }
     }
 
     private function evidence(int $adoptionId, int $reasonId): array
