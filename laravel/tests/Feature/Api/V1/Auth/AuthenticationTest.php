@@ -139,6 +139,7 @@ class AuthenticationTest extends TestCase
             ->assertOk()
             ->assertExactJson([
                 'data' => [
+                    'saas_capabilities' => [],
                     'user' => [
                         'id' => $user->id,
                         'name' => 'Administrador Demo',

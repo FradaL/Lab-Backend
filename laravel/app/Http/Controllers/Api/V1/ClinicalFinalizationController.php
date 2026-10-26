@@ -19,7 +19,7 @@ final class ClinicalFinalizationController extends Controller
 
     public function exceptions(Request $r, int $order, int $line): JsonResponse
     {
-        return response()->json($this->service->exceptions($this->current->get(), $r->user(), $order, $line));
+        return response()->json($this->service->exceptions($this->current->get(), $r->user(), $order, $line))->header('Cache-Control', 'private, no-store');
     }
 
     public function approve(Request $r, int $order, int $line, int $exception): JsonResponse

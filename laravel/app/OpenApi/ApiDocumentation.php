@@ -113,7 +113,7 @@ use OpenApi\Attributes as OA;
         new OA\Property(
             property: 'data',
             required: ['user'],
-            properties: [new OA\Property(property: 'user', ref: '#/components/schemas/AuthenticatedUser')],
+            properties: [new OA\Property(property: 'user', ref: '#/components/schemas/AuthenticatedUser'), new OA\Property(property: 'saas_capabilities', type: 'array', items: new OA\Items(type: 'string'), description: 'Sólo códigos efectivos de la propia cuenta; no concede facultades ni expone concesiones ajenas.')],
             type: 'object',
         ),
     ],

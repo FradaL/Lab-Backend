@@ -6,11 +6,15 @@ use App\Http\Controllers\Api\V1\Auth\CurrentAuthorizationController;
 use App\Http\Controllers\Api\V1\BranchController;
 use App\Http\Controllers\Api\V1\ClinicalExamController;
 use App\Http\Controllers\Api\V1\ClinicalFinalizationController;
+use App\Http\Controllers\Api\V1\ClinicalReasonAdoptionController;
+use App\Http\Controllers\Api\V1\ClinicalReasonReadController;
 use App\Http\Controllers\Api\V1\ClinicalReportController;
 use App\Http\Controllers\Api\V1\CommercialClientController;
 use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DoctorController;
+use App\Http\Controllers\Api\V1\GlobalClinicalReasonController;
+use App\Http\Controllers\Api\V1\GlobalClinicalReasonImpactController;
 use App\Http\Controllers\Api\V1\LaboratoryAreaController;
 use App\Http\Controllers\Api\V1\LaboratoryExamController;
 use App\Http\Controllers\Api\V1\LaboratoryOrderController;
@@ -19,17 +23,40 @@ use App\Http\Controllers\Api\V1\LaboratoryRoleController;
 use App\Http\Controllers\Api\V1\LaboratorySampleController;
 use App\Http\Controllers\Api\V1\LaboratoryUserController;
 use App\Http\Controllers\Api\V1\LaboratoryUserInvitationController;
+use App\Http\Controllers\Api\V1\LocalClinicalReasonController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PriceListController;
 use App\Http\Controllers\Api\V1\PriceListExamController;
 use App\Http\Controllers\Api\V1\PricingResolutionController;
 use App\Http\Controllers\Api\V1\ReportDeliveryController;
 use App\Http\Controllers\Api\V1\ResultValidationController;
+use App\Http\Controllers\Api\V1\SaasAccessController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
 use Illuminate\Support\Facades\Route;
+use Spatie\Permission\Middleware\PermissionMiddleware;
 
 Route::prefix('v1')->group(function (): void {
+    Route::prefix('platform/clinical-reasons')->middleware(['auth:sanctum', 'user.active'])->group(function (): void {
+        Route::get('/{reason}/versions/{version}/impact', [GlobalClinicalReasonImpactController::class, 'show'])->whereNumber(['reason', 'version'])->middleware('saas.capability:saas.clinical_reasons.classify_impact');
+        Route::get('/{reason}/versions/{version}/impact/declarations', [GlobalClinicalReasonImpactController::class, 'history'])->whereNumber(['reason', 'version'])->middleware('saas.capability:saas.clinical_reasons.classify_impact');
+        Route::post('/{reason}/versions/{version}/impact/declarations', [GlobalClinicalReasonImpactController::class, 'store'])->whereNumber(['reason', 'version'])->middleware('saas.capability:saas.clinical_reasons.classify_impact');
+        Route::get('/', [GlobalClinicalReasonController::class, 'index'])->middleware('saas.capability:saas.clinical_reasons.view');
+        Route::post('/', [GlobalClinicalReasonController::class, 'store'])->middleware('saas.capability:saas.clinical_reasons.create');
+        Route::get('/{reason}', [GlobalClinicalReasonController::class, 'show'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.view');
+        Route::get('/{reason}/versions', [GlobalClinicalReasonController::class, 'history'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.view');
+        Route::get('/{reason}/events', [GlobalClinicalReasonController::class, 'events'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.view');
+        Route::post('/{reason}/versions', [GlobalClinicalReasonController::class, 'publish'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.publish');
+        Route::post('/{reason}/activation', [GlobalClinicalReasonController::class, 'activation'])->whereNumber('reason')->middleware('saas.capability:saas.clinical_reasons.manage');
+    });
+    Route::prefix('platform/access')->middleware(['auth:sanctum', 'user.active', 'saas.capability:saas.access.manage'])->group(function (): void {
+        Route::get('/capabilities', [SaasAccessController::class, 'capabilities']);
+        Route::get('/users', [SaasAccessController::class, 'users']);
+        Route::get('/users/{user}/capabilities', [SaasAccessController::class, 'assignments'])->whereNumber('user');
+        Route::post('/users/{user}/capabilities', [SaasAccessController::class, 'grant'])->whereNumber('user');
+        Route::post('/users/{user}/capabilities/{assignment}/revoke', [SaasAccessController::class, 'revoke'])->whereNumber(['user', 'assignment']);
+        Route::get('/history', [SaasAccessController::class, 'history']);
+    });
     Route::get('/health', HealthCheckController::class);
     Route::get('/report-verifications/{token}', [ClinicalReportController::class, 'verify'])->middleware('throttle:report-verification');
     Route::post('/laboratory-user-invitations/{token}/accept', LaboratoryUserInvitationController::class)
@@ -47,6 +74,31 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::middleware('saas')->group(function (): void {
+        Route::get('/laboratory/clinical-reasons', ClinicalReasonReadController::class)->middleware(PermissionMiddleware::using(['clinical_reasons.adoptions.view', 'clinical_reasons.local.view']));
+        Route::get('/laboratory/clinical-reasons/local', [LocalClinicalReasonController::class, 'index'])->middleware('can:clinical_reasons.local.view');
+        Route::post('/laboratory/clinical-reasons/local', [LocalClinicalReasonController::class, 'store'])->middleware('can:clinical_reasons.local.create');
+        Route::get('/laboratory/clinical-reasons/local/{reason}', [LocalClinicalReasonController::class, 'show'])->middleware('can:clinical_reasons.local.view')->whereNumber('reason');
+        Route::get('/laboratory/clinical-reasons/local/{reason}/versions', [LocalClinicalReasonController::class, 'history'])->middleware('can:clinical_reasons.local.history')->whereNumber('reason');
+        Route::get('/laboratory/clinical-reasons/local/{reason}/events', [LocalClinicalReasonController::class, 'events'])->middleware('can:clinical_reasons.local.history')->whereNumber('reason');
+        Route::post('/laboratory/clinical-reasons/local/{reason}/versions', [LocalClinicalReasonController::class, 'publish'])->middleware('can:clinical_reasons.local.publish')->whereNumber('reason');
+        Route::post('/laboratory/clinical-reasons/local/{reason}/activation', [LocalClinicalReasonController::class, 'activation'])->middleware('can:clinical_reasons.local.manage')->whereNumber('reason');
+        Route::get('/laboratory/clinical-reasons/local/{reason}/reviews', [LocalClinicalReasonController::class, 'reviews'])->middleware('can:clinical_reasons.local.view')->whereNumber('reason');
+        Route::post('/laboratory/clinical-reasons/local/{reason}/reviews/{review}/resolutions', [LocalClinicalReasonController::class, 'resolve'])->middleware('can:clinical_reasons.review_impact')->whereNumber(['reason', 'review']);
+        Route::get('/laboratory/clinical-reasons/local/{reason}/reviews/{review}/resolutions', [LocalClinicalReasonController::class, 'resolutions'])->middleware('can:clinical_reasons.local.history')->whereNumber(['reason', 'review']);
+
+        Route::get('/laboratory/clinical-reasons/global', [ClinicalReasonAdoptionController::class, 'catalog'])->middleware('can:clinical_reasons.global.view');
+        Route::get('/laboratory/clinical-reasons/global/{reason}', [ClinicalReasonAdoptionController::class, 'globalDetail'])->middleware('can:clinical_reasons.global.view')->whereNumber(['reason']);
+        Route::get('/laboratory/clinical-reasons/global/{reason}/versions', [ClinicalReasonAdoptionController::class, 'globalVersions'])->middleware('can:clinical_reasons.global.view')->whereNumber(['reason']);
+        Route::get('/laboratory/clinical-reason-adoptions', [ClinicalReasonAdoptionController::class, 'index'])->middleware('can:clinical_reasons.adoptions.view');
+        Route::post('/laboratory/clinical-reason-adoptions', [ClinicalReasonAdoptionController::class, 'adopt'])->middleware('can:clinical_reasons.adoptions.create');
+        Route::post('/laboratory/clinical-reason-adoptions/{adoption}/versions', [ClinicalReasonAdoptionController::class, 'update'])->middleware('can:clinical_reasons.adoptions.update')->whereNumber(['adoption']);
+        Route::get('/laboratory/clinical-reason-adoptions/{adoption}/versions', [ClinicalReasonAdoptionController::class, 'history'])->middleware('can:clinical_reasons.adoptions.history')->whereNumber(['adoption']);
+        Route::get('/laboratory/clinical-reason-adoptions/{adoption}/updates', [ClinicalReasonAdoptionController::class, 'updates'])->middleware('can:clinical_reasons.adoptions.view')->whereNumber(['adoption']);
+        Route::get('/laboratory/clinical-reason-adoptions/{adoption}/eligibility', [ClinicalReasonAdoptionController::class, 'eligibility'])->middleware('can:clinical_reasons.adoptions.view')->whereNumber(['adoption']);
+        Route::get('/laboratory/clinical-reason-adoptions/{adoption}/reviews', [ClinicalReasonAdoptionController::class, 'reviews'])->middleware('can:clinical_reasons.adoptions.view')->whereNumber(['adoption']);
+        Route::post('/laboratory/clinical-reason-adoptions/{adoption}/reviews/{review}/resolutions', [ClinicalReasonAdoptionController::class, 'resolve'])->middleware('can:clinical_reasons.review_impact')->whereNumber(['adoption', 'review']);
+        Route::get('/laboratory/clinical-reason-adoptions/{adoption}/reviews/{review}/resolutions', [ClinicalReasonAdoptionController::class, 'resolutions'])->middleware('can:clinical_reasons.adoptions.history')->whereNumber(['adoption', 'review']);
+
         Route::get('/laboratory/users', [LaboratoryUserController::class, 'index'])->middleware('can:users.view');
         Route::post('/laboratory/users', [LaboratoryUserController::class, 'store'])->middleware('can:users.create');
         Route::get('/laboratory/users/{user}', [LaboratoryUserController::class, 'show'])->middleware('can:users.view')->whereNumber('user');

@@ -366,7 +366,7 @@ final class LaboratoryOrderExamStoreTest extends TestCase
         )));
 
         $this->assertSame(['get', 'post'], array_keys($path));
-        $this->assertSame(137, $operationCount);
+        $this->assertSame(176, $operationCount);
         $this->assertSame(['laboratory_exam_id'], $schema['required']);
         $this->assertSame(['laboratory_exam_id'], array_keys($schema['properties']));
         $this->assertFalse($schema['additionalProperties']);

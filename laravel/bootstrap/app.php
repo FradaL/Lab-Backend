@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureActiveSubscription;
 use App\Http\Middleware\EnsureActiveUser;
+use App\Http\Middleware\EnsureSaasCapability;
 use App\Http\Middleware\ResolveLaboratoryContext;
 use App\Http\Middleware\SetPermissionTeamContext;
 use Illuminate\Foundation\Application;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trimStrings(except: [$resultInput]);
         $middleware->convertEmptyStringsToNull(except: [$resultInput]);
         $middleware->alias([
+            'saas.capability' => EnsureSaasCapability::class,
             'user.active' => EnsureActiveUser::class,
             'laboratory.context' => ResolveLaboratoryContext::class,
             'permission.team' => SetPermissionTeamContext::class,

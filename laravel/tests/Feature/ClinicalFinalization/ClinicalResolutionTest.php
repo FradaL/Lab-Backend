@@ -22,7 +22,7 @@ class ClinicalResolutionTest extends TestCase
         $approver = $this->createLaboratoryMember($lab);
         $this->assignDirectLaboratoryPermissions($approver, $lab, ['orders.clinical_exceptions.approve']);
         $service = app(ClinicalResolutionService::class);
-        $request = $service->requestException($lab, $requester, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason' => 'FICTICIO: imposibilidad documentada']);
+        $request = $service->requestException($lab, $requester, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => $this->exceptionReference($lab, $requester), 'justification' => 'FICTICIO: imposibilidad documentada']);
         $result = $service->decideException($lab, $approver, $order->id, $line->id, $request['exception']['id'], true, ['clinical_revision' => $request['clinical_revision'], 'request_revision' => 1]);
         $this->assertSame('approved', $result['exception']['status']);
         $this->assertSame('authorized_exception', ClinicalLineResolution::sole()->resolution_type);
@@ -51,7 +51,7 @@ class ClinicalResolutionTest extends TestCase
         $reviewer = $this->createLaboratoryMember($lab);
         $this->assignDirectLaboratoryPermissions($reviewer, $lab, ['orders.clinical_exceptions.approve']);
         $service = app(ClinicalResolutionService::class);
-        $r = $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason' => 'FICTICIO: material no disponible']);
+        $r = $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => $this->exceptionReference($lab, $actor), 'justification' => 'FICTICIO: material no disponible']);
         $service->decideException($lab, $reviewer, $order->id, $line->id, $r['exception']['id'], true, ['clinical_revision' => $r['clinical_revision'], 'request_revision' => 1]);
         $before = $order->fresh()->only(['subtotal', 'discount', 'taxes', 'total', 'currency']);
         $service->finalizeOrder($lab, $actor, $order->id, ['clinical_revision' => $order->fresh()->clinical_revision]);

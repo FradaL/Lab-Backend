@@ -42,6 +42,7 @@ class ClinicalFinalizationConcurrencyTest extends TestCase
         $service = app(ClinicalResolutionService::class);
         $reviewer = $this->createLaboratoryMember($lab);
         $this->assignDirectLaboratoryPermissions($reviewer, $lab, RbacCatalog::PERMISSIONS);
+        $reasonReference = $this->exceptionReference($lab, $actor);
         $requestId = null;
         $resultRevision = 0;
         if ($setup === 'validated') {
@@ -53,14 +54,14 @@ class ClinicalFinalizationConcurrencyTest extends TestCase
                 $resultRevision = 2;
             }
         } else {
-            $request = $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason' => 'FICTICIO']);
+            $request = $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => $reasonReference, 'justification' => 'FICTICIO']);
             $requestId = $request['exception']['id'];
             if ($setup === 'resolved') {
                 $service->decideException($lab, $reviewer, $order->id, $line->id, $requestId, true, ['clinical_revision' => $request['clinical_revision'], 'request_revision' => 1]);
             }
         }
         $revision = $order->fresh()->clinical_revision;
-        $operation = function (string $op) use ($service, $lab, $actor, $reviewer, $order, $line, $requestId, $revision, $resultRevision): void {
+        $operation = function (string $op) use ($service, $lab, $actor, $reviewer, $order, $line, $requestId, $revision, $resultRevision, $reasonReference): void {
             match ($op) {
                 'line' => $service->finalizeLine($lab, $actor, $order->id, $line->id, ['clinical_revision' => $revision, 'result_revision' => $resultRevision]),
                 'close' => $service->finalizeOrder($lab, $actor, $order->id, ['clinical_revision' => $revision]),
@@ -71,7 +72,7 @@ class ClinicalFinalizationConcurrencyTest extends TestCase
                 'add' => app(AddExamToLaboratoryOrder::class)->execute($lab, $order->id, $line->laboratory_exam_id, $actor),
                 'remove' => app(RemoveExamFromLaboratoryOrder::class)->execute($lab, $order->id, $line->id, $actor),
                 'cancel' => app(TransitionLaboratoryOrderStatus::class)->execute($lab, $order->id, 'cancelled', $actor),
-                'request' => $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $revision, 'result_revision' => 1, 'reason' => 'FICTICIO']),
+                'request' => $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $revision, 'result_revision' => 1, 'reason_reference' => $reasonReference, 'justification' => 'FICTICIO']),
                 default => null,
             };
         };

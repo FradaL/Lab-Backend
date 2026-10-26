@@ -13,9 +13,15 @@ use App\Models\LaboratoryOrder;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
 use App\Models\Subscription;
+use Tests\Support\StructuredClinicalReasonFixture;
 
 trait ClinicalResultScenario
 {
+    protected function exceptionReference($lab, $actor, string $name = 'FICTICIO'): array
+    {
+        return StructuredClinicalReasonFixture::forLaboratory($lab, $actor, $name);
+    }
+
     protected function scenario(bool $start = true, array $parameterOverrides = []): array
     {
         $lab = Laboratory::factory()->create();
