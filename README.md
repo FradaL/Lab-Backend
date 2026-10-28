@@ -67,6 +67,8 @@ Las solicitudes clínicas nuevas requieren una referencia estructurada y justifi
 
 Sin catálogo/configuración válidos, `db:seed` falla con diagnóstico y revierte el dataset; no se generan solicitudes de texto libre. El contrato, la nueva migración (sin aplicación automática a desarrollo/producción), la compatibilidad histórica y las pruebas están en [BE-EXC-02.3-I](docs/sprint-2/BE-EXC-02.3-I-integracion-clinica.md). Las solicitudes anteriores conservan su texto e historia, sin inferir motivos por nombre; BE-EXC-02.4 añade [administración e integración local](docs/sprint-2/BE-EXC-02.4-motivos-locales.md) con versión original y revisión explícita, sin adopción ni impacto SaaS. El dataset demo conserva su configuración global explícita.
 
+Para integrar **FE-EXC-01 / CA-20**, está disponible un [procedimiento de catálogo DEMO aislado](docs/sprint-2/FE-EXC-01-datos-demo.md): crea 51 motivos y 56 versiones mediante dos identidades SaaS sintéticas autorizadas, en la base desechable `donqer_exc_demo`. Incluye un owner sintético para consumo frontend en `http://localhost:8086`, confirmación explícita, auditoría e idempotencia. Su Compose y el comando `demo:clinical-reasons` se ejecutan expresamente siguiendo esa guía.
+
 ## Usuarios demo
 
 Los seeders crean dos usuarios exclusivamente para desarrollo local:
