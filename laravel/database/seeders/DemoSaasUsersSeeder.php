@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Authorization\SaasAccessAuthority;
+use App\ClinicalExams\GlobalClinicalReasonImpactManager as Impact;
 use App\ClinicalExams\GlobalClinicalReasonManager as Catalog;
 use App\Models\SaasCapabilityAssignment;
 use App\Models\User;
@@ -14,7 +15,7 @@ use RuntimeException;
 
 final class DemoSaasUsersSeeder extends Seeder
 {
-    /** Explicit capabilities: no wildcard, inheritance, access administration or impact classification. */
+    /** Explicit capabilities: no wildcard, inheritance or access administration. */
     public static function profiles(): array
     {
         $full = [Catalog::VIEW, Catalog::CREATE, Catalog::PUBLISH, Catalog::MANAGE];
@@ -28,6 +29,7 @@ final class DemoSaasUsersSeeder extends Seeder
             'demo-saas-full' => $full,
             'demo-saas-mixed' => $full,
             'demo-no-access' => [],
+            'demo-saas-impact' => [Impact::CAPABILITY, Catalog::VIEW],
         ];
     }
 
