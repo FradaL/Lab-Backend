@@ -35,7 +35,8 @@ class DemoDevelopmentSeederTest extends TestCase
     {
         $tables = ['users', 'laboratories', 'laboratory_user', 'roles', 'model_has_roles', 'role_has_permissions',
             'subscriptions', 'saas_capability_assignments', 'saas_audit_logs', 'global_clinical_reasons',
-            'global_clinical_reason_versions', 'clinical_reason_adoptions', 'clinical_reason_adoption_versions', 'audit_logs', 'demo_dataset_records'];
+            'global_clinical_reason_versions', 'global_clinical_reason_impacts', 'clinical_reason_impact_reviews',
+            'clinical_reason_adoptions', 'clinical_reason_adoption_versions', 'audit_logs', 'demo_dataset_records'];
         $snapshot = [];
         foreach ($tables as $table) {
             $snapshot[$table] = DB::table($table)->get()->toJson();
@@ -44,7 +45,7 @@ class DemoDevelopmentSeederTest extends TestCase
         return $snapshot;
     }
 
-    public function test_eight_profiles_login_through_sanctum_and_have_exact_access_and_memberships(): void
+    public function test_nine_profiles_login_through_sanctum_and_have_exact_access_and_memberships(): void
     {
         $this->provision();
         $full = ['saas.clinical_reasons.create', 'saas.clinical_reasons.manage', 'saas.clinical_reasons.publish', 'saas.clinical_reasons.view'];
@@ -57,6 +58,7 @@ class DemoDevelopmentSeederTest extends TestCase
             'demo-saas-full' => [$full, 0],
             'demo-saas-mixed' => [$full, 1],
             'demo-no-access' => [[], 0],
+            'demo-saas-impact' => [['saas.clinical_reasons.classify_impact', 'saas.clinical_reasons.view'], 0],
         ];
         $this->withHeader('Origin', 'http://localhost:5173');
         $this->getJson('/api/v1/auth/me')->assertUnauthorized();
@@ -72,12 +74,86 @@ class DemoDevelopmentSeederTest extends TestCase
             $this->postJson('/api/v1/auth/logout')->assertOk();
             Auth::forgetGuards();
         }
-        $this->assertDatabaseCount('users', 10); // Eight frontend profiles plus two private service actors.
+        $this->assertDatabaseCount('users', 11); // Nine frontend profiles plus two private service actors.
         $this->assertDatabaseCount('laboratory_user', 3);
-        $this->assertDatabaseCount('saas_audit_logs', 73);
-        $this->assertDatabaseCount('saas_capability_assignments', 17);
+        $this->assertDatabaseCount('saas_audit_logs', 75);
+        $this->assertDatabaseCount('saas_capability_assignments', 19);
         $before = $this->snapshot();
         $this->provision();
+        $this->assertSame($before, $this->snapshot());
+    }
+
+    public function test_impact_profile_can_read_and_classify_but_cannot_publish_manage_or_grant(): void
+    {
+        $this->provision();
+        $user = User::where('email', 'demo-saas-impact@donqerlab.test')->sole();
+        $actor = User::where('email', 'exc-demo-a@donqerlab.test')->sole();
+        $grants = SaasCapabilityAssignment::where('user_id', $user->id)->get();
+        $this->assertCount(2, $grants);
+        foreach ($grants as $grant) {
+            $this->assertSame($actor->id, $grant->granted_by);
+            $this->assertNotSame($user->id, $grant->granted_by);
+            $this->assertDatabaseHas('saas_audit_logs', ['id' => $grant->grant_audit_id,
+                'actor_id' => $actor->id, 'affected_user_id' => $user->id, 'action' => 'saas.access.granted']);
+        }
+        $base = '/api/v1/platform/clinical-reasons';
+        $this->actingAs($user);
+        $reason = collect($this->getJson($base)->assertOk()->json('data'))->firstWhere('code', 'demo_exc_003');
+        $id = $reason['id'];
+        $this->getJson($base.'/'.$id)->assertOk();
+        $version = $this->getJson($base.'/'.$id.'/versions')->assertOk()->json('data.0.id');
+        $this->getJson($base.'/'.$id.'/events')->assertOk();
+        $impact = $base.'/'.$id.'/versions/'.$version.'/impact';
+        $this->getJson($impact)->assertOk()->assertJsonPath('data.classification', 'unclassified')->assertJsonPath('data.declaration', null);
+        $body = ['expected_revision' => 0, 'classification' => 'non_restrictive', 'justification' => 'FICTICIO: prueba de Cristian.'];
+        $this->postJson($impact.'/declarations', $body)->assertCreated()->assertJsonPath('data.revision', 1)->assertJsonPath('data.created_by', $user->id);
+        $this->getJson($impact)->assertOk()->assertJsonPath('data.classification', 'non_restrictive');
+        $this->getJson($impact.'/declarations')->assertOk()->assertJsonPath('meta.total', 1);
+        $this->postJson($impact.'/declarations', $body)->assertConflict();
+        $this->postJson($base, [])->assertForbidden();
+        $this->postJson($base.'/'.$id.'/versions', [])->assertForbidden();
+        $this->postJson($base.'/'.$id.'/activation', [])->assertForbidden();
+        $this->getJson('/api/v1/platform/access/users')->assertForbidden();
+        $this->postJson('/api/v1/platform/access/users/'.$user->id.'/capabilities', [
+            'capability' => 'saas.access.manage', 'reason' => 'FICTICIO autoconcesión prohibida',
+        ])->assertForbidden();
+        foreach (array_diff(array_keys(DemoSaasUsersSeeder::profiles()), ['demo-saas-impact']) as $profile) {
+            $this->actingAs(User::where('email', $profile.'@donqerlab.test')->sole());
+            $this->getJson($impact)->assertForbidden();
+            $this->getJson($impact.'/declarations')->assertForbidden();
+            $this->postJson($impact.'/declarations', $body)->assertForbidden();
+        }
+        $before = $this->snapshot();
+        $this->provision();
+        $this->assertSame($before, $this->snapshot());
+    }
+
+    public function test_impact_revocation_via_official_api_is_immediate_and_not_repaired(): void
+    {
+        $this->provision();
+        $user = User::where('email', 'demo-saas-impact@donqerlab.test')->sole();
+        $actor = User::where('email', 'exc-demo-a@donqerlab.test')->sole();
+        $base = '/api/v1/platform/access/users/'.$user->id.'/capabilities';
+        $assignments = $this->actingAs($actor)->getJson($base)->assertOk()->json('data');
+        $grant = collect($assignments)->firstWhere('capability_code', 'saas.clinical_reasons.classify_impact');
+        $this->postJson($base.'/'.$grant['id'].'/revoke', [
+            'revision' => $grant['revision'], 'reason' => 'FICTICIO: fin de prueba de Cristian.',
+        ])->assertOk();
+        $this->actingAs($user)->getJson('/api/v1/auth/me')->assertOk()
+            ->assertJsonPath('data.saas_capabilities', ['saas.clinical_reasons.view']);
+        $reason = GlobalClinicalReason::where('code', 'demo_exc_003')->sole();
+        $impact = '/api/v1/platform/clinical-reasons/'.$reason->id.'/versions/'.$reason->latestVersion->id.'/impact';
+        $this->getJson($impact)->assertForbidden();
+        $this->getJson($impact.'/declarations')->assertForbidden();
+        $this->postJson($impact.'/declarations', [])->assertForbidden();
+        $this->getJson('/api/v1/platform/clinical-reasons')->assertOk();
+        $before = $this->snapshot();
+        try {
+            $this->provision();
+            $this->fail('Revoked classification must never be restored.');
+        } catch (LogicException $error) {
+            $this->assertStringContainsString('automatic repair is forbidden', $error->getMessage());
+        }
         $this->assertSame($before, $this->snapshot());
     }
 
@@ -206,7 +282,7 @@ class DemoDevelopmentSeederTest extends TestCase
     public function test_failure_in_new_profile_audit_rolls_back_catalog_and_profiles(): void
     {
         SaasAuditLog::created(function (SaasAuditLog $event): void {
-            if ($event->action === 'saas.access.granted' && User::find($event->affected_user_id)?->email === 'demo-saas-create@donqerlab.test') {
+            if ($event->action === 'saas.access.granted' && User::find($event->affected_user_id)?->email === 'demo-saas-impact@donqerlab.test') {
                 throw new RuntimeException('Injected profile audit failure.');
             }
         });

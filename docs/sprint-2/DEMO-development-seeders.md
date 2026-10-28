@@ -1,6 +1,6 @@
 # DEMO de desarrollo — FE-EXC-01 y FE-SaaS-02
 
-## Ejecución para Sara y Atziry
+## Ejecución para Sara, Atziry y Cristian
 
 Desde la raíz de `backend-lab`, con Docker, la imagen local `donqer-lab-workspace`
 y las dependencias `laravel/vendor` instaladas:
@@ -29,7 +29,7 @@ Para repetir, ejecutar el mismo script con **la contraseña original**. Las
 contraseñas existentes no se cambian; un secreto distinto rechaza toda la operación.
 No hay una contraseña predeterminada ni un mecanismo para recuperar su texto
 original desde la BD: conservarla en el gestor de contraseñas del equipo y
-compartirla con Sara/Atziry mediante ese canal autorizado.
+compartirla con Sara/Atziry/Cristian mediante ese canal autorizado.
 
 ## Ocho perfiles y credenciales
 
@@ -47,7 +47,8 @@ La matriz fue confirmada expresamente por el solicitante para FE-SaaS-02.
 | 7. Mixto | `demo-saas-mixed@donqerlab.test` | 1 | Las cuatro anteriores |
 | 8. Sin accesos | `demo-no-access@donqerlab.test` | 0 | `[]` |
 
-Ninguno recibe `saas.access.manage` ni `saas.clinical_reasons.classify_impact`.
+Ninguno de los ocho perfiles anteriores recibe `saas.access.manage` ni
+`saas.clinical_reasons.classify_impact`. Su matriz permanece intacta.
 `manage` sólo permite activar/desactivar motivos; no administra concesiones SaaS.
 
 Hay además dos identidades auxiliares del procedimiento FE-EXC-01 existente:
@@ -80,9 +81,115 @@ cookies con credenciales.
    a su superficie SaaS autorizada. El mixto tiene además acceso tenant.
 
 Los roles tenant DEMO sólo permiten consultar, adoptar, actualizar y leer historial
-clínico; no habilitan todos los módulos del laboratorio. El catálogo conserva sus
-estados e impacto sin clasificar: no prepara escenarios de diagnóstico clínico ni
-sustituye el dataset general de `DatabaseSeeder`.
+clínico; no habilitan todos los módulos del laboratorio. El seeder conserva los
+estados y el impacto sin clasificar; las declaraciones posteriores hechas por
+Cristian se preservan en las repeticiones. El entorno no prepara escenarios de
+diagnóstico clínico ni sustituye el dataset general de `DatabaseSeeder`.
+
+## Perfil adicional para Cristian: clasificación de impacto
+
+Usuario sintético activo: **`demo-saas-impact@donqerlab.test`**. Usa el mismo
+secreto DEMO original y no tiene membresías de laboratorio. Preparar o ampliar
+el entorno con `./deploy/demo-exc/development.sh`; cerrar la sesión anterior e
+iniciar sesión con este correo, siguiendo el flujo CSRF/Sanctum descrito arriba.
+No utilizar la cuenta real de Cristian para estas pruebas.
+
+`GET /api/v1/auth/me` devuelve exactamente:
+
+```json
+{
+  "data": {
+    "saas_capabilities": [
+      "saas.clinical_reasons.classify_impact",
+      "saas.clinical_reasons.view"
+    ]
+  }
+}
+```
+
+Este fragmento muestra sólo el campo relevante de la respuesta. Las facultades
+se comprobaron contra las rutas y los servicios reales:
+
+| Capacidad | Por qué se asigna |
+| --- | --- |
+| `saas.clinical_reasons.classify_impact` | Consultar impacto actual, historial de declaraciones y registrar clasificaciones. Es suficiente si ya se conocen los IDs. |
+| `saas.clinical_reasons.view` | Consultar catálogo, detalle y versiones para seleccionar y leer el motivo que se clasificará; también permite consultar sus eventos. El contrato no la hereda desde `classify_impact`. |
+
+No requiere `create`, `publish`, `manage`, `saas.access.manage` ni permisos tenant.
+No enviar `X-Laboratory-ID` para esta superficie SaaS. La identidad auxiliar A
+(`exc-demo-a`) concede ambas facultades al usuario nuevo mediante `grant()`, con
+la misma procedencia, auditoría, transacción y guardas existentes; no hay
+inserciones directas de concesiones ni autoconcesión. Las credenciales aleatorias
+de A/B continúan privadas y no se cambian para iniciar sesiones manuales.
+
+### Flujo de prueba
+
+1. Consultar `GET /api/v1/platform/clinical-reasons` (paginación de 50) y elegir,
+   por ejemplo, el código `demo_exc_003`; obtener su `id` como `{reason}`.
+2. Consultar `GET /api/v1/platform/clinical-reasons/{reason}/versions`; elegir
+   el `id` de la versión como `{version}` (no su `number`).
+3. Consultar `GET /api/v1/platform/clinical-reasons/{reason}/versions/{version}/impact`.
+   Sin declaración, retorna `classification: "unclassified"` y `declaration: null`.
+4. Registrar `POST /api/v1/platform/clinical-reasons/{reason}/versions/{version}/impact/declarations`
+   con el siguiente cuerpo y la cabecera CSRF de la sesión:
+
+```json
+{
+  "expected_revision": 0,
+  "classification": "non_restrictive",
+  "justification": "FICTICIO: prueba de clasificación de impacto de Cristian."
+}
+```
+
+Devuelve 201, `data.revision`, `audit_id` y `operation_id`. Los valores válidos son
+`unclassified`, `non_restrictive` y `restrictive`; la justificación es obligatoria,
+no vacía y de máximo 2000 caracteres. `expected_revision` debe ser un entero JSON:
+0 sin declaración o la revisión actual obtenida en `data.declaration.revision`.
+Una revisión desactualizada devuelve 409: recargar antes de corregir. Sólo se
+aceptan los tres campos documentados. Las correcciones agregan declaraciones,
+conservando el historial; una declaración restrictiva puede crear obligaciones
+en laboratorios que hayan adoptado esa versión.
+
+Consultar el historial con
+`GET /api/v1/platform/clinical-reasons/{reason}/versions/{version}/impact/declarations`.
+Crear motivos, publicar versiones, activar/desactivar y administrar concesiones
+deben responder 403. Los ocho perfiles originales deben recibir 403 al leer o
+registrar impacto, incluso `demo-saas-full` y `demo-saas-mixed`.
+
+### Revocar mediante la API oficial
+
+Un operador con una **sesión ya autorizada** con `saas.access.manage` debe ejecutar
+este flujo exclusivamente sobre el usuario sintético en la base desechable. El
+clasificador no puede revocarse ni concederse facultades por sí mismo. Esta guía
+no concede administración a ninguna cuenta ni publica las credenciales de A/B.
+
+1. `GET /api/v1/platform/access/users`: localizar por correo exacto
+   `demo-saas-impact@donqerlab.test` y obtener `{user}`; paginar si hace falta.
+2. `GET /api/v1/platform/access/users/{user}/capabilities`: seleccionar la asignación
+   activa cuyo `capability_code` sea `saas.clinical_reasons.classify_impact` y
+   obtener su `id` como `{assignment}` y su `revision` actual.
+3. `POST /api/v1/platform/access/users/{user}/capabilities/{assignment}/revoke`,
+   con cookies de esa sesión administrativa, `X-XSRF-TOKEN` y cuerpo:
+
+```json
+{
+  "revision": 1,
+  "reason": "FICTICIO: fin de las pruebas de clasificación de Cristian."
+}
+```
+
+Usar la revisión leída, como entero JSON. Devuelve 200; una revisión obsoleta
+produce 409 y exige recargar la asignación. En la sesión del clasificador,
+`/auth/me` pasa inmediatamente a `["saas.clinical_reasons.view"]` y los tres
+endpoints de impacto devuelven 403. Si también se desea retirar la lectura,
+revocar por separado la asignación `saas.clinical_reasons.view` con el mismo flujo;
+`/auth/me` devolverá `[]`.
+
+El seeder **no restaura** facultades revocadas: una repetición detecta la
+asignación alterada y rechaza la transacción sin reparar datos. Para volver al
+estado inicial usar un entorno DEMO desechable nuevo, nunca modificar PostgreSQL
+ni resetear credenciales. La revocación por API se valida automáticamente con la
+identidad auxiliar autorizada, sin habilitar su login manual.
 
 ## Restricciones e idempotencia
 
@@ -101,9 +208,9 @@ Una transacción exterior y el lock administrativo existente serializan el conju
 Una colisión o fallo de auditoría revierte toda la ejecución. Datos ajenos que se
 incorporen después se conservan; ningún seeder elimina registros.
 
-Resultado limpio: **10 usuarios** (8 perfiles + A/B), **2 laboratorios**,
-**3 membresías**, **17 concesiones SaaS**, **51 motivos**, **56 versiones**,
-**73 eventos SaaS** (61 anteriores + 12 concesiones de perfiles).
+Resultado limpio: **11 usuarios** (8 perfiles originales + clasificador + A/B), **2 laboratorios**,
+**3 membresías**, **19 concesiones SaaS**, **51 motivos**, **56 versiones**,
+**75 eventos SaaS** (61 anteriores + 14 concesiones de perfiles).
 Las repeticiones no añaden usuarios, membresías, roles, concesiones, motivos,
 versiones ni eventos. Se conservan adopciones posteriores. Una revocación, cambio de
 matriz, rol, membresía, vigencia de suscripción o historia clínica se informa y
@@ -129,14 +236,14 @@ docker compose -p donqer-exc-demo -f deploy/demo-exc/compose.yaml down
 docker compose -p donqer-demo-seeders-validation -f deploy/testing/compose.yaml run --rm tests php vendor/bin/phpunit --do-not-cache-result tests/Feature/DemoDevelopmentSeederTest.php tests/Feature/ClinicalReasons tests/Feature/SaasAccess tests/Feature/Api/V1/Auth
 ```
 
-La nueva batería comprueba login de los ocho usuarios por sesión Sanctum,
+La batería comprueba login de los nueve usuarios por sesión Sanctum,
 `/auth/me` con matrices exactas y arrays vacíos, membresías, dos laboratorios,
 autorización de consulta SaaS, revocación inmediata y no restauración, paginación,
 adopción/actualización por ambos laboratorios y el mixto, idempotencia tras adopción,
 rechazo de producción/conexiones/secretos inválidos, preservación de usuarios reales,
 ampliación de FE-EXC-01 y rollback completo ante fallo de auditoría.
 
-Resultados ejecutados el **2026-10-28**:
+Validación previa de los ocho perfiles, ejecutada el **2026-10-28**:
 
 - Regresión ampliada: **284 pruebas, 9.043 aserciones, sin fallos**; incluye nueve
   pruebas nuevas del seeder y la regresión previa de FE-EXC-01.
@@ -146,6 +253,29 @@ Resultados ejecutados el **2026-10-28**:
 - Procedimiento completo ejecutado y seeder repetido en PostgreSQL 17 desechable.
   El entorno HTTP de validación se retiró al terminar; no se publica su secreto.
 - Laravel Pint aplicado; sintaxis Bash y `git diff --check` correctos.
+
+Validación del perfil de impacto, **2026-10-28**:
+
+- Pruebas del seeder: **11 pruebas, 224 aserciones, sin fallos**.
+- Regresión conjunta de seeders, clínica, acceso SaaS y autenticación:
+  **286 pruebas, 9.115 aserciones, sin fallos** (PHP 8.4.25, PHPUnit 12.5.35).
+- Login Sanctum y `/auth/me` exacto para nueve perfiles; lectura del catálogo,
+  detalle, versiones y eventos; declaración e historial de impacto; 409 por
+  revisión obsoleta; 403 en creación, publicación, activación y acceso SaaS.
+- Los ocho perfiles originales conservan sus capacidades y reciben 403 en los
+  tres endpoints de impacto. Concesiones del nuevo perfil auditadas por A.
+- Revocación por API oficial, efecto inmediato y rechazo del seeder sin restaurar
+  la capacidad; idempotencia también después de clasificar. Fallo de auditoría
+  del perfil nuevo revierte el conjunto.
+- Ampliación real desde el seeder original de ocho perfiles en otra base
+  desechable: usuarios, concesiones, auditoría y catálogo anteriores conservados,
+  perfil nuevo con las dos capacidades exactas y repetición idempotente.
+- PostgreSQL 17 desechable en el proyecto exclusivo `donqer-impact-validation`;
+  no se ejecutó el aprovisionamiento sobre bases compartidas ni producción.
+  Ambos entornos de validación se retiraron al terminar; el usuario se crea para
+  uso frontend al ejecutar `./deploy/demo-exc/development.sh` con el secreto DEMO.
+- Laravel Pint aplicado a los archivos PHP modificados; sintaxis Bash y
+  `git diff --check` correctos.
 
 ## Archivos entregados
 
