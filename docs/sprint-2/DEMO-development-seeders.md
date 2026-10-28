@@ -1,5 +1,11 @@
 # DEMO de desarrollo — FE-EXC-01, FE-SaaS-02 y pruebas funcionales
 
+Esta guía corresponde al entorno dedicado de catálogo y perfiles SaaS. Para
+reconstruir el dataset general de **Laboratorio** con `DatabaseSeeder`, seguir
+[Motivos para excepciones del dataset de Laboratorio](../../README.md#motivos-para-excepciones-del-dataset-de-laboratorio).
+Con `SAAS_DEMO_CLINICAL_REASON_ID` vacío, ese dataset prepara sus motivos locales
+automáticamente y no necesita ejecutar este procedimiento.
+
 ## Preparación para desarrolladores
 
 Desde la raíz de `backend-lab`, con Docker, la imagen local `donqer-lab-workspace`

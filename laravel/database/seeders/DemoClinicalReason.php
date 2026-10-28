@@ -4,15 +4,17 @@ namespace Database\Seeders;
 
 use App\Authorization\RbacCatalog;
 use App\ClinicalExams\ClinicalReasonAdoptionManager;
+use App\ClinicalExams\LocalClinicalReasonManager;
 use App\Models\ClinicalReasonAdoption;
 use App\Models\GlobalClinicalReason;
 use App\Models\Laboratory;
+use App\Models\LaboratoryClinicalReason;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 use Spatie\Permission\Models\Role;
 
-/** Demo consumers use the same structured contract; they never bootstrap SaaS privileges. */
+/** Demo consumers use structured tenant reasons; they never bootstrap SaaS privileges. */
 final class DemoClinicalReason
 {
     public static function reference(Laboratory $lab, User $actor): array
@@ -23,8 +25,11 @@ final class DemoClinicalReason
         DemoDataset::assertOwned($lab);
         DemoDataset::assertOwned($actor);
         $configured = config('saas.demo_clinical_reason_id');
+        if ($configured === null || $configured === '') {
+            return self::localReference($lab, $actor);
+        }
         if (! is_scalar($configured) || ! preg_match('/^[1-9][0-9]*$/', (string) $configured)) {
-            throw new LogicException('Demo clinical exceptions require an explicitly provisioned FICTICIO global reason in SAAS_DEMO_CLINICAL_REASON_ID. No free-text fallback is available.');
+            throw new LogicException('SAAS_DEMO_CLINICAL_REASON_ID must be a positive integer identifying a provisioned FICTICIO global reason, or empty to use structured local demo reasons.');
         }
         $reason = GlobalClinicalReason::with('latestVersion')->findOrFail((int) $configured);
         if ($reason->latestVersion->classification !== 'terminal_candidate' || ! str_contains($reason->latestVersion->name, 'FICTICIO')) {
@@ -39,5 +44,28 @@ final class DemoClinicalReason
         $selection = $adoption->latestVersion;
 
         return ['source' => 'global', 'reason_id' => $reason->id, 'version_id' => $selection->version_id, 'adoption_id' => $adoption->id, 'adoption_version_id' => $selection->id];
+    }
+
+    private static function localReference(Laboratory $lab, User $actor): array
+    {
+        $reason = DemoDataset::create(LaboratoryClinicalReason::class,
+            ['laboratory_id' => $lab->id, 'code' => 'demo_clinical_exception'],
+            factory: function () use ($lab, $actor): LaboratoryClinicalReason {
+                $actor->assignRole(Role::findOrCreate('owner', RbacCatalog::GUARD));
+
+                return app(LocalClinicalReasonManager::class)->create($lab, $actor, [
+                    'code' => 'demo_clinical_exception',
+                    'definition' => [
+                        'name' => 'FICTICIO: imposibilidad de completar el examen',
+                        'description' => DemoDataset::DISCLAIMER,
+                        'classification' => 'terminal_candidate',
+                        'evidence_requirements' => ['schema_version' => 1, 'requirements' => []],
+                        'is_active' => true,
+                        'change_reason' => 'FICTICIO: preparación del dataset de laboratorio.',
+                    ],
+                ])['data']['reason'];
+            });
+
+        return ['source' => 'local', 'reason_id' => $reason->id, 'version_id' => $reason->latestVersion->id];
     }
 }

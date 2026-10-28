@@ -37,9 +37,31 @@ final class LaboratoryOrderSeederTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_demo_without_explicit_catalog_fails_atomically_without_bootstrapping_saas_access(): void
+    public function test_demo_without_global_catalog_uses_local_reasons_and_is_idempotent_without_saas_access(): void
     {
         config(['saas.demo_clinical_reason_id' => null]);
+        $this->seed(DatabaseSeeder::class);
+        $this->assertDatabaseCount('laboratory_orders', LaboratoryOrderSeeder::DEMO_ORDER_COUNT + 15);
+        $this->assertDatabaseCount('laboratory_clinical_reasons', 2);
+        $this->assertDatabaseCount('laboratory_clinical_reason_versions', 2);
+        $requests = DB::table('clinical_exception_requests')->count();
+        $this->assertGreaterThan(0, $requests);
+        $this->assertDatabaseCount('clinical_exception_local_reason_references', $requests);
+        $this->assertSame(2, DB::table('audit_logs')->where('event', 'clinical_reason.local_created')->count());
+        $this->assertSame(0, DB::table('clinical_exception_local_reason_references as ref')
+            ->join('laboratory_clinical_reasons as reason', 'reason.id', '=', 'ref.reason_id')
+            ->whereColumn('reason.laboratory_id', '!=', 'ref.laboratory_id')->count());
+        foreach (['global_clinical_reasons', 'global_clinical_reason_impacts', 'clinical_reason_adoptions', 'clinical_exception_reason_references', 'saas_capability_assignments', 'saas_audit_logs'] as $table) {
+            $this->assertDatabaseCount($table, 0);
+        }
+        $before = $this->snapshots();
+        $this->seed(DatabaseSeeder::class);
+        $this->assertSame($before, $this->snapshots());
+    }
+
+    public function test_invalid_explicit_global_catalog_still_fails_atomically(): void
+    {
+        config(['saas.demo_clinical_reason_id' => 'invalid']);
         try {
             $this->seed(DatabaseSeeder::class);
             $this->fail('Demo clinical exceptions require an explicitly provisioned catalog.');
@@ -60,7 +82,7 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     private function snapshots(): array
     {
-        $tables = ['clinical_exception_reason_references', 'clinical_exception_legacy_requests', 'clinical_reason_adoptions', 'clinical_reason_adoption_versions', 'clinical_reason_impact_reviews', 'clinical_reason_impact_resolutions', 'global_clinical_reasons', 'global_clinical_reason_versions', 'global_clinical_reason_impacts', 'saas_capability_assignments', 'saas_audit_logs', 'users', 'plans', 'laboratories', 'branches', 'laboratory_user', 'subscriptions', 'laboratory_areas', 'sample_types', 'laboratory_exams', 'laboratory_exam_versions', 'laboratory_exam_clinical_states', 'patients', 'doctors', 'price_lists', 'price_list_exams', 'commercial_clients', 'commercial_client_price_lists', 'laboratory_orders', 'laboratory_order_exams', 'laboratory_order_sample_requirements', 'audit_logs', 'demo_datasets', 'demo_dataset_records', 'roles', 'permissions', 'role_has_permissions', 'model_has_roles', 'laboratory_order_legacy_exams', 'laboratory_samples', 'laboratory_sample_events', 'laboratory_sample_associations', 'laboratory_sample_processing_dependencies', 'laboratory_sample_idempotencies', 'laboratory_order_result_captures', 'laboratory_order_results', 'validation_professionals', 'laboratory_result_validations', 'laboratory_result_rectifications', 'model_has_permissions', 'clinical_exception_requests', 'clinical_exception_decisions', 'clinical_line_resolutions', 'clinical_order_finalizations', 'laboratory_report_settings', 'report_delivery_policies', 'report_delivery_policy_changes', 'report_delivery_exceptions', 'report_delivery_exception_authorizations', 'report_delivery_exception_revocations', 'report_delivery_preparations', 'report_deliveries'];
+        $tables = ['laboratory_clinical_reasons', 'laboratory_clinical_reason_versions', 'clinical_exception_local_reason_references', 'local_clinical_reason_reviews', 'local_clinical_reason_resolutions', 'clinical_exception_reason_references', 'clinical_exception_legacy_requests', 'clinical_reason_adoptions', 'clinical_reason_adoption_versions', 'clinical_reason_impact_reviews', 'clinical_reason_impact_resolutions', 'global_clinical_reasons', 'global_clinical_reason_versions', 'global_clinical_reason_impacts', 'saas_capability_assignments', 'saas_audit_logs', 'users', 'plans', 'laboratories', 'branches', 'laboratory_user', 'subscriptions', 'laboratory_areas', 'sample_types', 'laboratory_exams', 'laboratory_exam_versions', 'laboratory_exam_clinical_states', 'patients', 'doctors', 'price_lists', 'price_list_exams', 'commercial_clients', 'commercial_client_price_lists', 'laboratory_orders', 'laboratory_order_exams', 'laboratory_order_sample_requirements', 'audit_logs', 'demo_datasets', 'demo_dataset_records', 'roles', 'permissions', 'role_has_permissions', 'model_has_roles', 'laboratory_order_legacy_exams', 'laboratory_samples', 'laboratory_sample_events', 'laboratory_sample_associations', 'laboratory_sample_processing_dependencies', 'laboratory_sample_idempotencies', 'laboratory_order_result_captures', 'laboratory_order_results', 'validation_professionals', 'laboratory_result_validations', 'laboratory_result_rectifications', 'model_has_permissions', 'clinical_exception_requests', 'clinical_exception_decisions', 'clinical_line_resolutions', 'clinical_order_finalizations', 'laboratory_report_settings', 'report_delivery_policies', 'report_delivery_policy_changes', 'report_delivery_exceptions', 'report_delivery_exception_authorizations', 'report_delivery_exception_revocations', 'report_delivery_preparations', 'report_deliveries'];
         $snapshots = [];
         foreach ($tables as $table) {
             $rows = DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
