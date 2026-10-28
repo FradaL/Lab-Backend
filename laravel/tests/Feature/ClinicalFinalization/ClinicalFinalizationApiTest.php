@@ -46,11 +46,11 @@ class ClinicalFinalizationApiTest extends TestCase
         [$lab,$actor,$order,$line] = $this->scenario(false);
         $base = "/api/v1/laboratory-orders/$order->id/exams/$line->id";
         $revision = $order->fresh()->clinical_revision;
-        $r = $this->postJson($base.'/exceptions', ['clinical_revision' => $revision, 'result_revision' => 0, 'reason' => 'FICTICIO: no disponible'])->assertCreated();
+        $r = $this->postJson($base.'/exceptions', ['clinical_revision' => $revision, 'result_revision' => 0, 'reason_reference' => $this->exceptionReference($lab, $actor), 'justification' => 'FICTICIO: no disponible'])->assertCreated();
         $id = $r->json('data.exception.id');
         $revision = $r->json('data.clinical_revision');
         $this->postJson($base."/exceptions/$id/approve", ['clinical_revision' => $revision, 'request_revision' => 1])->assertForbidden();
-        $this->postJson($base.'/exceptions', ['clinical_revision' => $revision, 'result_revision' => 0, 'reason' => 'FICTICIO duplicado'])->assertConflict()->assertJsonPath('code', 'clinical_exception_pending');
+        $this->postJson($base.'/exceptions', ['clinical_revision' => $revision, 'result_revision' => 0, 'reason_reference' => $this->exceptionReference($lab, $actor), 'justification' => 'FICTICIO duplicado'])->assertConflict()->assertJsonPath('code', 'clinical_exception_pending');
         $reviewer = $this->createLaboratoryMember($lab);
         $this->assignDirectLaboratoryPermissions($reviewer, $lab, ['orders.clinical_exceptions.approve', 'orders.clinical_exceptions.view']);
         $this->actingAs($reviewer);

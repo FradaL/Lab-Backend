@@ -25,7 +25,7 @@ class ClinicalFinalizationIntegrityTest extends TestCase
     {
         [$lab,$actor,$order,$line] = $scenario;
 
-        return app(ClinicalResolutionService::class)->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason' => 'FICTICIO']);
+        return app(ClinicalResolutionService::class)->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => $this->exceptionReference($lab, $actor), 'justification' => 'FICTICIO']);
     }
 
     private function reviewer($lab)
@@ -52,7 +52,7 @@ class ClinicalFinalizationIntegrityTest extends TestCase
         }
         $this->assertDatabaseCount('clinical_line_resolutions', 0);
         $reject = $service->decideException($lab, $reviewer, $order->id, $line->id, $r['exception']['id'], false, ['clinical_revision' => $r['clinical_revision'], 'request_revision' => 1, 'reason' => 'FICTICIO changed capture']);
-        $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $reject['clinical_revision'], 'result_revision' => 1, 'reason' => 'FICTICIO reconsidered']);
+        $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $reject['clinical_revision'], 'result_revision' => 1, 'reason_reference' => $this->exceptionReference($lab, $actor), 'justification' => 'FICTICIO reconsidered']);
         $this->assertDatabaseCount('clinical_exception_requests', 2);
         $this->assertDatabaseCount('clinical_exception_decisions', 1);
         $this->assertDatabaseCount('laboratory_order_results', 1);
@@ -66,11 +66,11 @@ class ClinicalFinalizationIntegrityTest extends TestCase
         $validation = app(LaboratoryValidationService::class);
         $validation->validate($lab, $actor, $order->id, $line->id, ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11']]);
         $base = "/api/v1/laboratory-orders/$order->id/exams/$line->id";
-        $this->postJson($base.'/exceptions', ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 2, 'reason' => 'FICTICIO'])->assertConflict()->assertJsonPath('code', 'clinical_exception_not_available');
+        $this->postJson($base.'/exceptions', ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 2, 'reason_reference' => $this->exceptionReference($lab, $actor), 'justification' => 'FICTICIO'])->assertConflict()->assertJsonPath('code', 'clinical_exception_not_available');
         setPermissionsTeamId($lab->id);
         $validation->rectify($lab, $actor, $order->id, $line->id, ['revision' => 2, 'reason' => 'FICTICIO']);
         $this->postJson($base.'/finalize', ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 3])->assertConflict()->assertJsonPath('code', 'clinical_line_not_validated');
-        $this->postJson($base.'/exceptions', ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 3, 'reason' => 'FICTICIO'])->assertConflict()->assertJsonPath('code', 'clinical_exception_not_available');
+        $this->postJson($base.'/exceptions', ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 3, 'reason_reference' => $this->exceptionReference($lab, $actor), 'justification' => 'FICTICIO'])->assertConflict()->assertJsonPath('code', 'clinical_exception_not_available');
         $this->assertDatabaseCount('laboratory_result_validations', 1);
         $this->assertDatabaseCount('clinical_exception_requests', 0);
     }
@@ -171,7 +171,7 @@ class ClinicalFinalizationIntegrityTest extends TestCase
         $this->postJson($base."/exams/$line->id/finalize", ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0])->assertConflict()->assertJsonPath('code', 'clinical_line_not_validated');
         setPermissionsTeamId($lab->id);
         $actor->revokePermissionTo('orders.clinical_exceptions.request');
-        $this->postJson($base."/exams/$line->id/exceptions", ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason' => 'FICTICIO'])->assertForbidden();
+        $this->postJson($base."/exams/$line->id/exceptions", ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => $this->exceptionReference($lab, $actor), 'justification' => 'FICTICIO'])->assertForbidden();
         $empty = LaboratoryOrder::factory()->for($lab)->create(['status' => 'pending']);
         $this->postJson("/api/v1/laboratory-orders/$empty->id/finalize", ['clinical_revision' => 0])->assertUnprocessable();
         $order->update(['status' => 'cancelled']);
@@ -184,7 +184,7 @@ class ClinicalFinalizationIntegrityTest extends TestCase
         $other = Laboratory::factory()->create();
         $foreign = LaboratoryOrder::factory()->for($other)->create();
         $this->getJson("/api/v1/laboratory-orders/$foreign->id/clinical-finalization")->assertNotFound();
-        $this->postJson("/api/v1/laboratory-orders/$foreign->id/exams/$line->id/exceptions", ['clinical_revision' => 0, 'result_revision' => 0, 'reason' => 'FICTICIO'])->assertNotFound();
+        $this->postJson("/api/v1/laboratory-orders/$foreign->id/exams/$line->id/exceptions", ['clinical_revision' => 0, 'result_revision' => 0, 'reason_reference' => $this->exceptionReference($lab, $actor), 'justification' => 'FICTICIO'])->assertNotFound();
         $this->assertDatabaseCount('clinical_exception_requests', 0);
     }
 

@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Hash;
 use LogicException;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
 final class LaboratoryOrderSeederTest extends TestCase
@@ -36,6 +37,20 @@ final class LaboratoryOrderSeederTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_demo_without_explicit_catalog_fails_atomically_without_bootstrapping_saas_access(): void
+    {
+        config(['saas.demo_clinical_reason_id' => null]);
+        try {
+            $this->seed(DatabaseSeeder::class);
+            $this->fail('Demo clinical exceptions require an explicitly provisioned catalog.');
+        } catch (LogicException $e) {
+            $this->assertStringContainsString('SAAS_DEMO_CLINICAL_REASON_ID', $e->getMessage());
+        }
+        $this->assertDatabaseCount('clinical_exception_requests', 0);
+        $this->assertDatabaseCount('laboratory_orders', 0);
+        $this->assertDatabaseCount('saas_capability_assignments', 0);
+    }
+
     private function scenario(string $key): LaboratoryOrder
     {
         $id = DB::table('demo_dataset_records')->where('entity_kind', 'order_scenario')->where('entity_key', $key)->value('entity_id');
@@ -45,7 +60,7 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     private function snapshots(): array
     {
-        $tables = ['users', 'plans', 'laboratories', 'branches', 'laboratory_user', 'subscriptions', 'laboratory_areas', 'sample_types', 'laboratory_exams', 'laboratory_exam_versions', 'laboratory_exam_clinical_states', 'patients', 'doctors', 'price_lists', 'price_list_exams', 'commercial_clients', 'commercial_client_price_lists', 'laboratory_orders', 'laboratory_order_exams', 'laboratory_order_sample_requirements', 'audit_logs', 'demo_datasets', 'demo_dataset_records', 'roles', 'permissions', 'role_has_permissions', 'model_has_roles', 'laboratory_order_legacy_exams', 'laboratory_samples', 'laboratory_sample_events', 'laboratory_sample_associations', 'laboratory_sample_processing_dependencies', 'laboratory_sample_idempotencies', 'laboratory_order_result_captures', 'laboratory_order_results', 'validation_professionals', 'laboratory_result_validations', 'laboratory_result_rectifications', 'model_has_permissions', 'clinical_exception_requests', 'clinical_exception_decisions', 'clinical_line_resolutions', 'clinical_order_finalizations', 'laboratory_report_settings', 'report_delivery_policies', 'report_delivery_policy_changes', 'report_delivery_exceptions', 'report_delivery_exception_authorizations', 'report_delivery_exception_revocations', 'report_delivery_preparations', 'report_deliveries'];
+        $tables = ['clinical_exception_reason_references', 'clinical_exception_legacy_requests', 'clinical_reason_adoptions', 'clinical_reason_adoption_versions', 'clinical_reason_impact_reviews', 'clinical_reason_impact_resolutions', 'global_clinical_reasons', 'global_clinical_reason_versions', 'global_clinical_reason_impacts', 'saas_capability_assignments', 'saas_audit_logs', 'users', 'plans', 'laboratories', 'branches', 'laboratory_user', 'subscriptions', 'laboratory_areas', 'sample_types', 'laboratory_exams', 'laboratory_exam_versions', 'laboratory_exam_clinical_states', 'patients', 'doctors', 'price_lists', 'price_list_exams', 'commercial_clients', 'commercial_client_price_lists', 'laboratory_orders', 'laboratory_order_exams', 'laboratory_order_sample_requirements', 'audit_logs', 'demo_datasets', 'demo_dataset_records', 'roles', 'permissions', 'role_has_permissions', 'model_has_roles', 'laboratory_order_legacy_exams', 'laboratory_samples', 'laboratory_sample_events', 'laboratory_sample_associations', 'laboratory_sample_processing_dependencies', 'laboratory_sample_idempotencies', 'laboratory_order_result_captures', 'laboratory_order_results', 'validation_professionals', 'laboratory_result_validations', 'laboratory_result_rectifications', 'model_has_permissions', 'clinical_exception_requests', 'clinical_exception_decisions', 'clinical_line_resolutions', 'clinical_order_finalizations', 'laboratory_report_settings', 'report_delivery_policies', 'report_delivery_policy_changes', 'report_delivery_exceptions', 'report_delivery_exception_authorizations', 'report_delivery_exception_revocations', 'report_delivery_preparations', 'report_deliveries'];
         $snapshots = [];
         foreach ($tables as $table) {
             $rows = DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
@@ -58,10 +73,11 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     public function test_complete_dataset_uses_published_configurations_independent_requirements_and_domain_economics(): void
     {
+        StructuredClinicalReasonFixture::prepareDemoCatalog();
         $this->seed(DatabaseSeeder::class);
         $orders = LaboratoryOrder::with(['orderExams.sampleRequirements', 'orderExams.clinicalVersion'])->get();
         $this->assertCount(LaboratoryOrderSeeder::DEMO_ORDER_COUNT + 15, $orders);
-        $this->assertSame(['pending', 'in_process', 'completed'], $orders->pluck('status')->unique()->values()->all());
+        $this->assertEqualsCanonicalizing(['pending', 'in_process', 'completed'], $orders->pluck('status')->unique()->values()->all());
         $this->assertDatabaseCount('laboratory_exam_versions', 20);
         $this->assertDatabaseCount('laboratory_order_exams', 74);
         $this->assertDatabaseCount('laboratory_order_sample_requirements', 47);
@@ -116,6 +132,7 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     public function test_finalization_dataset_has_explicit_evidence_and_no_artificial_legacy_or_payment(): void
     {
+        StructuredClinicalReasonFixture::prepareDemoCatalog();
         $this->seed(DatabaseSeeder::class);
         $lab = Laboratory::where('nit', 'DEMO-BE08-1')->sole();
         $orders = LaboratoryOrder::forLaboratory($lab)->with(['clinicalFinalization', 'orderExams.clinicalResolution'])->get();
@@ -139,6 +156,7 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     public function test_fictional_result_scenario_is_independent_preliminary_and_not_overwritten_on_reseed(): void
     {
+        StructuredClinicalReasonFixture::prepareDemoCatalog();
         $this->seed(DatabaseSeeder::class);
         $lab = Laboratory::where('nit', '000000000001')->sole();
         $id = DB::table('demo_dataset_records')->where('entity_kind', 'result_order_scenario')->where('entity_key', 'results-v1')->value('entity_id');
@@ -159,6 +177,7 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     public function test_second_run_preserves_every_identity_password_and_operational_edit(): void
     {
+        StructuredClinicalReasonFixture::prepareDemoCatalog();
         $this->seed(DatabaseSeeder::class);
         User::where('email', 'admin@donqerlab.test')->firstOrFail()->update(['password' => Hash::make('changed-by-user')]);
         $this->scenario('order-01')->update(['status' => 'cancelled', 'notes' => 'Operational edit']);
@@ -183,6 +202,10 @@ final class LaboratoryOrderSeederTest extends TestCase
         $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
         $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
         $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $integration = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $localIntegration = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $localIntegration->down();
+        $integration->down();
         $deliveryMigration->down();
         $reportMigration->down();
         $finalizationMigration->down();
@@ -202,11 +225,14 @@ final class LaboratoryOrderSeederTest extends TestCase
         $finalizationMigration->up();
         $reportMigration->up();
         $deliveryMigration->up();
+        $integration->up();
+        $localIntegration->up();
         setPermissionsTeamId($lab->id);
         $role = Role::create(['name' => 'administrator', 'guard_name' => 'web', 'laboratory_id' => $lab->id]);
         $role->givePermissionTo(Permission::findOrCreate('orders.view', 'web'));
         $legacy = DB::table('laboratory_order_legacy_exams')->get()->toJson();
         $before = [$order->fresh()->getRawOriginal(), $line->fresh()->getRawOriginal(), $prices->fresh()->getRawOriginal(), $role->permissions->pluck('name')->all()];
+        StructuredClinicalReasonFixture::prepareDemoCatalog();
         $this->seed(DatabaseSeeder::class);
         $this->seed(DatabaseSeeder::class);
         $this->assertSame($lab->id, getPermissionsTeamId());
@@ -283,6 +309,7 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     public function test_missing_registered_dependency_is_not_recreated(): void
     {
+        StructuredClinicalReasonFixture::prepareDemoCatalog();
         $this->seed(DatabaseSeeder::class);
         DB::table('doctors')->where('license_number', 'DEMO-MED-0020')->delete();
         $before = $this->snapshots();

@@ -15,6 +15,7 @@ use App\Models\PriceListExam;
 use App\Models\Subscription;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
 class ClinicalHistoricalResolutionTest extends TestCase
@@ -23,6 +24,10 @@ class ClinicalHistoricalResolutionTest extends TestCase
 
     public function test_upgrade_preserves_historical_and_legacy_lines_and_only_explicit_exception_can_resolve_them(): void
     {
+        $integration = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $localIntegration = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $localIntegration->down();
+        $integration->down();
         $migrations = [];
         foreach (['2026_10_10_000002_add_order_clinical_composition', '2026_10_10_000004_add_physical_sample_operations', '2026_10_11_000001_create_clinical_order_results', '2026_10_11_000002_add_clinical_result_validation', '2026_10_11_000003_add_clinical_order_finalization', '2026_10_11_000004_create_clinical_report_issuances', '2026_10_11_000005_create_report_delivery_controls'] as $file) {
             $migrations[] = require database_path('migrations/'.$file.'.php');
@@ -54,11 +59,14 @@ class ClinicalHistoricalResolutionTest extends TestCase
         $this->assertNull($legacy->clinical_version_id);
         $this->assertSame('legacy_compatibility', $legacy->clinical_configuration_source);
         $cohort = DB::table('laboratory_order_legacy_exams')->orderBy('laboratory_exam_id')->get()->toJson();
+        $integration->up();
+        $localIntegration->up();
+        $reference = StructuredClinicalReasonFixture::forLaboratory($lab, $actor);
         $service = app(ClinicalResolutionService::class);
         foreach ([$historical->fresh(), $legacy] as $line) {
             $this->postJson("/api/v1/laboratory-orders/$order->id/exams/$line->id/finalize", ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0])->assertConflict()->assertJsonPath('code', 'clinical_line_not_validated');
             setPermissionsTeamId($lab->id);
-            $request = $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason' => 'FICTICIO resolución histórica explícita']);
+            $request = $service->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => $reference, 'justification' => 'FICTICIO resolución histórica explícita']);
             $service->decideException($lab, $reviewer, $order->id, $line->id, $request['exception']['id'], true, ['clinical_revision' => $request['clinical_revision'], 'request_revision' => 1]);
             $this->assertNull($line->fresh()->clinical_version_id);
             $this->assertNull($line->fresh()->processing_started_at);

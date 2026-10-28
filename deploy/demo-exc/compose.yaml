@@ -1,0 +1,51 @@
+services:
+  postgres-exc-demo:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: donqer_exc_demo
+      POSTGRES_USER: donqer_exc_demo
+      POSTGRES_PASSWORD: disposable-exc-demo-only
+    tmpfs: [/var/lib/postgresql/data]
+    networks: [demo-exc]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U donqer_exc_demo -d donqer_exc_demo"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  api:
+    image: ${DONQER_TEST_PHP_IMAGE:-donqer-lab-workspace}
+    working_dir: /var/www
+    env_file: ../../laravel/.env.testing.example
+    environment:
+      APP_ENV: local
+      APP_NAME: DonqerExcDemo
+      APP_URL: http://localhost:8086
+      APP_CONFIG_CACHE: /tmp/config.php
+      APP_ROUTES_CACHE: /tmp/routes.php
+      APP_EVENTS_CACHE: /tmp/events.php
+      APP_SERVICES_CACHE: /tmp/services.php
+      APP_PACKAGES_CACHE: /tmp/packages.php
+      DB_HOST: postgres-exc-demo
+      DB_DATABASE: donqer_exc_demo
+      DB_USERNAME: donqer_exc_demo
+      DB_PASSWORD: disposable-exc-demo-only
+      SESSION_DRIVER: file
+      SESSION_COOKIE: donqer_exc_demo_session
+      DONQER_EXC_DEMO_OWNER_PASSWORD: ${DONQER_EXC_DEMO_OWNER_PASSWORD:?Set a synthetic owner password of at least 12 characters}
+    volumes:
+      - ../../laravel:/var/www:ro
+      - ../../laravel/.env.testing.example:/var/www/.env:ro
+    tmpfs:
+      - /var/www/storage
+      - /var/www/bootstrap/cache
+    ports: ["127.0.0.1:8086:8086"]
+    networks: [demo-exc, demo-http]
+    depends_on:
+      postgres-exc-demo:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c", 'mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache; exec "$@"', "--"]
+    command: [php, artisan, serve, --host=0.0.0.0, --port=8086, --no-reload]
+networks:
+  demo-exc:
+    internal: true
+  demo-http:

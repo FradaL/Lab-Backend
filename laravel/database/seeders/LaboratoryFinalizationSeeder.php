@@ -62,7 +62,7 @@ final class LaboratoryFinalizationSeeder extends Seeder
                         foreach ($order->orderExams()->orderBy('id')->get() as $position => $line) {
                             $exception = str_starts_with($scenario, 'exception_') || $scenario === 'closed_exceptions' || ($scenario === 'closed_mixed' && $position === 1);
                             if ($exception) {
-                                $request = $resolution->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason' => DemoDataset::DISCLAIMER.' Imposibilidad ficticia de completar el examen.']);
+                                $request = $resolution->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => DemoClinicalReason::reference($lab, $actor), 'justification' => DemoDataset::DISCLAIMER.' Imposibilidad ficticia de completar el examen.']);
                                 if ($scenario !== 'exception_pending') {
                                     $resolution->decideException($lab, $approver, $order->id, $line->id, $request['exception']['id'], $scenario !== 'exception_rejected', ['clinical_revision' => $request['clinical_revision'], 'request_revision' => 1, 'reason' => DemoDataset::DISCLAIMER]);
                                 }

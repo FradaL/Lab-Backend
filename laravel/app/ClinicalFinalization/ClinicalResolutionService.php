@@ -5,8 +5,11 @@ namespace App\ClinicalFinalization;
 use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\ClinicalExams\ClinicalConflict;
+use App\ClinicalExams\ClinicalReasonEligibilityPolicy;
 use App\ClinicalValidation\ValidationAuthority;
 use App\Models\ClinicalExceptionDecision;
+use App\Models\ClinicalExceptionLocalReasonReference;
+use App\Models\ClinicalExceptionReasonReference;
 use App\Models\ClinicalExceptionRequest;
 use App\Models\ClinicalLineResolution;
 use App\Models\ClinicalOrderFinalization;
@@ -22,13 +25,22 @@ use Illuminate\Validation\ValidationException;
 
 final class ClinicalResolutionService
 {
-    public function __construct(private AuditWriter $audit, private ValidationAuthority $authority) {}
+    public function __construct(private AuditWriter $audit, private ValidationAuthority $authority, private ClinicalExceptionReasonGuard $reasons, private ClinicalReasonEligibilityPolicy $eligibility) {}
 
     public function requestException(Laboratory $lab, User $actor, int $orderId, int $lineId, array $input): array
     {
-        $this->input($input, ['clinical_revision', 'result_revision'], ['reason' => ['required', 'string', 'max:2000']]);
+        $this->input($input, ['clinical_revision', 'result_revision'], [
+            'reason_reference' => ['required', 'array:source,reason_id,version_id,adoption_id,adoption_version_id'],
+            'reason_reference.source' => ['required', 'in:global,local'],
+            'reason_reference.reason_id' => ['required', 'integer', 'min:1'],
+            'reason_reference.version_id' => ['required', 'integer', 'min:1'],
+            'reason_reference.adoption_id' => ['required_if:reason_reference.source,global', 'prohibited_if:reason_reference.source,local', 'integer', 'min:1'],
+            'reason_reference.adoption_version_id' => ['required_if:reason_reference.source,global', 'prohibited_if:reason_reference.source,local', 'integer', 'min:1'],
+            'justification' => ['required', 'string', 'max:2000', 'regex:/\\S/'],
+        ]);
 
         return DB::transaction(function () use ($lab, $actor, $orderId, $lineId, $input) {
+            $this->reasons->lock();
             [$order,$line] = $this->locked($lab, $actor, $orderId, $lineId, $input['clinical_revision'], 'orders.clinical_exceptions.request');
             $this->unresolved($line);
             if (LaboratoryResultValidation::forLaboratory($lab)->where('laboratory_order_exam_id', $lineId)->exists()) {
@@ -41,12 +53,14 @@ final class ClinicalResolutionService
             if ($revision !== $input['result_revision']) {
                 throw new ClinicalConflict('result_revision_conflict', 'Reload the current capture revision.');
             }
+            [$version, $eligibility] = $this->reasons->select($lab, $actor, $input['reason_reference']);
             $request = ClinicalExceptionRequest::create(['laboratory_id' => $lab->id, 'laboratory_order_id' => $orderId, 'laboratory_order_exam_id' => $lineId,
-                'reason' => $input['reason'], 'status' => 'pending', 'revision' => 1, 'requested_by' => $actor->id, 'requested_at' => now(),
+                'reason' => $version->name, 'status' => 'pending', 'revision' => 1, 'requested_by' => $actor->id, 'requested_at' => now(),
                 'capture_revision' => $revision, 'processing_started_at' => $line->processing_started_at, 'clinical_configuration_source' => $line->clinical_configuration_source ?? 'historical']);
-            $this->audit->record($lab, $actor, new AuditEvent('order_clinical.exception_requested', 'laboratory_order_exam', $lineId, newValues: ['exception_request_id' => $request->id, 'status' => 'pending'], metadata: ['reason' => $input['reason'], 'laboratory_order_id' => $orderId, 'result_revision' => $revision, 'clinical_configuration_source' => $request->clinical_configuration_source]));
+            $reference = $this->reasons->remember($lab, $actor, $request, $input['reason_reference'], $input['justification']);
+            $this->audit->record($lab, $actor, new AuditEvent('order_clinical.exception_requested', 'laboratory_order_exam', $lineId, newValues: ['exception_request_id' => $request->id, 'status' => 'pending'], metadata: ['reason' => $request->reason, 'source' => $reference->source, 'reason_reference_id' => $reference->id, 'reason_id' => $reference->reason_id, 'version_id' => $reference->version_id, 'eligibility' => $eligibility, 'laboratory_order_id' => $orderId, 'result_revision' => $revision, 'clinical_configuration_source' => $request->clinical_configuration_source]));
 
-            return ['clinical_revision' => $order->fresh()->clinical_revision, 'exception' => $request->toArray()];
+            return ['clinical_revision' => $order->fresh()->clinical_revision, 'exception' => $request->toArray(), 'reason_reference' => $reference->representation()];
         });
     }
 
@@ -55,6 +69,7 @@ final class ClinicalResolutionService
         $this->input($input, ['clinical_revision', 'request_revision'], $approve ? ['reason' => ['sometimes', 'nullable', 'string', 'max:2000']] : ['reason' => ['required', 'string', 'max:2000']]);
 
         return DB::transaction(function () use ($lab, $actor, $orderId, $lineId, $requestId, $approve, $input) {
+            $this->reasons->lock();
             [$order,$line] = $this->locked($lab, $actor, $orderId, $lineId, $input['clinical_revision'], 'orders.clinical_exceptions.approve');
             $request = ClinicalExceptionRequest::forLaboratory($lab)->where('laboratory_order_id', $orderId)->where('laboratory_order_exam_id', $lineId)->whereKey($requestId)->lockForUpdate()->firstOrFail();
             if ($approve && $request->requested_by === $actor->id) {
@@ -67,6 +82,8 @@ final class ClinicalResolutionService
             if ($approve && ($request->capture_revision !== ($line->resultCapture?->revision ?? 0) || $request->processing_started_at?->toISOString() !== $line->processing_started_at?->toISOString() || LaboratoryResultValidation::forLaboratory($lab)->where('laboratory_order_exam_id', $lineId)->exists())) {
                 throw new ClinicalConflict('clinical_exception_obsolete', 'The clinical line changed after this request. Reject it and review a new request.');
             }
+            $check = $approve ? $this->reasons->approve($lab, $actor, $request) : null;
+            $reference = $check['reference'] ?? $this->reasons->reference($lab, $requestId);
             $snapshot = $this->lineEvidence($line);
             $decision = ClinicalExceptionDecision::create(['laboratory_id' => $lab->id, 'laboratory_order_id' => $orderId, 'laboratory_order_exam_id' => $lineId, 'exception_request_id' => $requestId,
                 'decision' => $approve ? 'approved' : 'rejected', 'reason' => $input['reason'] ?? null, 'decided_by' => $actor->id, 'decided_at' => now(), 'evidence_snapshot' => $snapshot]);
@@ -75,9 +92,9 @@ final class ClinicalResolutionService
                     'exception_decision_id' => $decision->id, 'validation_id' => null, 'resolved_by' => $actor->id, 'resolved_at' => now(), 'evidence_snapshot' => $snapshot + ['exception_request_id' => $requestId, 'exception_decision_id' => $decision->id, 'reason' => $request->reason, 'requested_by' => $request->requested_by]]);
             }
             $this->audit->record($lab, $actor, new AuditEvent('order_clinical.exception_'.($approve ? 'approved' : 'rejected'), 'laboratory_order_exam', $lineId,
-                oldValues: ['exception_request_id' => $requestId, 'status' => 'pending'], newValues: ['exception_decision_id' => $decision->id, 'status' => $decision->decision], metadata: ['reason' => $input['reason'] ?? null, 'laboratory_order_id' => $orderId]));
+                oldValues: ['exception_request_id' => $requestId, 'status' => 'pending'], newValues: ['exception_decision_id' => $decision->id, 'status' => $decision->decision], metadata: ['reason' => $input['reason'] ?? null, 'laboratory_order_id' => $orderId, 'source' => $reference?->source, 'reason_reference_id' => $reference?->id, 'reason_id' => $reference?->reason_id, 'version_id' => $reference?->version_id, 'eligibility' => $check['eligibility'] ?? null]));
 
-            return ['clinical_revision' => $order->fresh()->clinical_revision, 'exception' => $request->fresh()->toArray(), 'decision' => $decision->toArray()];
+            return ['clinical_revision' => $order->fresh()->clinical_revision, 'exception' => $request->fresh()->toArray(), 'decision' => $decision->toArray(), 'reason_reference' => $reference?->representation()];
         });
     }
 
@@ -109,13 +126,22 @@ final class ClinicalResolutionService
 
     public function exceptions(Laboratory $lab, User $actor, int $orderId, int $lineId): array
     {
-        $this->authority->permission($lab, $actor, 'orders.clinical_exceptions.view');
-        LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->firstOrFail();
-        LaboratoryOrderExam::forLaboratory($lab)->where('laboratory_order_id', $orderId)->whereKey($lineId)->firstOrFail();
-        $page = ClinicalExceptionRequest::forLaboratory($lab)->where('laboratory_order_exam_id', $lineId)->orderByDesc('id')->paginate(50);
-        $decisions = ClinicalExceptionDecision::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->get()->keyBy('exception_request_id');
+        return DB::transaction(function () use ($lab, $actor, $orderId, $lineId): array {
+            $this->reasons->lock();
+            $this->authority->permission($lab, $actor, 'orders.clinical_exceptions.view');
+            LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->firstOrFail();
+            LaboratoryOrderExam::forLaboratory($lab)->where('laboratory_order_id', $orderId)->whereKey($lineId)->firstOrFail();
+            $page = ClinicalExceptionRequest::forLaboratory($lab)->where('laboratory_order_exam_id', $lineId)->orderByDesc('id')->paginate(50);
+            $decisions = ClinicalExceptionDecision::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->get()->keyBy('exception_request_id');
 
-        return ['data' => $page->map(fn ($r) => $r->toArray() + ['decision' => $decisions->get($r->id)?->toArray()])->all(), 'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'per_page' => 50, 'total' => $page->total()]];
+            $references = ClinicalExceptionReasonReference::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->with('version')->get()->keyBy('exception_request_id');
+            $references = $references->union(ClinicalExceptionLocalReasonReference::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->with('version')->get()->keyBy('exception_request_id'));
+
+            $pending = $page->where('status', 'pending')->pluck('id')->all();
+            $statuses = app(ClinicalReasonEligibilityPolicy::class)->approvalStatuses($lab, $references->toBase()->only($pending));
+
+            return ['data' => $page->map(fn ($r) => $r->toArray() + ['decision' => $decisions->get($r->id)?->toArray(), 'reason_reference' => $references->get($r->id)?->representation(), 'reason_eligibility' => $statuses[$r->id] ?? null])->all(), 'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'per_page' => 50, 'total' => $page->total()]];
+        });
     }
 
     public function finalizeOrder(Laboratory $lab, User $actor, int $orderId, array $input): array

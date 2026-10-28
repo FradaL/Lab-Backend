@@ -23,6 +23,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
 class ClinicalReportTest extends TestCase
@@ -316,7 +317,7 @@ class ClinicalReportTest extends TestCase
         $approver = $this->createLaboratoryMember($lab);
         $this->assignDirectLaboratoryPermissions($approver, $lab, ['orders.clinical_exceptions.approve']);
         $resolution = app(ClinicalResolutionService::class);
-        $r = $resolution->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason' => 'FICTICIO no se puede procesar']);
+        $r = $resolution->requestException($lab, $actor, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => $this->exceptionReference($lab, $actor, 'FICTICIO no se puede procesar'), 'justification' => 'FICTICIO no se puede procesar']);
         $this->withHeader('Idempotency-Key', 'exception-report-key-1')->postJson("/api/v1/laboratory-orders/$order->id/reports", $this->body($order, $line))->assertConflict()->assertJsonPath('code', 'report_line_unresolved');
         setPermissionsTeamId($lab->id);
         $resolution->decideException($lab, $approver, $order->id, $line->id, $r['exception']['id'], true, ['clinical_revision' => $r['clinical_revision'], 'request_revision' => 1]);
@@ -338,7 +339,7 @@ class ClinicalReportTest extends TestCase
         $approver = $this->createLaboratoryMember($lab);
         $this->assignDirectLaboratoryPermissions($approver, $lab, ['orders.clinical_exceptions.approve']);
         $resolution = app(ClinicalResolutionService::class);
-        $r = $resolution->requestException($lab, $actor, $order->id, $newLine->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason' => 'FICTICIO']);
+        $r = $resolution->requestException($lab, $actor, $order->id, $newLine->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => $this->exceptionReference($lab, $actor, 'FICTICIO'), 'justification' => 'FICTICIO']);
         $resolution->decideException($lab, $approver, $order->id, $newLine->id, $r['exception']['id'], true, ['clinical_revision' => $r['clinical_revision'], 'request_revision' => 1]);
         $order->patient->update(['first_names' => 'Changed live identity']);
         $order->branch->update(['name' => 'Changed live branch']);
@@ -375,6 +376,7 @@ class ClinicalReportTest extends TestCase
 
     public function test_default_dataset_prepares_evidence_and_explicit_pdf_seeder_is_idempotent(): void
     {
+        StructuredClinicalReasonFixture::prepareDemoCatalog();
         $this->seed(DatabaseSeeder::class);
         $this->assertDatabaseCount('laboratory_report_issuances', 0);
         $this->seed(LaboratoryReportIssuanceSeeder::class);

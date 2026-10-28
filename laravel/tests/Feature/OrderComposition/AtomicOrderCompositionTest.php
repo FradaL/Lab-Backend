@@ -404,6 +404,10 @@ class AtomicOrderCompositionTest extends TestCase
         $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
         $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
         $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $localReasons = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $structuredReasons = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $localReasons->down();
+        $structuredReasons->down();
         $deliveryMigration->down();
         $reportMigration->down();
         $finalizationMigration->down();
@@ -421,6 +425,8 @@ class AtomicOrderCompositionTest extends TestCase
         $finalizationMigration->up();
         $reportMigration->up();
         $deliveryMigration->up();
+        $structuredReasons->up();
+        $localReasons->up();
         $this->assertDatabaseHas('laboratory_order_legacy_exams', ['laboratory_exam_id' => $legacy->id]);
         $this->assertDatabaseMissing('laboratory_order_legacy_exams', ['laboratory_exam_id' => $enrolled->id]);
         PriceListExam::factory()->for($this->lab)->create(['price_list_id' => $this->prices->id, 'laboratory_exam_id' => $legacy->id, 'status' => 'active']);
@@ -452,6 +458,10 @@ class AtomicOrderCompositionTest extends TestCase
         $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
         $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
         $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $localReasons = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $structuredReasons = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $localReasons->down();
+        $structuredReasons->down();
         $deliveryMigration->down();
         $reportMigration->down();
         $finalizationMigration->down();
@@ -477,6 +487,8 @@ class AtomicOrderCompositionTest extends TestCase
         $finalizationMigration->up();
         $reportMigration->up();
         $deliveryMigration->up();
+        $structuredReasons->up();
+        $localReasons->up();
 
         $this->assertSame($beforeOrder, array_intersect_key($order->refresh()->getRawOriginal(), $beforeOrder));
         $this->assertSame($beforeExam, $exam->refresh()->getRawOriginal());
@@ -496,6 +508,10 @@ class AtomicOrderCompositionTest extends TestCase
         $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
         $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
         $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $localReasons = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $structuredReasons = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $localReasons->down();
+        $structuredReasons->down();
         $deliveryMigration->down();
         $reportMigration->down();
         $finalizationMigration->down();
@@ -511,6 +527,8 @@ class AtomicOrderCompositionTest extends TestCase
         $finalizationMigration->up();
         $reportMigration->up();
         $deliveryMigration->up();
+        $structuredReasons->up();
+        $localReasons->up();
         PriceListExam::factory()->for($this->lab)->create(['price_list_id' => $this->prices->id, 'laboratory_exam_id' => $legacy->id, 'status' => 'active']);
         $orderId = $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($legacy)])->assertCreated()->json('data.id');
         $old = LaboratoryOrderExam::sole()->getRawOriginal();

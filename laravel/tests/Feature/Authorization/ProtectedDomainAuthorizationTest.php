@@ -47,7 +47,7 @@ final class ProtectedDomainAuthorizationTest extends TestCase
         ksort($expected);
 
         $this->assertSame($expected, $actual);
-        $this->assertCount(128, $actual);
+        $this->assertCount(150, $actual);
         $this->assertEmpty(array_diff(array_values($actual), RbacCatalog::PERMISSIONS));
         $this->assertSame(47, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
@@ -325,6 +325,28 @@ final class ProtectedDomainAuthorizationTest extends TestCase
     private function protectedRoutes(): array
     {
         return [
+            'GET api/v1/laboratory/clinical-reasons/local' => 'clinical_reasons.local.view',
+            'POST api/v1/laboratory/clinical-reasons/local' => 'clinical_reasons.local.create',
+            'GET api/v1/laboratory/clinical-reasons/local/{reason}' => 'clinical_reasons.local.view',
+            'GET api/v1/laboratory/clinical-reasons/local/{reason}/versions' => 'clinical_reasons.local.history',
+            'GET api/v1/laboratory/clinical-reasons/local/{reason}/events' => 'clinical_reasons.local.history',
+            'POST api/v1/laboratory/clinical-reasons/local/{reason}/versions' => 'clinical_reasons.local.publish',
+            'POST api/v1/laboratory/clinical-reasons/local/{reason}/activation' => 'clinical_reasons.local.manage',
+            'GET api/v1/laboratory/clinical-reasons/local/{reason}/reviews' => 'clinical_reasons.local.view',
+            'POST api/v1/laboratory/clinical-reasons/local/{reason}/reviews/{review}/resolutions' => 'clinical_reasons.review_impact',
+            'GET api/v1/laboratory/clinical-reasons/local/{reason}/reviews/{review}/resolutions' => 'clinical_reasons.local.history',
+            'GET api/v1/laboratory/clinical-reasons/global' => 'clinical_reasons.global.view',
+            'GET api/v1/laboratory/clinical-reasons/global/{reason}' => 'clinical_reasons.global.view',
+            'GET api/v1/laboratory/clinical-reasons/global/{reason}/versions' => 'clinical_reasons.global.view',
+            'GET api/v1/laboratory/clinical-reason-adoptions' => 'clinical_reasons.adoptions.view',
+            'POST api/v1/laboratory/clinical-reason-adoptions' => 'clinical_reasons.adoptions.create',
+            'POST api/v1/laboratory/clinical-reason-adoptions/{adoption}/versions' => 'clinical_reasons.adoptions.update',
+            'GET api/v1/laboratory/clinical-reason-adoptions/{adoption}/versions' => 'clinical_reasons.adoptions.history',
+            'GET api/v1/laboratory/clinical-reason-adoptions/{adoption}/updates' => 'clinical_reasons.adoptions.view',
+            'GET api/v1/laboratory/clinical-reason-adoptions/{adoption}/eligibility' => 'clinical_reasons.adoptions.view',
+            'GET api/v1/laboratory/clinical-reason-adoptions/{adoption}/reviews' => 'clinical_reasons.adoptions.view',
+            'POST api/v1/laboratory/clinical-reason-adoptions/{adoption}/reviews/{review}/resolutions' => 'clinical_reasons.review_impact',
+            'GET api/v1/laboratory/clinical-reason-adoptions/{adoption}/reviews/{review}/resolutions' => 'clinical_reasons.adoptions.history',
             'GET api/v1/dashboard' => 'orders.view',
             'GET api/v1/branches/active' => 'branches.view',
             'GET api/v1/patients' => 'patients.view',

@@ -240,6 +240,10 @@ class ClinicalResultTest extends TestCase
         $finalizationMigration = require database_path('migrations/2026_10_11_000003_add_clinical_order_finalization.php');
         $reportMigration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
         $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
+        $localReasons = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $structuredReasons = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $localReasons->down();
+        $structuredReasons->down();
         $deliveryMigration->down();
         $reportMigration->down();
         $finalizationMigration->down();
@@ -254,6 +258,8 @@ class ClinicalResultTest extends TestCase
         $finalizationMigration->up();
         $reportMigration->up();
         $deliveryMigration->up();
+        $structuredReasons->up();
+        $localReasons->up();
         $this->getJson($url)->assertOk()->assertJsonPath('data.parameters', [])->assertJsonPath('data.capture_available', false);
         $this->putJson('/api/v1/laboratory/validation-policy', ['validation_policy' => 'permission_based'])->assertOk();
         $this->postJson($url.'/validate', ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11']])->assertConflict()->assertJsonPath('code', 'result_validation_unavailable');

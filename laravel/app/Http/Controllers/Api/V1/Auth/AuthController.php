@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Auth;
 
+use App\Authorization\SaasAccessAuthority;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Auth\LoginRequest;
 use App\Http\Resources\Api\V1\UserResource;
@@ -80,12 +81,13 @@ class AuthController extends Controller
         path: '/api/v1/auth/me',
         operationId: 'authMe',
         summary: 'Obtener el usuario autenticado',
-        description: 'Devuelve exclusivamente los datos públicos necesarios del usuario asociado a la sesión de Sanctum.',
+        description: 'Devuelve la identidad pública y códigos de capacidades SaaS vigentes de la propia cuenta, sin concesiones, actores ni datos de otros usuarios. La autorización de escritura se revalida.',
         security: [['sanctumCookie' => []]],
         tags: ['Authentication'],
         responses: [
             new OA\Response(response: 200, description: 'Usuario autenticado.', content: new OA\JsonContent(ref: '#/components/schemas/CurrentUserResponse')),
             new OA\Response(response: 401, description: 'La solicitud no tiene una sesión autenticada.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
+            new OA\Response(response: 403, description: 'Cuenta inactiva: USER_INACTIVE.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
         ],
     )]
     public function me(Request $request): JsonResponse
@@ -93,7 +95,8 @@ class AuthController extends Controller
         return response()->json([
             'data' => [
                 'user' => UserResource::make($request->user()),
+                'saas_capabilities' => app(SaasAccessAuthority::class)->capabilitiesFor($request->user()),
             ],
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 }
