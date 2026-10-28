@@ -1,6 +1,6 @@
-# DEMO de desarrollo — FE-EXC-01 y FE-SaaS-02
+# DEMO de desarrollo — FE-EXC-01, FE-SaaS-02 y pruebas funcionales
 
-## Ejecución para Sara, Atziry y Cristian
+## Preparación para desarrolladores
 
 Desde la raíz de `backend-lab`, con Docker, la imagen local `donqer-lab-workspace`
 y las dependencias `laravel/vendor` instaladas:
@@ -29,7 +29,7 @@ Para repetir, ejecutar el mismo script con **la contraseña original**. Las
 contraseñas existentes no se cambian; un secreto distinto rechaza toda la operación.
 No hay una contraseña predeterminada ni un mecanismo para recuperar su texto
 original desde la BD: conservarla en el gestor de contraseñas del equipo y
-compartirla con Sara/Atziry/Cristian mediante ese canal autorizado.
+compartirla con los desarrolladores mediante ese canal autorizado.
 
 ## Ocho perfiles y credenciales
 
@@ -191,6 +191,160 @@ estado inicial usar un entorno DEMO desechable nuevo, nunca modificar PostgreSQL
 ni resetear credenciales. La revocación por API se valida automáticamente con la
 identidad auxiliar autorizada, sin habilitar su login manual.
 
+## Usuario adicional para pruebas funcionales: `demo-superadmin`
+
+**Exclusivo para desarrollo local y pruebas aisladas.** Correo:
+**`demo-superadmin@donqerlab.test`**. Está activo y usa el secreto elegido mediante
+`./deploy/demo-exc/development.sh`, igual que los nueve perfiles especializados.
+La contraseña se obtiene del gestor autorizado del equipo; no hay valor
+predeterminado y el seeder nunca cambia la contraseña de una cuenta existente.
+Los nueve perfiles anteriores conservan sus capacidades, roles y membresías.
+
+Ejecutar desde la raíz del repositorio:
+
+```bash
+./deploy/demo-exc/development.sh
+```
+
+El comando prepara o amplía únicamente el entorno desechable autorizado. El
+usuario no se instala en Laradock habitual, bases compartidas ni producción. No
+exportar sus registros, hashes, secretos ni sesiones a un entorno real. Su nombre
+no representa un rol global ni una excepción de autorización en tiempo de ejecución.
+
+### Capacidades SaaS exactas
+
+El catálogo real vigente contiene seis capacidades. Todas son concedibles por
+otra identidad con `saas.access.manage`; ninguna necesita una excepción ni está
+excluida de este perfil. `/api/v1/auth/me` devuelve en `data.saas_capabilities`:
+
+```json
+[
+  "saas.access.manage",
+  "saas.clinical_reasons.classify_impact",
+  "saas.clinical_reasons.create",
+  "saas.clinical_reasons.manage",
+  "saas.clinical_reasons.publish",
+  "saas.clinical_reasons.view"
+]
+```
+
+Incluye consultar el catálogo, crear motivos, publicar versiones, activar o
+desactivar, declarar impacto y administrar concesiones mediante `/platform/access`.
+A concede las seis capacidades mediante `SaasAccessManager::grant()` y conserva
+la auditoría SaaS. No se escribe directamente en las tablas de concesiones. La
+cuenta no puede autoconcesionarse capacidades, aunque tenga `saas.access.manage`;
+continúan vigentes la protección del último administrador y las reglas de revisión.
+El seeder compara la lista explícitamente revisada con todo `saas_capabilities` y
+rechaza un catálogo distinto: una capacidad futura exige revisión, sin concesión
+automática por comodines ni omisión silenciosa.
+
+### Laboratorios, rol y permisos efectivos
+
+Posee membresía activa con rol **`owner`** en los dos laboratorios existentes:
+
+| Laboratorio | NIT | Predeterminado |
+| --- | --- | --- |
+| DEMO FICTICIO EXC | `DEMO-EXC-01` | Sí |
+| DEMO FICTICIO SEGUNDO | `DEMO-DEV-02` | No |
+
+El `owner` de estos laboratorios DEMO tiene exactamente cinco permisos:
+`clinical_reasons.global.view`, `clinical_reasons.adoptions.view`,
+`clinical_reasons.adoptions.create`, `clinical_reasons.adoptions.update` y
+`clinical_reasons.adoptions.history`. **No se amplía ese rol compartido.** La
+matriz general de `RbacCatalog::rolePermissions()['owner']` tiene 75 permisos,
+excluye facultades sensibles y tampoco se modifica ni se aplica a estos roles DEMO.
+
+Para el nuevo usuario se complementan los cinco permisos con los **90 permisos
+restantes de `RbacCatalog::PERMISSIONS`**, como permisos directos de Spatie,
+limitados al usuario y a cada laboratorio. Se reutiliza el mecanismo de
+aprovisionamiento de `AdminDemoPermissionSeeder` y de los seeders de validación y
+cierre clínico: `Permission::findOrCreate()` y `User::givePermissionTo()`. No se
+actualizan pivotes con SQL, no se modifica el catálogo ni se habilita un bypass de
+Gate. Dos eventos `demo_development.permissions_granted` registran laboratorio,
+usuario destinatario, lista concedida y origen del seeder; el actor nulo representa
+aprovisionamiento de sistema, no una autoconcesión de la cuenta. `DemoDataset`
+registra su procedencia y verifica el resultado exacto en cada repetición.
+
+La autorización efectiva es de **95 permisos en cada laboratorio**, desglosados
+abajo. Cada nombre resulta de unir el prefijo y el sufijo con un punto:
+
+| Prefijo | Sufijos concedidos |
+| --- | --- |
+| `branches` | `view` |
+| `patients` | `view`, `create`, `update`, `change_status` |
+| `doctors` | `view`, `create`, `update`, `change_status` |
+| `laboratory_areas` | `view`, `create`, `update`, `change_status` |
+| `sample_types` | `view`, `create`, `update`, `change_status` |
+| `laboratory_exams` | `view`, `create`, `update`, `change_status`, `create_draft`, `edit_draft`, `publish`, `import_template` |
+| `commercial_clients` | `view`, `create`, `update`, `change_status` |
+| `price_lists` | `view`, `create`, `update`, `change_status`, `set_default` |
+| `exam_prices` | `view`, `manage` |
+| `commercial_price_assignments` | `view`, `manage` |
+| `pricing` | `resolve` |
+| `orders` | `view`, `create`, `add_exam`, `remove_exam`, `manage_discount`, `change_status`, `clinical_finalize`, `exams.clinical_finalize`, `clinical_exceptions.request`, `clinical_exceptions.approve`, `clinical_exceptions.view`, `clinical_finalization.view`, `start_exam` |
+| `results` | `view`, `capture`, `edit`, `view_history`, `validate`, `rectify`, `validation_history`, `validation_policy.manage`, `professionals.manage` |
+| `reports` | `view_history`, `issue`, `download`, `settings.view`, `settings.edit`, `delivery_policy.view`, `delivery_policy.manage`, `delivery.evaluate`, `delivery_history.view`, `delivery.prepare`, `delivery.confirm`, `delivery_exceptions.authorize`, `delivery_exceptions.view` |
+| `samples` | `view`, `collect`, `receive`, `evaluate`, `associate` |
+| `users` | `view`, `create`, `assign_role`, `change_status` |
+| `roles` | `view` |
+| `clinical_reasons` | `global.view`, `adoptions.view`, `adoptions.create`, `adoptions.update`, `adoptions.history`, `review_impact`, `local.view`, `local.create`, `local.publish`, `local.manage`, `local.history` |
+
+Estos permisos adicionales se obtienen ejecutando el aprovisionamiento autorizado
+anterior, sin cambios a la matriz de producción. La API de roles permite asignar
+roles existentes; no ofrece un endpoint genérico para conceder permisos directos.
+No utilizarla como sustituto del aprovisionamiento DEMO ni escribir permisos en SQL.
+
+### Uso y limitaciones
+
+1. Cerrar la sesión anterior, obtener `/sanctum/csrf-cookie` e iniciar sesión por
+   `POST /api/v1/auth/login` con el correo y el secreto DEMO, cookies y CSRF.
+2. Verificar identidad y las seis capacidades en `GET /api/v1/auth/me`.
+3. Consultar `GET /api/v1/auth/laboratories`: devuelve las dos membresías activas.
+   Se mantiene el contrato existente: `/auth/me` no incorpora membresías ni roles.
+4. Seleccionar un ID devuelto y enviarlo en `X-Laboratory-ID`; consultar
+   `GET /api/v1/auth/authorization`, que devuelve ese laboratorio, `roles: ["owner"]`
+   y los 95 nombres de permisos ordenados. Para cambiar de laboratorio enviar
+   el otro ID en la siguiente petición; no es necesario volver a iniciar sesión.
+5. Usar las operaciones SaaS en `/platform/...` y las de laboratorio con el
+   contexto elegido. El aislamiento tenant, las membresías activas y la
+   suscripción vigente se siguen comprobando en cada solicitud.
+
+Tener todos los permisos no elimina requisitos de datos, revisiones, políticas ni
+separación de funciones. En particular:
+
+- No puede aprobar su propia solicitud de excepción clínica ni autorizarse a sí
+  mismo como profesional. Se requiere otra identidad sintética legítimamente
+  autorizada cuando el servicio exige una segunda persona; no se elevan los nueve
+  perfiles existentes para resolverlo.
+- Con `validation_policy=professional_required`, validar o rectificar requiere
+  además un registro profesional autorizado en ese laboratorio. El seeder no
+  crea habilitaciones profesionales ni cambia la política. El flujo oficial es
+  registrar mediante `POST /laboratory/validation-professionals` y autorizar con
+  **otra identidad habilitada** mediante
+  `POST /laboratory/validation-professionals/{professional}/authorize`. Estos
+  endpoints requieren `results.professionals.manage` y el contexto tenant.
+- No crea sucursales, pacientes, órdenes, muestras, resultados o reportes de ejemplo. El
+  catálogo clínico DEMO conserva sus 51 motivos y 56 versiones. Preparar los datos
+  necesarios mediante las operaciones oficiales; los servicios pueden responder
+  409 o 422 mientras falten requisitos de negocio. En particular, crear órdenes
+  requiere una sucursal activa; este dataset no la incluye y el contrato actual
+  sólo expone consulta de sucursales (`GET /branches/active`). Prepararla requiere
+  un fixture o seeder sintético autorizado en la base desechable; no ampliar
+  permisos ni ejecutar `DatabaseSeeder` sobre este dataset para resolverlo.
+- Estos laboratorios sólo aprovisionan el rol `owner`. La administración de
+  usuarios no crea definiciones de roles: utilizar otros roles requiere prepararlos
+  mediante un aprovisionamiento sintético autorizado. No ejecutar el seeder general
+  `RolePermissionSeeder` sobre este entorno: reemplazaría la matriz compartida del
+  `owner` y alteraría los perfiles especializados.
+- No accede a laboratorios ajenos. Una membresía, cuenta, laboratorio o suscripción
+  inactiva puede impedir el acceso aunque conserve permisos.
+
+Las repeticiones son idempotentes. Una capacidad revocada o un permiso directo,
+rol o membresía alterado provoca rechazo y rollback; no se restaura automáticamente.
+Para revocar una capacidad usar el flujo de API oficial de la sección de Cristian,
+seleccionando ahora `demo-superadmin@donqerlab.test`. Si se revoca su
+`saas.access.manage`, el actor A conserva la administración; el seeder no la repone.
+
 ## Restricciones e idempotencia
 
 Sólo se admite `local` sobre `postgres-exc-demo/donqer_exc_demo`, usuario
@@ -208,9 +362,11 @@ Una transacción exterior y el lock administrativo existente serializan el conju
 Una colisión o fallo de auditoría revierte toda la ejecución. Datos ajenos que se
 incorporen después se conservan; ningún seeder elimina registros.
 
-Resultado limpio: **11 usuarios** (8 perfiles originales + clasificador + A/B), **2 laboratorios**,
-**3 membresías**, **19 concesiones SaaS**, **51 motivos**, **56 versiones**,
-**75 eventos SaaS** (61 anteriores + 14 concesiones de perfiles).
+Resultado limpio: **12 usuarios** (9 perfiles especializados + superadmin + A/B),
+**2 laboratorios**, **5 membresías**, **25 concesiones SaaS**, **51 motivos**,
+**56 versiones**, **81 eventos SaaS** (61 iniciales + 20 concesiones de perfiles),
+**180 asignaciones directas tenant** (90 por laboratorio, sólo al superadmin) y
+**2 eventos tenant** de aprovisionamiento de permisos del superadmin.
 Las repeticiones no añaden usuarios, membresías, roles, concesiones, motivos,
 versiones ni eventos. Se conservan adopciones posteriores. Una revocación, cambio de
 matriz, rol, membresía, vigencia de suscripción o historia clínica se informa y
@@ -236,7 +392,7 @@ docker compose -p donqer-exc-demo -f deploy/demo-exc/compose.yaml down
 docker compose -p donqer-demo-seeders-validation -f deploy/testing/compose.yaml run --rm tests php vendor/bin/phpunit --do-not-cache-result tests/Feature/DemoDevelopmentSeederTest.php tests/Feature/ClinicalReasons tests/Feature/SaasAccess tests/Feature/Api/V1/Auth
 ```
 
-La batería comprueba login de los nueve usuarios por sesión Sanctum,
+La batería comprueba login de los diez usuarios por sesión Sanctum,
 `/auth/me` con matrices exactas y arrays vacíos, membresías, dos laboratorios,
 autorización de consulta SaaS, revocación inmediata y no restauración, paginación,
 adopción/actualización por ambos laboratorios y el mixto, idempotencia tras adopción,
@@ -277,7 +433,57 @@ Validación del perfil de impacto, **2026-10-28**:
 - Laravel Pint aplicado a los archivos PHP modificados; sintaxis Bash y
   `git diff --check` correctos.
 
-## Archivos entregados
+Validación del superadmin, **2026-10-28**:
+
+- Regresión ampliada: **392 pruebas, 9.930 aserciones, sin fallos**, en PHP 8.4.25
+  y PHPUnit 12.5.35. Incluye los 18 casos del seeder y las regresiones de clínica,
+  SaaS, autenticación, RBAC, aislamiento tenant y separación de funciones.
+- Se añadieron siete pruebas al seeder (18 en total): catálogo SaaS completo,
+  operaciones SaaS por API, concesión y revocación auditadas, autoconcesión 403,
+  permisos efectivos exactos, navegación entre ambos laboratorios con la misma
+  sesión Sanctum, creación y aislamiento de pacientes, roles originales intactos,
+  autoautorización profesional 403, membresía/cuenta/suscripción inactivas,
+  laboratorio ajeno, revocaciones sin reparación, colisión con identidad ajena
+  y rollback ante fallo de auditoría de permisos.
+- Ampliación desde los nueve perfiles del commit anterior en un segundo
+  PostgreSQL 17 desechable: todos los registros originales comparados en 14 tablas
+  se conservaron, incluido el hash de las credenciales, roles y sus permisos.
+  El nuevo usuario obtuvo seis capacidades, dos membresías `owner` y 95 permisos
+  en cada laboratorio. Una segunda ejecución no produjo cambios.
+- Los 95 nombres de permisos de la tabla documental se compararon contra el
+  catálogo fuente: coinciden exactamente. Laravel Pint, sintaxis Bash y
+  `git diff --check` verificados.
+
+Ambos proyectos de validación (`donqer-superadmin-validation` y
+`donqer-superadmin-upgrade-validation`) utilizaron PostgreSQL desechable y se
+retiraron al terminar. No se modificaron bases compartidas ni producción. El
+usuario queda disponible para uso frontend al ejecutar el script de preparación
+con el secreto DEMO original.
+
+Comando de regresión ampliada, desde la raíz del repositorio:
+
+```bash
+docker compose -p donqer-superadmin-validation -f deploy/testing/compose.yaml run --rm tests \
+  php vendor/bin/phpunit --do-not-cache-result \
+  tests/Feature/DemoDevelopmentSeederTest.php \
+  tests/Feature/ClinicalReasons tests/Feature/SaasAccess \
+  tests/Feature/Api/V1/Auth tests/Feature/Authorization \
+  tests/Feature/ClinicalValidation/ValidationSecurityTest.php \
+  tests/Feature/ClinicalFinalization/ClinicalResolutionTest.php \
+  tests/Feature/ReportDelivery/ReportDeliveryTest.php
+```
+
+Archivos modificados para este perfil:
+
+| Archivo | Cambio |
+| --- | --- |
+| `laravel/database/seeders/DemoSaasUsersSeeder.php` | Décimo perfil con seis capacidades revisadas y guarda ante cambios del catálogo. |
+| `laravel/database/seeders/DemoLaboratorySeeder.php` | Dos membresías owner y permisos directos exclusivos del superadmin, con procedencia, auditoría y verificación exacta. |
+| `laravel/tests/Feature/DemoDevelopmentSeederTest.php` | Autenticación, autorización, aislamiento, idempotencia y seguridad del perfil nuevo; regresión de los nueve anteriores. |
+| `docs/sprint-2/DEMO-development-seeders.md` | Credenciales, capacidades, permisos efectivos, límites y evidencia. |
+| `README.md` | Entrada al perfil funcional en la guía DEMO. |
+
+## Archivos del aprovisionamiento original
 
 | Archivo | Cambio |
 | --- | --- |

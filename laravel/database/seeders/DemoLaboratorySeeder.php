@@ -2,9 +2,12 @@
 
 namespace Database\Seeders;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
 use App\Authorization\ClinicalReasonTenantAuthority as Tenant;
 use App\Authorization\RbacCatalog;
 use App\Authorization\SaasAccessAuthority;
+use App\Models\AuditLog;
 use App\Models\Laboratory;
 use App\Models\LaboratoryUser;
 use App\Models\Plan;
@@ -15,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 final class DemoLaboratorySeeder extends Seeder
 {
@@ -54,7 +58,9 @@ final class DemoLaboratorySeeder extends Seeder
                         if ($role->permissions()->orderBy('name')->pluck('name')->all() !== $permissions) {
                             throw new RuntimeException('DEMO role changed; automatic repair is forbidden.');
                         }
-                        $profiles = $lab->id === $primary->id ? ['exc-demo-owner', 'demo-saas-mixed'] : ['exc-demo-owner'];
+                        $profiles = $lab->id === $primary->id
+                            ? ['exc-demo-owner', 'demo-saas-mixed', 'demo-superadmin']
+                            : ['exc-demo-owner', 'demo-superadmin'];
                         foreach ($profiles as $profile) {
                             $user = DemoDataset::owned(User::class, ['email' => $profile.'@donqerlab.test']);
                             $default = $lab->id === $primary->id;
@@ -69,11 +75,12 @@ final class DemoLaboratorySeeder extends Seeder
                                 throw new RuntimeException('DEMO membership/role changed; automatic repair is forbidden.');
                             }
                         }
+                        $this->superadminPermissions($lab);
                     }
                     foreach (DemoSaasUsersSeeder::profiles() as $profile => $_) {
                         $user = DemoDataset::owned(User::class, ['email' => $profile.'@donqerlab.test']);
                         $expected = match ($profile) {
-                            'exc-demo-owner' => [$primary->id, $secondary->id],
+                            'exc-demo-owner', 'demo-superadmin' => [$primary->id, $secondary->id],
                             'demo-saas-mixed' => [$primary->id],
                             default => [],
                         };
@@ -86,6 +93,45 @@ final class DemoLaboratorySeeder extends Seeder
             });
         } finally {
             setPermissionsTeamId($team);
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
+        }
+    }
+
+    /** Use the existing DEMO direct-permission mechanism without expanding the shared owner role. */
+    private function superadminPermissions(Laboratory $lab): void
+    {
+        RbacCatalog::assertValid();
+        $user = DemoDataset::owned(User::class, ['email' => 'demo-superadmin@donqerlab.test']);
+        $user->unsetRelation('roles')->unsetRelation('permissions');
+        if ($user->getRoleNames()->all() !== ['owner']) {
+            throw new RuntimeException('DEMO superadmin roles changed; automatic repair is forbidden.');
+        }
+        $expected = RbacCatalog::PERMISSIONS;
+        sort($expected);
+        $direct = array_values(array_diff($expected, $user->getPermissionsViaRoles()->pluck('name')->all()));
+        $values = ['role' => 'owner', 'permissions' => $direct, 'is_active' => true];
+        $audit = DemoDataset::remember(AuditLog::class, hash('sha256', 'demo-development:superadmin-permissions:'.$lab->id),
+            fn ($id) => AuditLog::whereKey($id)->where('laboratory_id', $lab->id)
+                ->where('event', 'demo_development.permissions_granted')->whereNull('user_id')
+                ->where('auditable_type', 'user')->where('auditable_id', $user->id)->first(),
+            function () use ($lab, $user, $direct, $values): AuditLog {
+                if ($user->getDirectPermissions()->isNotEmpty()) {
+                    throw new RuntimeException('Unregistered DEMO direct permissions; automatic repair is forbidden.');
+                }
+                foreach ($direct as $name) {
+                    $user->givePermissionTo(Permission::findOrCreate($name, RbacCatalog::GUARD));
+                }
+
+                return app(AuditWriter::class)->record($lab, null, new AuditEvent(
+                    'demo_development.permissions_granted', 'user', $user->id,
+                    newValues: $values,
+                    metadata: ['source' => 'DemoLaboratorySeeder', 'reason' => DemoDataset::DISCLAIMER],
+                ));
+            });
+        $user->unsetRelation('roles')->unsetRelation('permissions');
+        if ($audit->new_values != $values || $user->getDirectPermissions()->pluck('name')->sort()->values()->all() !== $direct
+            || $user->getAllPermissions()->pluck('name')->sort()->values()->all() !== $expected) {
+            throw new RuntimeException('DEMO superadmin permissions changed; automatic repair is forbidden.');
         }
     }
 }
