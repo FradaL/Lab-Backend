@@ -61,6 +61,14 @@ docker compose exec workspace php artisan db:seed
 docker compose exec workspace php artisan test
 ```
 
+## Catálogo para excepciones del dataset clínico
+
+Las solicitudes clínicas nuevas requieren una referencia estructurada y justificación separada; el dataset demo utiliza origen global adoptado. Antes de ejecutar el dataset completo, un operador SaaS autorizado debe preparar un motivo global **FICTICIO**, activo, de clase `terminal_candidate` y con impacto clasificado que permita su uso. Configurar su ID efectivo en `SAAS_DEMO_CLINICAL_REASON_ID`; los escenarios demo lo seleccionan individualmente mediante el servicio de adopción. No se crean accesos o facultades SaaS automáticamente.
+
+Sin catálogo/configuración válidos, `db:seed` falla con diagnóstico y revierte el dataset; no se generan solicitudes de texto libre. El contrato, la nueva migración (sin aplicación automática a desarrollo/producción), la compatibilidad histórica y las pruebas están en [BE-EXC-02.3-I](docs/sprint-2/BE-EXC-02.3-I-integracion-clinica.md). Las solicitudes anteriores conservan su texto e historia, sin inferir motivos por nombre; BE-EXC-02.4 añade [administración e integración local](docs/sprint-2/BE-EXC-02.4-motivos-locales.md) con versión original y revisión explícita, sin adopción ni impacto SaaS. El dataset demo conserva su configuración global explícita.
+
+Para integrar **FE-EXC-01 / CA-20**, está disponible un [procedimiento de catálogo DEMO aislado](docs/sprint-2/FE-EXC-01-datos-demo.md): crea 51 motivos y 56 versiones mediante dos identidades SaaS sintéticas autorizadas, en la base desechable `donqer_exc_demo`. Incluye un owner sintético para consumo frontend en `http://localhost:8086`, confirmación explícita, auditoría e idempotencia. Su Compose y el comando `demo:clinical-reasons` se ejecutan expresamente siguiendo esa guía.
+
 ## Usuarios demo
 
 Los seeders crean dos usuarios exclusivamente para desarrollo local:
@@ -305,3 +313,11 @@ El health check responde HTTP 200 con:
 ```
 
 Los endpoints disponibles para autenticación son `POST /api/v1/auth/login`, `GET /api/v1/auth/me` y `POST /api/v1/auth/logout`.
+
+### Lecturas compartidas de motivos clínicos
+
+BE-EXC-02.5 incorpora GET `/api/v1/laboratory/clinical-reasons` para globales adoptados y locales del contexto autorizado, con referencia lista para BE08, elegibilidad informativa, filtros y paginación. Se reutilizan los permisos existentes por origen; el backend revalida al escribir. [Contratos y guía de integración](docs/sprint-2/BE-EXC-02.5-contratos-lectura.md) detallan los campos aditivos de pendientes, elegibilidad global y capacidades propias SaaS. Sin frontend ni aplicación de migraciones a entornos reales.
+
+## Validación integral del catálogo clínico
+
+[BE-EXC-02.6 — auditoría y recomendación de cierre técnico](docs/sprint-2/BE-EXC-02.6-validacion-integral.md) registra la suite completa en PostgreSQL, aislamiento, autoridades, integridad, concurrencia, contratos y medición. El cierre técnico del catálogo se distingue del alcance pendiente de evidencia, viabilidad, incidentes e informes BE-EXC-03/04/05; la decisión administrativa corresponde al Product Owner.

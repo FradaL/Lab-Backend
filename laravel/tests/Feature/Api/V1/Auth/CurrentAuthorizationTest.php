@@ -288,7 +288,7 @@ final class CurrentAuthorizationTest extends TestCase
         }
         $this->createSubscription($laboratory);
         $this->seed(RolePermissionSeeder::class);
-        $allPermissions = RbacCatalog::rolePermissions()['owner'];
+        $allPermissions = RbacCatalog::rolePermissions()['administrator'];
         $receptionPermissions = array_values(array_unique(array_merge(
             RbacCatalog::rolePermissions()['receptionist'],
             RbacCatalog::rolePermissions()['cashier'],
@@ -394,7 +394,7 @@ final class CurrentAuthorizationTest extends TestCase
         $this->assertContains('saas', $route->gatherMiddleware());
         $this->assertFalse(collect($route->gatherMiddleware())
             ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')));
-        $this->assertSame(128, collect(Route::getRoutes()->getRoutes())
+        $this->assertSame(150, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/'))
             ->filter(fn (IlluminateRoute $route): bool => collect($route->gatherMiddleware())
                 ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')))

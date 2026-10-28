@@ -1,5 +1,11 @@
 # BE-S2-08 — Finalización clínica de exámenes y órdenes
 
+## Actualización posterior — BE-EXC-02.3-I
+
+La [integración clínica 02.3-I](BE-EXC-02.3-I-integracion-clinica.md), del 2026-10-25, incorpora referencia global adoptada obligatoria para nuevas solicitudes y aplica la política de catálogo en solicitud/aprobación BE08 dentro de su transacción. Conserva la referencia original, historial, snapshots e informes; los IDs de solicitudes anteriores quedan en un conjunto sellado sin asociación inferida a catálogo. Local depende de 02.4; evidencia/viabilidad integral conserva BE-EXC-03/04. El informe enlazado registra resultados y límites de verificación. No se acredita producción ni se declara terminado todo el alcance de excepciones.
+
+El contenido inferior se conserva como expediente del corte anterior a 02.3-I: sus payloads con reason libre y sus menciones de integración pendiente no describen el contrato actual para nuevas solicitudes. La justificación nueva se recibe separadamente y reason se deriva de la versión seleccionada. Consultar el informe y OpenAPI vigentes antes de integrar consumidores.
+
 **Estado:** implementado y validado con PostgreSQL aislado (2026-10-11). Se conserva el trabajo BE-S2-07 existente. No se ejecutan migraciones/seeders en desarrollo o producción, commit, push, despliegue, frontend ni cierre de Trello.
 
 ## 1. Auditoría y decisión aprobada
