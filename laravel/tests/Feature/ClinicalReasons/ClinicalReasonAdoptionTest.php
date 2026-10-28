@@ -34,6 +34,83 @@ class ClinicalReasonAdoptionTest extends TestCase
         return ['expected_revision' => $revision, 'outcome' => $outcome, 'assessment' => 'FICTICIO: evaluación clínica documentada de las restricciones y su aplicabilidad.', 'justification' => 'FICTICIO: fundamento de la evaluación.'];
     }
 
+    #[DataProvider('adoptionWriteOperations')]
+    public function test_adoption_write_contract_returns_a_persisted_selection(bool $update): void
+    {
+        $this->artisan('l5-swagger:generate')->assertExitCode(0);
+        $document = json_decode(file_get_contents(storage_path('api-docs/api-docs.json')), true, flags: JSON_THROW_ON_ERROR);
+        $path = self::BASE.($update ? '/{adoption}/versions' : '');
+        $schema = $document['paths'][$path]['post']['responses'][201]['content']['application/json']['schema'];
+        $this->assertSame('#/components/schemas/ClinicalReasonAdoptionWrite', $schema['$ref']);
+        $schemas = $document['components']['schemas'];
+        $this->assertSame('#/components/schemas/ClinicalReasonAdoptionWriteData', $schemas['ClinicalReasonAdoptionWrite']['properties']['data']['$ref']);
+        $this->assertSame('#/components/schemas/ClinicalReasonSelection', $schemas['ClinicalReasonAdoptionWriteData']['properties']['selection']['$ref']);
+
+        [$operator] = $this->operator();
+        $global = $this->globalReason($operator);
+        [$lab, $owner] = $this->tenant();
+        $previous = null;
+        $url = self::BASE;
+        $input = ['reason_id' => $global['reason']->id, 'version_id' => $global['version']->id, 'justification' => 'FICTICIO: contrato de adopción.'];
+        if ($update) {
+            $previous = $this->selectReason($lab, $owner, $global)['selection'];
+            $published = app(GlobalManager::class)->publish($operator, $global['reason']->id, ['expected_number' => 1, 'definition' => $this->definition(['name' => 'FICTICIO: nueva versión'])])['data'];
+            $url .= '/'.$previous->adoption_id.'/versions';
+            $input = ['expected_revision' => 1, 'version_id' => $published['version']->id, 'justification' => 'FICTICIO: contrato de actualización.'];
+        }
+
+        $response = $this->actingAs($owner)->withHeader('X-Laboratory-ID', (string) $lab->id)->postJson($url, $input)->assertCreated();
+        $selection = $response->json('data.selection');
+        $persisted = ClinicalReasonAdoptionVersion::findOrFail($selection['id']);
+        $this->assertSame($persisted->toArray(), $selection);
+        $response->assertJsonPath('data.selection.laboratory_id', $lab->id)
+            ->assertJsonPath('data.selection.reason_id', $global['reason']->id)
+            ->assertJsonPath('data.selection.adoption_id', $response->json('data.adoption.id'))
+            ->assertJsonPath('data.selection.version_id', $input['version_id'])
+            ->assertJsonPath('data.selection.revision', $update ? 2 : 1)
+            ->assertJsonPath('data.selection.previous_id', $previous?->id)
+            ->assertJsonPath('data.selection.created_by', $owner->id)
+            ->assertJsonPath('data.selection.justification', $input['justification']);
+        foreach ($selection as $field => $value) {
+            $this->assertArrayHasKey($field, $schemas['ClinicalReasonSelection']['properties']);
+        }
+        $this->assertArrayNotHasKey('reason_reference', $selection);
+        $this->assertArrayNotHasKey('eligibility', $selection);
+
+        $this->assertSame('#/components/schemas/ClinicalReasonEligibility', $document['paths'][self::BASE.'/{adoption}/eligibility']['get']['responses'][200]['content']['application/json']['schema']['$ref']);
+        $this->assertSame('#/components/schemas/ClinicalReasonEligibilityData', $schemas['ClinicalReasonEligibility']['properties']['data']['$ref']);
+        $this->assertSame('#/components/schemas/ClinicalReasonSelectionContext', $schemas['ClinicalReasonEligibilityData']['properties']['selection']['$ref']);
+        $this->getJson(self::BASE.'/'.$selection['adoption_id'].'/eligibility')->assertOk()
+            ->assertJsonStructure(['data' => ['selection' => ['reason_reference', 'eligibility']]]);
+    }
+
+    public static function adoptionWriteOperations(): array
+    {
+        return ['initial adoption' => [false], 'version adoption' => [true]];
+    }
+
+    public function test_generated_openapi_references_resolve(): void
+    {
+        $this->artisan('l5-swagger:generate')->assertExitCode(0);
+        $document = json_decode(file_get_contents(storage_path('api-docs/api-docs.json')), true, flags: JSON_THROW_ON_ERROR);
+        $references = 0;
+        foreach (new \RecursiveIteratorIterator(new \RecursiveArrayIterator($document)) as $key => $reference) {
+            if ($key !== '$ref') {
+                continue;
+            }
+            $references++;
+            $this->assertStringStartsWith('#/', $reference);
+            $target = $document;
+            foreach (explode('/', substr($reference, 2)) as $segment) {
+                $segment = str_replace(['~1', '~0'], ['/', '~'], rawurldecode($segment));
+                $this->assertIsArray($target, $reference);
+                $this->assertArrayHasKey($segment, $target, $reference);
+                $target = $target[$segment];
+            }
+        }
+        $this->assertGreaterThan(0, $references);
+    }
+
     public function test_selection_is_individual_and_updates_never_overwrite_the_adopted_version(): void
     {
         [$operator] = $this->operator();
