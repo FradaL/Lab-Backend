@@ -69,6 +69,20 @@ Sin catálogo/configuración válidos, `db:seed` falla con diagnóstico y revier
 
 Para integrar **FE-EXC-01 / CA-20**, está disponible un [procedimiento de catálogo DEMO aislado](docs/sprint-2/FE-EXC-01-datos-demo.md): crea 51 motivos y 56 versiones mediante dos identidades SaaS sintéticas autorizadas, en la base desechable `donqer_exc_demo`. Incluye un owner sintético para consumo frontend en `http://localhost:8086`, confirmación explícita, auditoría e idempotencia. Su Compose y el comando `demo:clinical-reasons` se ejecutan expresamente siguiendo esa guía.
 
+## Entorno DEMO para frontend
+
+Para preparar FE-EXC-01, los ocho perfiles de FE-SaaS-02 y el perfil adicional
+de clasificación de impacto para Cristian, además de `demo-superadmin` para pruebas
+funcionales de SaaS y laboratorio, mediante seeders:
+
+```bash
+./deploy/demo-exc/development.sh
+```
+
+Pide el secreto DEMO con entrada oculta y prepara la base desechable dedicada.
+Incluye dos laboratorios, 51 motivos y 56 versiones; no se ejecuta sobre la BD
+habitual de Laradock. Ver [cuentas, matriz de capacidades, ejecución y pruebas](docs/sprint-2/DEMO-development-seeders.md).
+
 ## Usuarios demo
 
 Los seeders crean dos usuarios exclusivamente para desarrollo local:
