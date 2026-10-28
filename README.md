@@ -72,7 +72,8 @@ Para integrar **FE-EXC-01 / CA-20**, está disponible un [procedimiento de catá
 ## Entorno DEMO para frontend
 
 Para preparar FE-EXC-01, los ocho perfiles de FE-SaaS-02 y el perfil adicional
-de clasificación de impacto para Cristian mediante seeders:
+de clasificación de impacto para Cristian, además de `demo-superadmin` para pruebas
+funcionales de SaaS y laboratorio, mediante seeders:
 
 ```bash
 ./deploy/demo-exc/development.sh

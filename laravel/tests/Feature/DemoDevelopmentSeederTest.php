@@ -2,11 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Authorization\ClinicalReasonTenantAuthority as Tenant;
+use App\Authorization\RbacCatalog;
+use App\Models\AuditLog;
 use App\Models\GlobalClinicalReason;
+use App\Models\Laboratory;
 use App\Models\SaasAuditLog;
+use App\Models\SaasCapability;
 use App\Models\SaasCapabilityAssignment;
 use App\Models\User;
 use App\UserAdministration\SaasAccessManager;
+use Database\Seeders\DemoClinicalReasonProvisioner;
 use Database\Seeders\DemoClinicalReasonsSeeder;
 use Database\Seeders\DemoDevelopmentSeeder;
 use Database\Seeders\DemoLaboratorySeeder;
@@ -33,7 +39,7 @@ class DemoDevelopmentSeederTest extends TestCase
 
     private function snapshot(): array
     {
-        $tables = ['users', 'laboratories', 'laboratory_user', 'roles', 'model_has_roles', 'role_has_permissions',
+        $tables = ['users', 'laboratories', 'laboratory_user', 'roles', 'model_has_roles', 'role_has_permissions', 'model_has_permissions',
             'subscriptions', 'saas_capability_assignments', 'saas_audit_logs', 'global_clinical_reasons',
             'global_clinical_reason_versions', 'global_clinical_reason_impacts', 'clinical_reason_impact_reviews',
             'clinical_reason_adoptions', 'clinical_reason_adoption_versions', 'audit_logs', 'demo_dataset_records'];
@@ -45,7 +51,7 @@ class DemoDevelopmentSeederTest extends TestCase
         return $snapshot;
     }
 
-    public function test_nine_profiles_login_through_sanctum_and_have_exact_access_and_memberships(): void
+    public function test_ten_profiles_login_through_sanctum_and_have_exact_access_and_memberships(): void
     {
         $this->provision();
         $full = ['saas.clinical_reasons.create', 'saas.clinical_reasons.manage', 'saas.clinical_reasons.publish', 'saas.clinical_reasons.view'];
@@ -59,6 +65,7 @@ class DemoDevelopmentSeederTest extends TestCase
             'demo-saas-mixed' => [$full, 1],
             'demo-no-access' => [[], 0],
             'demo-saas-impact' => [['saas.clinical_reasons.classify_impact', 'saas.clinical_reasons.view'], 0],
+            'demo-superadmin' => [['saas.access.manage', 'saas.clinical_reasons.classify_impact', ...$full], 2],
         ];
         $this->withHeader('Origin', 'http://localhost:5173');
         $this->getJson('/api/v1/auth/me')->assertUnauthorized();
@@ -74,10 +81,12 @@ class DemoDevelopmentSeederTest extends TestCase
             $this->postJson('/api/v1/auth/logout')->assertOk();
             Auth::forgetGuards();
         }
-        $this->assertDatabaseCount('users', 11); // Nine frontend profiles plus two private service actors.
-        $this->assertDatabaseCount('laboratory_user', 3);
-        $this->assertDatabaseCount('saas_audit_logs', 75);
-        $this->assertDatabaseCount('saas_capability_assignments', 19);
+        $this->assertDatabaseCount('users', 12); // Ten frontend profiles plus two private service actors.
+        $this->assertDatabaseCount('laboratory_user', 5);
+        $this->assertDatabaseCount('saas_audit_logs', 81);
+        $this->assertDatabaseCount('saas_capability_assignments', 25);
+        $this->assertDatabaseCount('model_has_permissions', 180);
+        $this->assertDatabaseHas('audit_logs', ['event' => 'demo_development.permissions_granted']);
         $before = $this->snapshot();
         $this->provision();
         $this->assertSame($before, $this->snapshot());
@@ -117,7 +126,7 @@ class DemoDevelopmentSeederTest extends TestCase
         $this->postJson('/api/v1/platform/access/users/'.$user->id.'/capabilities', [
             'capability' => 'saas.access.manage', 'reason' => 'FICTICIO autoconcesión prohibida',
         ])->assertForbidden();
-        foreach (array_diff(array_keys(DemoSaasUsersSeeder::profiles()), ['demo-saas-impact']) as $profile) {
+        foreach (array_diff(array_keys(DemoSaasUsersSeeder::profiles()), ['demo-saas-impact', 'demo-superadmin']) as $profile) {
             $this->actingAs(User::where('email', $profile.'@donqerlab.test')->sole());
             $this->getJson($impact)->assertForbidden();
             $this->getJson($impact.'/declarations')->assertForbidden();
@@ -157,11 +166,211 @@ class DemoDevelopmentSeederTest extends TestCase
         $this->assertSame($before, $this->snapshot());
     }
 
+    public function test_superadmin_has_the_entire_real_saas_catalog_and_uses_authorized_services(): void
+    {
+        $this->provision();
+        $user = User::where('email', 'demo-superadmin@donqerlab.test')->sole();
+        $actor = User::where('email', 'exc-demo-a@donqerlab.test')->sole();
+        $capabilities = SaasCapability::orderBy('code')->pluck('code')->all();
+        $this->assertCount(6, $capabilities);
+        $this->actingAs($user)->getJson('/api/v1/auth/me')->assertOk()->assertJsonPath('data.saas_capabilities', $capabilities);
+        foreach (SaasCapabilityAssignment::where('user_id', $user->id)->get() as $grant) {
+            $this->assertSame($actor->id, $grant->granted_by);
+            $this->assertDatabaseHas('saas_audit_logs', ['id' => $grant->grant_audit_id,
+                'actor_id' => $actor->id, 'affected_user_id' => $user->id, 'action' => 'saas.access.granted']);
+        }
+        $base = '/api/v1/platform/clinical-reasons';
+        $definition = DemoClinicalReasonProvisioner::definitions(3)[0];
+        $created = $this->postJson($base, ['code' => 'demo_superadmin_functional', 'definition' => $definition])->assertCreated();
+        $id = $created->json('data.reason.id');
+        $definition['description'] .= ' FICTICIO: publicación de prueba.';
+        $this->postJson($base.'/'.$id.'/versions', ['expected_number' => 1, 'definition' => $definition])->assertCreated();
+        $version = $this->postJson($base.'/'.$id.'/activation', [
+            'expected_number' => 2, 'is_active' => false, 'change_reason' => 'FICTICIO: desactivación de prueba.',
+        ])->assertCreated()->json('data.version.id');
+        $impact = $base.'/'.$id.'/versions/'.$version.'/impact';
+        $this->postJson($impact.'/declarations', ['expected_revision' => 0, 'classification' => 'non_restrictive', 'justification' => 'FICTICIO'])
+            ->assertCreated();
+        $this->getJson($impact)->assertOk()->assertJsonPath('data.classification', 'non_restrictive');
+        $this->getJson($impact.'/declarations')->assertOk()->assertJsonPath('meta.total', 1);
+        foreach ([$base, $base.'/'.$id, $base.'/'.$id.'/versions', $base.'/'.$id.'/events',
+            '/api/v1/platform/access/capabilities', '/api/v1/platform/access/users', '/api/v1/platform/access/history'] as $path) {
+            $this->getJson($path)->assertOk();
+        }
+        $target = User::factory()->create(); // Synthetic recipient confined to the disposable test database.
+        $access = '/api/v1/platform/access/users/';
+        $input = ['capability' => 'saas.clinical_reasons.view', 'reason' => 'FICTICIO: concesión de prueba.'];
+        $this->postJson($access.$user->id.'/capabilities', $input)->assertForbidden();
+        $grant = $this->postJson($access.$target->id.'/capabilities', $input)->assertCreated()->json('data');
+        $this->getJson($access.$target->id.'/capabilities')->assertOk()->assertJsonCount(1, 'data');
+        $this->postJson($access.$target->id.'/capabilities/'.$grant['id'].'/revoke', ['revision' => $grant['revision'], 'reason' => 'FICTICIO: fin de prueba.'])
+            ->assertOk();
+        $this->assertDatabaseHas('saas_audit_logs', ['actor_id' => $user->id, 'affected_user_id' => $target->id, 'action' => 'saas.access.revoked']);
+        $before = $this->snapshot();
+        $this->provision();
+        $this->assertSame($before, $this->snapshot());
+    }
+
+    public function test_superadmin_switches_laboratories_with_exact_permissions_and_preserves_other_owners(): void
+    {
+        $this->provision();
+        $user = User::where('email', 'demo-superadmin@donqerlab.test')->sole();
+        $this->withHeader('Origin', 'http://localhost:5173');
+        $this->get('/sanctum/csrf-cookie')->assertNoContent();
+        $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => self::PASSWORD])->assertOk();
+        Auth::forgetGuards();
+        $labs = $this->getJson('/api/v1/auth/laboratories')->assertOk()->assertJsonCount(2, 'data')->json('data');
+        $this->assertSame(1, collect($labs)->where('is_default', true)->count());
+        $expected = RbacCatalog::PERMISSIONS;
+        sort($expected);
+        $original = [Tenant::GLOBAL_VIEW, Tenant::VIEW, Tenant::ADOPT, Tenant::UPDATE, Tenant::HISTORY];
+        sort($original);
+        $patients = [];
+        foreach ([$labs[0], $labs[1], $labs[0]] as $lab) {
+            $this->withHeader('X-Laboratory-ID', (string) $lab['id']);
+            $this->getJson('/api/v1/auth/authorization')->assertOk()->assertJsonPath('data.laboratory.id', $lab['id'])
+                ->assertJsonPath('data.roles', ['owner'])->assertJsonPath('data.permissions', $expected);
+            $this->assertSame($original, DB::table('role_has_permissions as rp')->join('roles as r', 'rp.role_id', '=', 'r.id')
+                ->join('permissions as p', 'rp.permission_id', '=', 'p.id')->where('r.laboratory_id', $lab['id'])->where('r.name', 'owner')
+                ->orderBy('p.name')->pluck('p.name')->all());
+            foreach (['patients', 'doctors', 'laboratory-areas', 'sample-types', 'laboratory-exams', 'price-lists',
+                'commercial-clients', 'laboratory/users', 'laboratory/roles', 'laboratory/validation-policy',
+                'laboratory/validation-professionals', 'laboratory/clinical-reasons/global', 'laboratory/clinical-reasons/local'] as $path) {
+                $this->getJson('/api/v1/'.$path)->assertOk();
+            }
+            if (! isset($patients[$lab['id']])) {
+                $patients[$lab['id']] = $this->postJson('/api/v1/patients', ['first_names' => 'FICTICIO', 'last_names' => 'DEMO'])->assertCreated()->json('data.id');
+            }
+            $this->getJson('/api/v1/patients/'.$patients[$lab['id']])->assertOk();
+            $this->assertDatabaseHas('audit_logs', ['laboratory_id' => $lab['id'], 'user_id' => null,
+                'event' => 'demo_development.permissions_granted', 'auditable_id' => $user->id]);
+        }
+        $this->getJson('/api/v1/patients/'.$patients[$labs[1]['id']])->assertNotFound();
+        $owner = User::where('email', 'exc-demo-owner@donqerlab.test')->sole();
+        $this->postJson('/api/v1/auth/logout')->assertOk();
+        Auth::forgetGuards();
+        $this->postJson('/api/v1/auth/login', ['email' => $owner->email, 'password' => self::PASSWORD])->assertOk();
+        Auth::forgetGuards();
+        foreach ($labs as $lab) {
+            $this->withHeader('X-Laboratory-ID', (string) $lab['id']);
+            $this->getJson('/api/v1/auth/authorization')->assertOk()->assertJsonPath('data.permissions', $original);
+            $this->getJson('/api/v1/patients')->assertForbidden();
+        }
+        $this->assertDatabaseCount('permissions', 95);
+    }
+
+    public function test_superadmin_permissions_do_not_bypass_professional_self_authorization_or_tenant_access(): void
+    {
+        $this->provision();
+        $user = User::where('email', 'demo-superadmin@donqerlab.test')->sole();
+        $labs = $user->laboratories()->orderBy('laboratories.id')->get();
+        $this->actingAs($user)->withHeader('X-Laboratory-ID', (string) $labs[0]->id);
+        $professional = $this->postJson('/api/v1/laboratory/validation-professionals', [
+            'user_id' => $user->id, 'professional_name' => 'FICTICIO', 'profession' => 'DEMO',
+        ])->assertCreated()->json('data.id');
+        $this->postJson('/api/v1/laboratory/validation-professionals/'.$professional.'/authorize', [])->assertForbidden();
+        DB::table('laboratory_user')->where('user_id', $user->id)->where('laboratory_id', $labs[0]->id)->update(['is_active' => false]);
+        $this->getJson('/api/v1/auth/authorization')->assertForbidden();
+        $this->getJson('/api/v1/patients')->assertForbidden();
+        $this->withHeader('X-Laboratory-ID', (string) $labs[1]->id)->getJson('/api/v1/patients')->assertOk();
+        $labs[1]->subscriptions()->update(['status' => 'expired']);
+        $this->getJson('/api/v1/patients')->assertForbidden();
+        $foreign = Laboratory::factory()->create();
+        $this->withHeader('X-Laboratory-ID', (string) $foreign->id)->getJson('/api/v1/auth/authorization')->assertForbidden();
+        $user->update(['is_active' => false]);
+        $this->getJson('/api/v1/auth/me')->assertForbidden();
+    }
+
+    public function test_superadmin_direct_permission_revocation_is_not_repaired(): void
+    {
+        $this->provision();
+        $user = User::where('email', 'demo-superadmin@donqerlab.test')->sole();
+        $lab = $user->laboratories()->first();
+        setPermissionsTeamId($lab->id);
+        $user->revokePermissionTo('patients.create');
+        $this->actingAs($user)->withHeader('X-Laboratory-ID', (string) $lab->id)
+            ->postJson('/api/v1/patients', ['first_names' => 'FICTICIO', 'last_names' => 'DEMO'])->assertForbidden();
+        $before = $this->snapshot();
+        try {
+            $this->provision();
+            $this->fail('Revoked direct permissions must never be repaired.');
+        } catch (RuntimeException $error) {
+            $this->assertStringContainsString('permissions changed; automatic repair is forbidden', $error->getMessage());
+        }
+        $this->assertSame($before, $this->snapshot());
+    }
+
+    public function test_superadmin_access_management_revocation_is_immediate_and_not_restored(): void
+    {
+        $this->provision();
+        $user = User::where('email', 'demo-superadmin@donqerlab.test')->sole();
+        $actor = User::where('email', 'exc-demo-a@donqerlab.test')->sole();
+        $base = '/api/v1/platform/access/users/'.$user->id.'/capabilities';
+        $grant = collect($this->actingAs($actor)->getJson($base)->assertOk()->json('data'))->firstWhere('capability_code', 'saas.access.manage');
+        $this->postJson($base.'/'.$grant['id'].'/revoke', ['revision' => $grant['revision'], 'reason' => 'FICTICIO: retirar administración.'])->assertOk();
+        $expected = SaasCapability::where('code', '<>', 'saas.access.manage')->orderBy('code')->pluck('code')->all();
+        $this->actingAs($user)->getJson('/api/v1/auth/me')->assertOk()->assertJsonPath('data.saas_capabilities', $expected);
+        $this->getJson('/api/v1/platform/access/users')->assertForbidden();
+        $this->getJson('/api/v1/platform/clinical-reasons')->assertOk();
+        $before = $this->snapshot();
+        try {
+            $this->provision();
+            $this->fail('Revoked access management must never be restored.');
+        } catch (LogicException $error) {
+            $this->assertStringContainsString('automatic repair is forbidden', $error->getMessage());
+        }
+        $this->assertSame($before, $this->snapshot());
+    }
+
+    public function test_superadmin_email_collision_does_not_modify_an_unregistered_identity(): void
+    {
+        config(['clinical_reason_demo.owner_password' => self::PASSWORD]);
+        $this->seed(DemoClinicalReasonsSeeder::class);
+        User::factory()->create(['email' => 'demo-superadmin@donqerlab.test']);
+        $before = $this->snapshot();
+        try {
+            $this->provision();
+            $this->fail('A matching email must not establish DEMO ownership.');
+        } catch (LogicException $error) {
+            $this->assertStringContainsString('Unregistered preexisting record conflicts', $error->getMessage());
+        }
+        $this->assertSame($before, $this->snapshot());
+        $this->assertDatabaseCount('model_has_permissions', 0);
+    }
+
+    public function test_superadmin_permission_audit_failure_rolls_back_the_entire_dataset(): void
+    {
+        AuditLog::created(function (AuditLog $event): void {
+            if ($event->event === 'demo_development.permissions_granted') {
+                throw new RuntimeException('Injected superadmin permission audit failure.');
+            }
+        });
+        try {
+            $this->provision();
+            $this->fail('Permission audit failure must roll back the entire dataset.');
+        } catch (RuntimeException $error) {
+            $this->assertSame('Injected superadmin permission audit failure.', $error->getMessage());
+        } finally {
+            AuditLog::flushEventListeners();
+            AuditLog::clearBootedModels();
+        }
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('model_has_permissions', 0);
+        $this->assertDatabaseCount('saas_capability_assignments', 0);
+        $this->assertDatabaseCount('saas_audit_logs', 0);
+        $this->assertDatabaseCount('audit_logs', 0);
+        $this->assertDatabaseCount('demo_datasets', 0);
+    }
+
     public function test_both_laboratories_and_mixed_profile_can_paginate_adopt_and_update(): void
     {
         $this->provision();
-        foreach (['exc-demo-owner', 'demo-saas-mixed'] as $profile) {
-            $reason = GlobalClinicalReason::where('code', $profile === 'exc-demo-owner' ? 'demo_exc_003' : 'demo_exc_001')->sole();
+        foreach (['exc-demo-owner', 'demo-saas-mixed', 'demo-superadmin'] as $profile) {
+            $reason = GlobalClinicalReason::where('code', match ($profile) {
+                'exc-demo-owner' => 'demo_exc_003',
+                'demo-saas-mixed' => 'demo_exc_001',
+                'demo-superadmin' => 'demo_exc_002',
+            })->sole();
             $versions = $reason->versions()->orderBy('number')->get();
             $user = User::where('email', $profile.'@donqerlab.test')->sole();
             foreach ($user->laboratories()->get() as $lab) {
