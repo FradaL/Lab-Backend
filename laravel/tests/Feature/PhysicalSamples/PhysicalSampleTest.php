@@ -378,6 +378,10 @@ class PhysicalSampleTest extends TestCase
         $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
         $integration = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
         $localIntegration = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
+        $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
+        $exceptionEvidence->down();
+        $replacementEvidence->down();
         $localIntegration->down();
         $integration->down();
         $deliveryMigration->down();
@@ -394,6 +398,8 @@ class PhysicalSampleTest extends TestCase
         $deliveryMigration->up();
         $integration->up();
         $localIntegration->up();
+        $replacementEvidence->up();
+        $exceptionEvidence->up();
         $this->assertSame($beforeOrder, Arr::except($order->fresh()->getRawOriginal(), ['clinical_revision']));
         $this->assertSame($beforeLine, Arr::except($line->fresh()->getRawOriginal(), ['report_area_snapshot']));
         $this->assertNull($line->fresh()->report_area_snapshot); // A pre-report line receives no invented area backfill.

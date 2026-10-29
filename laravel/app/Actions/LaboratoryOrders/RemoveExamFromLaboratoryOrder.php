@@ -13,6 +13,7 @@ use App\Models\LaboratoryOrderExam;
 use App\Models\User;
 use App\Services\LaboratoryOrders\RecalculateLaboratoryOrderEconomics;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 final class RemoveExamFromLaboratoryOrder
@@ -55,6 +56,9 @@ final class RemoveExamFromLaboratoryOrder
 
             if (array_key_exists('clinical_revision', $order->getAttributes()) && $orderExam->clinicalExceptions()->exists()) {
                 throw new ClinicalConflict('order_exam_has_clinical_activity', 'An exception history prevents removal of its clinical line.');
+            }
+            if (Schema::hasTable('clinical_replacement_contexts') && DB::table('clinical_replacement_contexts')->where('laboratory_order_exam_id', $orderExam->id)->exists()) {
+                throw new ClinicalConflict('order_exam_has_clinical_activity', 'Replacement evidence prevents removal of its clinical line.');
             }
             ClinicalFinalizationGuard::line($order, $orderExam);
             $requirements = $orderExam->sampleRequirements()->lockForUpdate()->get();

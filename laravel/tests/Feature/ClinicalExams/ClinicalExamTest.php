@@ -176,6 +176,10 @@ class ClinicalExamTest extends TestCase
         $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
         $localReasons = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
         $structuredReasons = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
+        $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
+        $exceptionEvidence->down();
+        $replacementEvidence->down();
         $localReasons->down();
         $structuredReasons->down();
         $deliveryMigration->down();
@@ -195,6 +199,8 @@ class ClinicalExamTest extends TestCase
         $deliveryMigration->up();
         $structuredReasons->up();
         $localReasons->up();
+        $replacementEvidence->up();
+        $exceptionEvidence->up();
         $before = $line->refresh()->getRawOriginal();
         $version = app(ClinicalExamService::class)->fork($this->lab, $this->actor, $legacy->id, null);
         $this->assertSame('active', $legacy->refresh()->status);
@@ -400,6 +406,10 @@ class ClinicalExamTest extends TestCase
         $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
         $localReasons = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
         $structuredReasons = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
+        $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
+        $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
+        $exceptionEvidence->down();
+        $replacementEvidence->down();
         $localReasons->down();
         $structuredReasons->down();
         $deliveryMigration->down();
@@ -428,6 +438,8 @@ class ClinicalExamTest extends TestCase
         $deliveryMigration->up();
         $structuredReasons->up();
         $localReasons->up();
+        $replacementEvidence->up();
+        $exceptionEvidence->up();
         $this->assertNull($line->refresh()->clinical_version_id);
         $this->getJson("/api/v1/laboratory-exams/{$exam->id}/versions/current")->assertOk()->assertJsonPath('data', null);
     }

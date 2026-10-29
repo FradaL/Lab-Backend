@@ -130,6 +130,7 @@ class ClinicalFinalizationIntegrityTest extends TestCase
         [$lab,$actor,$order,$line] = $scenario;
         $service = app(ClinicalResolutionService::class);
         $reviewer = $this->reviewer($lab);
+        $this->exceptionReference($lab, $actor);
         $r = null;
         if ($operation !== 'request') {
             $r = $this->request($scenario);
@@ -138,7 +139,7 @@ class ClinicalFinalizationIntegrityTest extends TestCase
             $service->decideException($lab, $reviewer, $order->id, $line->id, $r['exception']['id'], true, ['clinical_revision' => $r['clinical_revision'], 'request_revision' => 1]);
         }
         $before = [];
-        foreach (['laboratory_orders', 'clinical_exception_requests', 'clinical_exception_decisions', 'clinical_line_resolutions', 'clinical_order_finalizations', 'audit_logs'] as $table) {
+        foreach (['laboratory_orders', 'clinical_exception_requests', 'clinical_exception_decisions', 'clinical_line_resolutions', 'clinical_order_finalizations', 'clinical_exception_evidence_reviews', 'audit_logs'] as $table) {
             $before[$table] = DB::table($table)->orderBy('id')->get()->toJson();
         }
         AuditLog::creating(function ($audit) use ($event) {

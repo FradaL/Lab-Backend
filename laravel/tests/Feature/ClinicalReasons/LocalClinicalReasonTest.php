@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Feature\ClinicalResults\ClinicalResultScenario;
+use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
 class LocalClinicalReasonTest extends TestCase
@@ -36,13 +37,14 @@ class LocalClinicalReasonTest extends TestCase
     private function definition(array $changes = []): array
     {
         return array_replace(['name' => 'FICTICIO: motivo local', 'description' => 'FICTICIO: definición del laboratorio', 'classification' => 'terminal_candidate',
-            'evidence_requirements' => ['schema_version' => 1, 'requirements' => []], 'is_active' => true, 'change_reason' => 'FICTICIO: inicial'], $changes);
+            'evidence_requirements' => ['schema_version' => 1, 'requirements' => ['medical_instruction']], 'is_active' => true, 'change_reason' => 'FICTICIO: inicial'], $changes);
     }
 
     private function prepared(string $code = 'ficticio'): array
     {
         [$lab, $owner, $order, $line] = $this->scenario(false);
         $this->assignLaboratoryRole($owner, $lab, 'owner');
+        StructuredClinicalReasonFixture::medicalEvidence($lab, $owner);
         $data = app(LocalClinicalReasonManager::class)->create($lab, $owner, ['code' => $code, 'definition' => $this->definition()])['data'];
         $reviewer = $this->createLaboratoryMember($lab);
         $this->assignDirectLaboratoryPermissions($reviewer, $lab, [Authority::REVIEW, Authority::LOCAL_VIEW, Authority::LOCAL_HISTORY, 'orders.clinical_exceptions.approve', 'orders.clinical_exceptions.view']);
