@@ -222,6 +222,7 @@ final class ClinicalResolutionService
 
         return DB::transaction(function () use ($lab, $actor, $orderId) {
             $order = LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->sharedLock()->with(['clinicalFinalization', 'orderExams.clinicalResolution:id,laboratory_order_exam_id,resolution_type,validation_id,exception_decision_id,resolved_by,resolved_at', 'orderExams.clinicalExceptions:id,laboratory_order_exam_id,status', 'orderExams.resultCapture:id,laboratory_order_exam_id,revision,status,last_validation_id', 'orderExams.resultCapture.lastValidation:id,transition_revision'])->firstOrFail();
+            $pendingReportStates = collect(json_decode(DB::scalar('SELECT report_pending_snapshot(?)', [$orderId]), true, flags: JSON_THROW_ON_ERROR))->keyBy('line_id');
             $progress = self::progress($order, $order->orderExams);
             $progress['can_finalize'] = $progress['eligible'] && $actor->can('orders.clinical_finalize');
 
@@ -230,11 +231,23 @@ final class ClinicalResolutionService
                 'lines' => $order->orderExams->map(fn ($l) => ['id' => $l->id, 'clinical_configuration_source' => $l->clinical_configuration_source ?? 'historical', 'clinical_version_id' => $l->clinical_version_id,
                     'resolution' => $l->clinicalResolution === null ? null : ['id' => $l->clinicalResolution->id, 'resolution_type' => $l->clinicalResolution->resolution_type, 'validation_id' => $l->clinicalResolution->validation_id, 'exception_decision_id' => $l->clinicalResolution->exception_decision_id, 'resolved_by' => $l->clinicalResolution->resolved_by, 'resolved_at' => $l->clinicalResolution->resolved_at->toISOString()],
                     'incidence' => $this->incidence($lab, $l),
+                    'reporting' => $this->reportingState($l, $pendingReportStates->get($l->id)),
                     'pending_exception_ids' => $l->clinicalExceptions->where('status', 'pending')->pluck('id')->all(),
                     'result_revision' => $l->resultCapture?->revision ?? 0,
                     'can_finalize' => $l->clinicalResolution === null && $order->status === 'in_process' && $l->processing_started_at !== null && ! $l->clinicalExceptions->contains('status', 'pending') && $l->resultCapture?->status === 'validated' && $l->resultCapture?->revision === $l->resultCapture?->lastValidation?->transition_revision && $actor->can('orders.exams.clinical_finalize'),
                     'can_request_exception' => $l->clinicalResolution === null && in_array($order->status, ['pending', 'in_process'], true) && ! $l->clinicalExceptions->contains('status', 'pending') && $l->resultCapture?->last_validation_id === null && $actor->can('orders.clinical_exceptions.request')])->all()];
         });
+    }
+
+    private function reportingState(LaboratoryOrderExam $line, ?array $pending): array
+    {
+        if ($line->clinicalResolution === null) {
+            return ['status' => $pending['clinical_status'], 'label' => $pending['clinical_status'] === 'incomplete' ? 'Incompleto' : 'Pendiente', 'processing_started' => $pending['processing_started'], 'eligible_line' => false, 'blocking_reasons' => ['report_line_unresolved'], 'reason' => null, 'reason_reference' => null];
+        }
+        $state = json_decode(DB::scalar("SELECT jsonb_build_object('display',s->'clinical_display','reason_reference',CASE WHEN jsonb_typeof(s->'exception'->'reason_reference')='object' THEN (s->'exception'->'reason_reference') - 'definition' ELSE NULL END) FROM (SELECT report_line_snapshot(?) AS s) q", [$line->id]), true, flags: JSON_THROW_ON_ERROR);
+        $eligible = $line->clinicalResolution->resolution_type === 'authorized_exception' || ($line->resultCapture?->status === 'validated' && $line->resultCapture?->last_validation_id === $line->clinicalResolution->validation_id && $line->resultCapture?->revision === $line->resultCapture?->lastValidation?->transition_revision);
+
+        return $state['display'] + ['processing_started' => $line->processing_started_at !== null, 'eligible_line' => $eligible, 'blocking_reasons' => $eligible ? [] : ['report_line_unresolved'], 'reason_reference' => $state['reason_reference']];
     }
 
     private function terminalEligibility(Laboratory $lab, User $actor, LaboratoryOrder $order, LaboratoryOrderExam $line, ClinicalExceptionRequest $request, GlobalClinicalReasonVersion|LaboratoryClinicalReasonVersion|null $version, ?array $reasonStatus): array

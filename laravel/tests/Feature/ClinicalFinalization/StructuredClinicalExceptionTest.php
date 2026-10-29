@@ -332,6 +332,8 @@ class StructuredClinicalExceptionTest extends TestCase
         $integration = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
         $localIntegration = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
+        $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $reportExceptions->down();
         $exceptionEvidence->down();
         $localIntegration->down();
         $integration->down();
@@ -343,13 +345,14 @@ class StructuredClinicalExceptionTest extends TestCase
         $report = app(ClinicalReportService::class)->issue($lab, $actor, $order->id, ['type' => 'complete', 'clinical_revision' => $order->fresh()->clinical_revision, 'identity_confirmation' => true], 'ficticio-historical-report');
         $before = [$request->fresh()->getRawOriginal(), $decision->fresh()->getRawOriginal(), $report->fresh()->getRawOriginal(), DB::scalar('SELECT report_line_snapshot(?)::text', [$line->id]), Storage::disk('clinical_reports')->get($report->private_path)];
 
-        DB::transaction(function () use ($integration, $localIntegration, $exceptionEvidence): void {
+        DB::transaction(function () use ($integration, $localIntegration, $exceptionEvidence, $reportExceptions): void {
             $integration->up();
             $localIntegration->up();
             $exceptionEvidence->up();
+            $reportExceptions->up();
         });
 
-        $this->assertSame($before, [$request->fresh()->getRawOriginal(), $decision->fresh()->getRawOriginal(), $report->fresh()->getRawOriginal(), DB::scalar('SELECT report_line_snapshot(?)::text', [$line->id]), Storage::disk('clinical_reports')->get($report->private_path)]);
+        $this->assertSame($before, [$request->fresh()->getRawOriginal(), $decision->fresh()->getRawOriginal(), array_intersect_key($report->fresh()->getRawOriginal(), $before[2]), DB::scalar('SELECT report_line_snapshot_v1(?)::text', [$line->id]), Storage::disk('clinical_reports')->get($report->private_path)]);
         $this->getJson($this->url($order, $line))->assertOk()->assertJsonPath('data.0.reason_reference', null);
         $this->assertDatabaseCount('clinical_exception_reason_references', 0);
         $this->assertDatabaseHas('clinical_exception_legacy_requests', ['exception_request_id' => $request->id]);

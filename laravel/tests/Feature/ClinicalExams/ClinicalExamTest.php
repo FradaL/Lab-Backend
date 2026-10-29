@@ -178,6 +178,8 @@ class ClinicalExamTest extends TestCase
         $structuredReasons = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
         $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
+        $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $reportExceptions->down();
         $exceptionEvidence->down();
         $replacementEvidence->down();
         $localReasons->down();
@@ -201,6 +203,7 @@ class ClinicalExamTest extends TestCase
         $localReasons->up();
         $replacementEvidence->up();
         $exceptionEvidence->up();
+        $reportExceptions->up();
         $before = $line->refresh()->getRawOriginal();
         $version = app(ClinicalExamService::class)->fork($this->lab, $this->actor, $legacy->id, null);
         $this->assertSame('active', $legacy->refresh()->status);
@@ -408,6 +411,8 @@ class ClinicalExamTest extends TestCase
         $structuredReasons = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
         $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
+        $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $reportExceptions->down();
         $exceptionEvidence->down();
         $replacementEvidence->down();
         $localReasons->down();
@@ -440,6 +445,7 @@ class ClinicalExamTest extends TestCase
         $localReasons->up();
         $replacementEvidence->up();
         $exceptionEvidence->up();
+        $reportExceptions->up();
         $this->assertNull($line->refresh()->clinical_version_id);
         $this->getJson("/api/v1/laboratory-exams/{$exam->id}/versions/current")->assertOk()->assertJsonPath('data', null);
     }
