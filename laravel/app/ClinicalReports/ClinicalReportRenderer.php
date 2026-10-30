@@ -10,65 +10,40 @@ class ClinicalReportRenderer
     /** Render only immutable server snapshots. No HTML, remote assets or signatures. */
     public function render(array $document, string $verificationUrl): string
     {
-        $pdf = new Tcpdf(fileOptions: ['allowedHosts' => [], 'allowedPaths' => [resource_path('report-fonts')]]);
-        $pdf->setCreator('Donqer Lab');
+        $pdf = $this->pdf();
         $pdf->setTitle($document['number']);
         $pdf->setAuthor($document['presentation']['trade_name']);
-        $font = $pdf->font->insert($pdf->pon, 'dejavusans', '', 9, ifile: resource_path('report-fonts/dejavusans.json'));
-        $presentation = $document['presentation'];
-        $wrap = function (string $value, float $width) use ($pdf): array {
-            $rows = [];
-            foreach (explode("\n", $value) as $paragraph) {
-                $row = '';
-                $used = 0.0;
-                foreach (mb_str_split($paragraph) as $char) {
-                    $code = mb_ord($char);
-                    if (! $pdf->font->isCharDefined($code)) {
-                        throw new ClinicalConflict('report_unsupported_character', 'The standard report font cannot represent all document characters.');
-                    }
-                    $charWidth = $pdf->toUnit($pdf->font->getCharWidth($code));
-                    if ($row !== '' && $used + $charWidth > $width - 2) {
-                        $rows[] = $row;
-                        $row = '';
-                        $used = 0;
-                    }
-                    $row .= $char;
-                    $used += $charWidth;
-                }
-                $rows[] = $row === '' ? ' ' : $row;
-            }
-
-            return $rows;
-        };
-        $tradeNameRows = $wrap($presentation['trade_name'], 155);
-        $footerRows = $wrap($presentation['footer'] ?? '', 175);
-        if (count($tradeNameRows) > 8 || count($footerRows) > 20) {
-            throw new ClinicalConflict('report_presentation_invalid', 'The saved presentation cannot fit the mandatory report layout.');
-        }
-        $footerY = 285 - (count($footerRows) + 1) * 4;
-        $bodyEnd = $footerY - 8;
+        $title = ($document['type'] === 'partial' ? 'INFORME PARCIAL' : 'INFORME COMPLETO').' | '.$document['number'];
+        $layout = $this->layout($pdf, $document['presentation'], $title);
+        $bodyFont = $this->font($pdf, 9);
+        $wrap = fn (string $value, float $width) => $this->wrap($pdf, $value, $width);
+        $bodyEnd = $layout['footer_y'] - 8;
         $pageNumber = 0;
         $y = 0.0;
-        $newPage = function () use ($pdf, $font, $document, $tradeNameRows, $footerRows, $footerY, &$pageNumber, &$y): void {
+        $newPage = function () use ($pdf, $bodyFont, $layout, &$pageNumber, &$y): void {
             $pdf->addPage();
-            $pdf->page->addContent($font['out']);
             $pageNumber++;
-            $headerY = 10.0;
-            foreach ($tradeNameRows as $row) {
-                $pdf->addTextCell($row, posx: 15, posy: $headerY, width: 160, height: 6, drawcell: false);
-                $headerY += 6;
+            $position = 10.0;
+            if ($layout['logo'] !== null) {
+                $logo = $layout['logo'];
+                $iid = $pdf->image->add('@'.$logo['bytes']);
+                $pdf->page->addContent($pdf->image->getSetImage($iid, $logo['x'], $position, $logo['width'], $logo['height'], 297));
+                $position += $logo['height'] + 3;
             }
-            $titleY = max(20, $headerY + 2);
-            $pdf->addTextCell(($document['type'] === 'partial' ? 'INFORME PARCIAL' : 'INFORME COMPLETO').' | '.$document['number'], posx: 15, posy: $titleY, width: 180, height: 8, drawcell: false);
-            $pdf->addTextCell('Página '.$pageNumber, posx: 15, posy: $footerY, width: 180, height: 4, drawcell: false);
-            $position = $footerY + 4;
-            foreach ($footerRows as $row) {
-                $pdf->addTextCell($row, posx: 15, posy: $position, width: 180, height: 4, drawcell: false);
-                $position += 4;
+            foreach ($layout['header'] as $block) {
+                $this->drawBlock($pdf, $block, $position);
+                $position += $block['height'] + 2;
             }
-            $y = $titleY + 12;
+            $pdf->page->addContent($bodyFont['out']);
+            $pdf->addTextCell('Página '.$pageNumber, posx: 15, posy: $layout['footer_y'], width: 180, height: 5, drawcell: false);
+            $this->drawBlock($pdf, $layout['footer'], $layout['footer_y'] + 5);
+            $pdf->page->addContent($this->font($pdf, 9)['out']);
+            $y = $layout['body_y'];
         };
         $text = function (?string $value) use ($pdf, $newPage, $wrap, $bodyEnd, &$y): void {
+            if (trim((string) $value) === '' && $y + 6 > $bodyEnd) {
+                return;
+            }
             foreach ($wrap((string) $value, 175) as $row) {
                 if ($y + 6 > $bodyEnd) {
                     $newPage();
@@ -78,12 +53,6 @@ class ClinicalReportRenderer
             }
         };
         $newPage();
-        if ($presentation['logo'] !== null) {
-            $iid = $pdf->image->add('@'.base64_decode($presentation['logo'], true));
-            $pdf->page->addContent($pdf->image->getSetImage($iid, 175, 5, 18, 12, 297));
-        }
-        $text(($presentation['address'] ?? '').' | '.($presentation['phone'] ?? ''));
-        $text($presentation['header'] ?? '');
         $text('Emisión: '.$document['issued_at'].' | Orden: '.$document['order_code']);
         $identity = $document['identity'];
         $text('Paciente: '.$identity['patient']['first_names'].' '.$identity['patient']['last_names']);
@@ -163,6 +132,115 @@ class ClinicalReportRenderer
         }
 
         return $pdf->getOutPDFString();
+    }
+
+    public function validatePresentation(array $presentation): void
+    {
+        $this->layout($this->pdf(), $presentation, 'INFORME COMPLETO | REP-00000000000000000000000000');
+    }
+
+    private function pdf(): Tcpdf
+    {
+        $pdf = new Tcpdf(fileOptions: ['allowedHosts' => [], 'allowedPaths' => [resource_path('report-fonts')]]);
+        $pdf->setCreator('Donqer Lab');
+
+        return $pdf;
+    }
+
+    private function font(Tcpdf $pdf, int $size): array
+    {
+        return $pdf->font->insert($pdf->pon, 'dejavusans', '', $size, ifile: resource_path('report-fonts/dejavusans.json'));
+    }
+
+    private function wrap(Tcpdf $pdf, string $value, float $width): array
+    {
+        $rows = [];
+        foreach (explode("\n", $value) as $paragraph) {
+            $row = '';
+            $used = 0.0;
+            foreach (mb_str_split($paragraph) as $char) {
+                $code = mb_ord($char);
+                if (! $pdf->font->isCharDefined($code)) {
+                    throw new ClinicalConflict('report_unsupported_character', 'The standard report font cannot represent all document characters.');
+                }
+                $charWidth = $pdf->toUnit($pdf->font->getCharWidth($code));
+                if ($row !== '' && $used + $charWidth > $width - 2) {
+                    $rows[] = $row;
+                    $row = '';
+                    $used = 0;
+                }
+                $row .= $char;
+                $used += $charWidth;
+            }
+            $rows[] = $row === '' ? ' ' : $row;
+        }
+
+        return $rows;
+    }
+
+    private function block(Tcpdf $pdf, string $value, array $style): array
+    {
+        $this->font($pdf, $style['font_size_pt']);
+        $rows = $value === '' ? [] : $this->wrap($pdf, $value, 180);
+        $lineHeight = $style['font_size_pt'] * 25.4 / 72 * 1.5;
+
+        return ['rows' => $rows, 'style' => $style, 'line_height' => $lineHeight, 'height' => count($rows) * $lineHeight];
+    }
+
+    /** All configurable content has bounded space, independent of the clinical body. */
+    private function layout(Tcpdf $pdf, array $presentation, string $title): array
+    {
+        $styles = $presentation['styles'] ?? ReportPresentationStyles::defaults();
+        ReportPresentationStyles::validate($styles);
+        $header = [];
+        $height = 10.0;
+        $logo = null;
+        if (($presentation['logo'] ?? null) !== null) {
+            $bytes = base64_decode($presentation['logo'], true);
+            $dimensions = $bytes === false ? false : @getimagesizefromstring($bytes);
+            if (! $dimensions) {
+                throw new ClinicalConflict('report_presentation_invalid', 'The stored logo is invalid.');
+            }
+            $width = (float) $styles['logo']['width_mm'];
+            $logoHeight = $width * $dimensions[1] / $dimensions[0];
+            if ($logoHeight > 20) {
+                $width *= 20 / $logoHeight;
+                $logoHeight = 20.0;
+            }
+            $logo = ['bytes' => $bytes, 'width' => $width, 'height' => $logoHeight,
+                'x' => 15 + match ($styles['logo']['align']) {
+                    'center' => (180 - $width) / 2, 'right' => 180 - $width, default => 0
+                }];
+            $height += $logoHeight + 3;
+        }
+        foreach (['trade_name', 'address', 'phone', 'header', 'title'] as $name) {
+            $block = $this->block($pdf, $name === 'title' ? $title : ($presentation[$name] ?? ''), $styles[$name]);
+            if ($name === 'trade_name' && count($block['rows']) > 8) {
+                throw new ClinicalConflict('report_presentation_invalid', 'The laboratory name exceeds the reserved area.');
+            }
+            $header[] = $block;
+            $height += $block['height'] + 2;
+        }
+        $footer = $this->block($pdf, $presentation['footer'] ?? '', $styles['footer']);
+        if ($height > 105 || $footer['height'] > 45 || count($footer['rows']) > 20) {
+            throw new ClinicalConflict('report_presentation_invalid', 'The presentation exceeds the reserved header or footer area. Shorten the text or reduce its size.');
+        }
+
+        return ['header' => $header, 'logo' => $logo, 'footer' => $footer, 'body_y' => $height + 4, 'footer_y' => 287 - $footer['height'] - 5];
+    }
+
+    private function drawBlock(Tcpdf $pdf, array $block, float $y): void
+    {
+        $pdf->page->addContent($this->font($pdf, $block['style']['font_size_pt'])['out']);
+        foreach ($block['rows'] as $row) {
+            $align = match ($block['style']['align']) {
+                'center' => 'C', 'right' => 'R', default => 'L'
+            };
+            // Let TCPDF align inside a full-width cell. Shrinking the cell to
+            // the measured glyph width would trigger a second wrap for padding.
+            $pdf->addTextCell($row, posx: 15, posy: $y, width: 180, height: $block['line_height'], halign: $align, drawcell: false);
+            $y += $block['line_height'];
+        }
     }
 
     private function referenceText(array $rule): string

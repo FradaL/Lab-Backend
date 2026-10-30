@@ -27,16 +27,31 @@ final class ReportSettingsService
         });
     }
 
+    public function readLogo(Laboratory $lab, User $actor): ?string
+    {
+        return DB::transaction(function () use ($lab, $actor) {
+            $this->authority->check($lab, $actor, 'reports.settings.view');
+            [, $presentation] = $this->snapshot($lab);
+
+            return $presentation['logo'] === null ? null : base64_decode($presentation['logo'], true);
+        });
+    }
+
     public function snapshot(Laboratory $lab): array
     {
         $row = DB::table('laboratory_report_settings')->where('laboratory_id', $lab->id)->sharedLock()->first();
 
-        return $row === null ? [0, ['trade_name' => $lab->name, 'address' => $lab->address, 'phone' => $lab->phone, 'header' => '', 'footer' => '', 'logo' => null, 'logo_hash' => null]] : [$row->revision, json_decode($row->presentation, true, flags: JSON_THROW_ON_ERROR)];
+        $presentation = $row === null
+            ? ['trade_name' => $lab->name, 'address' => $lab->address, 'phone' => $lab->phone, 'header' => '', 'footer' => '', 'logo' => null, 'logo_hash' => null]
+            : json_decode($row->presentation, true, flags: JSON_THROW_ON_ERROR);
+        $presentation['styles'] ??= ReportPresentationStyles::defaults();
+
+        return [$row === null ? 0 : $row->revision, $presentation];
     }
 
     public function update(Laboratory $lab, User $actor, array $input, ?UploadedFile $logo = null): array
     {
-        $allowed = ['revision', 'trade_name', 'address', 'phone', 'header', 'footer', 'remove_logo'];
+        $allowed = ['styles', 'revision', 'trade_name', 'address', 'phone', 'header', 'footer', 'remove_logo'];
         if (array_diff(array_keys($input), $allowed) !== []) {
             throw ValidationException::withMessages(['input' => ['Unknown presentation fields.']]);
         }
@@ -54,6 +69,9 @@ final class ReportSettingsService
                 throw ValidationException::withMessages([$field => ['Too many explicit line breaks for the report layout.']]);
             }
         }
+        if (array_key_exists('styles', $input)) {
+            ReportPresentationStyles::validate($input['styles']);
+        }
         $normalized = $logo === null ? null : $this->logo($logo);
 
         return DB::transaction(function () use ($lab, $actor, $input, $normalized) {
@@ -68,10 +86,14 @@ final class ReportSettingsService
                     $presentation[$field] = $input[$field];
                 }
             }
+            if (array_key_exists('styles', $input)) {
+                $presentation['styles'] = $input['styles'];
+            }
             if (($input['remove_logo'] ?? false) || $normalized !== null) {
                 $presentation['logo'] = $normalized;
                 $presentation['logo_hash'] = $normalized === null ? null : hash('sha256', base64_decode($normalized, true));
             }
+            app(ClinicalReportRenderer::class)->validatePresentation($presentation);
             DB::table('laboratory_report_settings')->updateOrInsert(['laboratory_id' => $lab->id], ['revision' => $revision + 1, 'presentation' => json_encode($presentation, JSON_THROW_ON_ERROR)]);
             $this->audit->record($lab, $actor, new AuditEvent('order_report.settings_updated', 'laboratory', $lab->id, oldValues: ['revision' => $revision], newValues: ['revision' => $revision + 1, 'logo_hash' => $presentation['logo_hash']]));
             unset($presentation['logo']);

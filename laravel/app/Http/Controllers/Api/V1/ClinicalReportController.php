@@ -25,14 +25,36 @@ final class ClinicalReportController extends Controller
         return response()->json(['data' => $this->settings->update($this->current->get(), $r->user(), $r->all())]);
     }
 
+    public function readLogo(Request $r)
+    {
+        $bytes = $this->settings->readLogo($this->current->get(), $r->user());
+
+        return response($bytes ?? '', $bytes === null ? 404 : 200)
+            ->header('Content-Type', 'image/png')->header('Cache-Control', 'private, no-store')
+            ->header('X-Content-Type-Options', 'nosniff');
+    }
+
     public function logo(Request $r)
     {
         $r->validate(['revision' => ['required', 'regex:/\A[0-9]+\z/'], 'logo' => ['required', 'file', 'max:2048']]);
-        if (array_diff(array_keys($r->all()), ['revision', 'logo']) !== []) {
+        if (array_diff(array_keys($r->all()), ['revision', 'logo', 'changes']) !== []) {
             throw ValidationException::withMessages(['input' => ['Unknown logo fields.']]);
         }
 
-        return response()->json(['data' => $this->settings->update($this->current->get(), $r->user(), ['revision' => (int) $r->input('revision')], $r->file('logo'))]);
+        $changes = [];
+        if ($r->has('changes')) {
+            try {
+                $object = json_decode($r->input('changes'), flags: JSON_THROW_ON_ERROR);
+                $changes = json_decode($r->input('changes'), true, flags: JSON_THROW_ON_ERROR);
+            } catch (\Throwable) {
+                throw ValidationException::withMessages(['changes' => ['A JSON object is required.']]);
+            }
+            if (! $object instanceof \stdClass || array_key_exists('revision', $changes) || array_key_exists('remove_logo', $changes)) {
+                throw ValidationException::withMessages(['changes' => ['Only presentation text and styles are accepted.']]);
+            }
+        }
+
+        return response()->json(['data' => $this->settings->update($this->current->get(), $r->user(), ['revision' => (int) $r->input('revision')] + $changes, $r->file('logo'))]);
     }
 
     public function issue(Request $r, int $order)
