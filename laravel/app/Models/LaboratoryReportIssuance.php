@@ -14,7 +14,7 @@ class LaboratoryReportIssuance extends Model
 
     protected $guarded = ['id'];
 
-    protected $hidden = ['private_path', 'verification_hash', 'idempotency_hash', 'request_hash', 'clinical_snapshot', 'identity_snapshot', 'presentation_snapshot'];
+    protected $hidden = ['private_path', 'verification_hash', 'idempotency_hash', 'request_hash', 'clinical_snapshot', 'pending_snapshot', 'identity_snapshot', 'presentation_snapshot'];
 
     protected $dateFormat = 'Y-m-d H:i:s.u';
 
@@ -35,6 +35,6 @@ class LaboratoryReportIssuance extends Model
 
     protected function casts(): array
     {
-        return ['issued_at' => 'immutable_datetime', 'identity_snapshot' => 'array', 'clinical_snapshot' => 'array', 'presentation_snapshot' => 'array'];
+        return ['issued_at' => 'immutable_datetime', 'identity_snapshot' => 'array', 'clinical_snapshot' => 'array', 'pending_snapshot' => 'array', 'presentation_snapshot' => 'array'];
     }
 }

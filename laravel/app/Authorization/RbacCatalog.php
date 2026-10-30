@@ -2,6 +2,7 @@
 
 namespace App\Authorization;
 
+use App\ClinicalReplacements\ReplacementAuthority;
 use LogicException;
 
 final class RbacCatalog
@@ -36,7 +37,7 @@ final class RbacCatalog
         'users.view', 'users.create', 'users.assign_role', 'users.change_status', 'roles.view',
     ];
 
-    public const array PERMISSIONS = [...self::LEGACY_PERMISSIONS, ...ClinicalReasonTenantAuthority::PERMISSIONS];
+    public const array PERMISSIONS = [...self::LEGACY_PERMISSIONS, ...ClinicalReasonTenantAuthority::PERMISSIONS, ...ReplacementAuthority::PERMISSIONS];
 
     private const array RECEPTIONIST_PERMISSIONS = [
         'branches.view',
@@ -85,8 +86,8 @@ final class RbacCatalog
 
     public static function assertValid(): void
     {
-        if (count(self::PERMISSIONS) !== 95 || count(array_unique(self::PERMISSIONS)) !== 95) {
-            throw new LogicException('The RBAC catalog must contain exactly 95 unique permissions.');
+        if (count(self::PERMISSIONS) !== 98 || count(array_unique(self::PERMISSIONS)) !== 98) {
+            throw new LogicException('The RBAC catalog must contain exactly 98 unique permissions.');
         }
 
         $matrix = self::rolePermissions();

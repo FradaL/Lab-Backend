@@ -27,7 +27,7 @@ class RolePermissionSeederTest extends TestCase
     {
         RbacCatalog::assertValid();
 
-        $this->assertCount(95, RbacCatalog::PERMISSIONS);
+        $this->assertCount(98, RbacCatalog::PERMISSIONS);
         $this->assertSame([
             'owner', 'administrator', 'receptionist', 'cashier', 'laboratory_technician', 'viewer',
         ], RbacCatalog::ROLES);
@@ -45,7 +45,7 @@ class RolePermissionSeederTest extends TestCase
             ->get()->map(fn (object $mapping): array => (array) $mapping)->all();
         $this->seed(RolePermissionSeeder::class);
 
-        $this->assertDatabaseCount('permissions', 95);
+        $this->assertDatabaseCount('permissions', 98);
         $this->assertDatabaseCount('roles', 12);
         $this->assertSame($firstMappings, DB::table('role_has_permissions')
             ->orderBy('role_id')->orderBy('permission_id')

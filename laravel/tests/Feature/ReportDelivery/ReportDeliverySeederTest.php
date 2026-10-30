@@ -10,7 +10,6 @@ use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use LogicException;
-use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
 final class ReportDeliverySeederTest extends TestCase
@@ -21,7 +20,7 @@ final class ReportDeliverySeederTest extends TestCase
 
     public function test_demo_evidence_and_explicit_deliveries_are_complete_and_idempotent(): void
     {
-        StructuredClinicalReasonFixture::prepareDemoCatalog();
+        config(['saas.demo_clinical_reason_id' => '']);
         $this->seed(DatabaseSeeder::class);
         $free = Laboratory::where('nit', 'DEMO-BE091-1')->sole();
         $restricted = Laboratory::where('nit', 'DEMO-BE092-1')->sole();
