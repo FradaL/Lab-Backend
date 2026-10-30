@@ -62,7 +62,7 @@ final class ClinicalResolutionService
                 'reason' => $version->name, 'status' => 'pending', 'revision' => 1, 'requested_by' => $actor->id, 'requested_at' => now(),
                 'capture_revision' => $revision, 'processing_started_at' => $line->processing_started_at, 'clinical_configuration_source' => $line->clinical_configuration_source ?? 'historical']);
             $reference = $this->reasons->remember($lab, $actor, $request, $input['reason_reference'], $input['justification']);
-            $this->evidence->remember($lab, $request, $actor->id, $input['justification'], 'request');
+            $this->rememberEvidence($lab, $request, $actor->id, $input['justification'], 'request');
             $this->audit->record($lab, $actor, new AuditEvent('order_clinical.exception_requested', 'laboratory_order_exam', $lineId, newValues: ['exception_request_id' => $request->id, 'status' => 'pending'], metadata: ['reason' => $request->reason, 'source' => $reference->source, 'reason_reference_id' => $reference->id, 'reason_id' => $reference->reason_id, 'version_id' => $reference->version_id, 'eligibility' => $eligibility, 'laboratory_order_id' => $orderId, 'result_revision' => $revision, 'clinical_configuration_source' => $request->clinical_configuration_source]));
 
             return ['clinical_revision' => $order->fresh()->clinical_revision, 'exception' => $request->toArray(), 'reason_reference' => $reference->representation()];
@@ -125,7 +125,7 @@ final class ClinicalResolutionService
                 throw new ClinicalConflict('clinical_exception_dependencies_conflict', 'Reload evidence and viability before reviewing.');
             }
             $this->evidence->assertEligible($status);
-            $id = $this->evidence->remember($lab, $request, $actor->id, $input['justification'], 'review');
+            $id = $this->rememberEvidence($lab, $request, $actor->id, $input['justification'], 'review');
             $this->audit->record($lab, $actor, new AuditEvent('order_clinical.exception_reviewed', 'laboratory_order_exam', $lineId, newValues: ['exception_request_id' => $requestId, 'evidence_review_id' => $id], metadata: ['laboratory_order_id' => $orderId, 'justification' => $input['justification'], 'clinical_eligibility' => $status]));
 
             return ['clinical_revision' => $order->fresh()->clinical_revision, 'evidence_review_id' => $id, 'clinical_eligibility' => $this->terminalEligibility($lab, $actor, $order, $line, $request, $reference?->version, $reference === null ? null : ($this->eligibility->approvalStatuses($lab, collect([$reference]))[$requestId] ?? null))];
@@ -162,8 +162,8 @@ final class ClinicalResolutionService
     {
         return DB::transaction(function () use ($lab, $actor, $orderId, $lineId): array {
             $this->reasons->lock();
-            $this->authority->permission($lab, $actor, 'orders.clinical_exceptions.view');
             $order = LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->sharedLock()->firstOrFail();
+            $this->authority->access($lab, $actor, 'orders.clinical_exceptions.view');
             $line = LaboratoryOrderExam::forLaboratory($lab)->where('laboratory_order_id', $orderId)->whereKey($lineId)->with(['resultCapture', 'clinicalResolution'])->firstOrFail();
             $page = ClinicalExceptionRequest::forLaboratory($lab)->where('laboratory_order_exam_id', $lineId)->orderByDesc('id')->paginate(50);
             $decisions = ClinicalExceptionDecision::forLaboratory($lab)->whereIn('exception_request_id', $page->pluck('id'))->get()->keyBy('exception_request_id');
@@ -184,8 +184,7 @@ final class ClinicalResolutionService
 
         return DB::transaction(function () use ($lab, $actor, $orderId, $input) {
             $order = LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->lockForUpdate()->firstOrFail();
-            Laboratory::whereKey($lab->id)->where('is_active', true)->sharedLock()->firstOrFail();
-            $this->authority->permission($lab, $actor, 'orders.clinical_finalize', true);
+            $this->authority->access($lab, $actor, 'orders.clinical_finalize');
             if (ClinicalOrderFinalization::forLaboratory($lab)->where('laboratory_order_id', $orderId)->exists()) {
                 throw new ClinicalConflict('clinical_order_finalized', 'An immutable finalization already exists.');
             }
@@ -218,10 +217,9 @@ final class ClinicalResolutionService
 
     public function show(Laboratory $lab, User $actor, int $orderId): array
     {
-        $this->authority->permission($lab, $actor, 'orders.clinical_finalization.view');
-
         return DB::transaction(function () use ($lab, $actor, $orderId) {
             $order = LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->sharedLock()->with(['clinicalFinalization', 'orderExams.clinicalResolution:id,laboratory_order_exam_id,resolution_type,validation_id,exception_decision_id,resolved_by,resolved_at', 'orderExams.clinicalExceptions:id,laboratory_order_exam_id,status', 'orderExams.resultCapture:id,laboratory_order_exam_id,revision,status,last_validation_id', 'orderExams.resultCapture.lastValidation:id,transition_revision'])->firstOrFail();
+            $this->authority->access($lab, $actor, 'orders.clinical_finalization.view');
             $pendingReportStates = collect(json_decode(DB::scalar('SELECT report_pending_snapshot(?)', [$orderId]), true, flags: JSON_THROW_ON_ERROR))->keyBy('line_id');
             $progress = self::progress($order, $order->orderExams);
             $progress['can_finalize'] = $progress['eligible'] && $actor->can('orders.clinical_finalize');
@@ -326,12 +324,24 @@ final class ClinicalResolutionService
         return ['id' => $f->id, 'finalized_by' => $f->finalized_by, 'finalized_at' => $f->finalized_at->toISOString(), 'clinical_revision' => $f->clinical_revision, 'lines_snapshot' => $f->lines_snapshot];
     }
 
+    /**
+     * Persistence is private to the clinical command: call only inside its transaction,
+     * after catalog/order/line/request locks, current access, pending state/revisions,
+     * and evidence eligibility (including the observed token for an explicit review).
+     * The request command also persists the original structured reason first.
+     */
+    private function rememberEvidence(Laboratory $lab, ClinicalExceptionRequest $request, int $actorId, string $justification, string $kind): int
+    {
+        return DB::table('clinical_exception_evidence_reviews')->insertGetId(['laboratory_id' => $lab->id, 'laboratory_order_id' => $request->laboratory_order_id,
+            'laboratory_order_exam_id' => $request->laboratory_order_exam_id, 'exception_request_id' => $request->id, 'reviewed_by' => $actorId,
+            'kind' => $kind, 'justification' => $justification, 'dependency_snapshot' => $this->evidence->dependencies($request->laboratory_order_exam_id), 'created_at' => now()]);
+    }
+
     private function locked(Laboratory $lab, User $actor, int $orderId, int $lineId, int $revision, string $permission): array
     {
         $order = LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->lockForUpdate()->firstOrFail();
         $line = LaboratoryOrderExam::forLaboratory($lab)->where('laboratory_order_id', $orderId)->whereKey($lineId)->lockForUpdate()->with(['clinicalVersion', 'resultCapture.lastValidation', 'clinicalResolution', 'clinicalExceptions'])->firstOrFail();
-        Laboratory::whereKey($lab->id)->where('is_active', true)->sharedLock()->firstOrFail();
-        $this->authority->permission($lab, $actor, $permission, true);
+        $this->authority->access($lab, $actor, $permission);
         if (! in_array($order->status, ['pending', 'in_process'], true) || ClinicalOrderFinalization::forLaboratory($lab)->where('laboratory_order_id', $orderId)->exists()) {
             throw new ClinicalConflict('clinical_order_not_open', 'Clinical operations require an open order.');
         }

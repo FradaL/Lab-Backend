@@ -337,3 +337,9 @@ BE-EXC-02.5 incorpora GET `/api/v1/laboratory/clinical-reasons` para globales ad
 ## Validación integral del catálogo clínico
 
 [BE-EXC-02.6 — auditoría y recomendación de cierre técnico](docs/sprint-2/BE-EXC-02.6-validacion-integral.md) registra la suite completa en PostgreSQL, aislamiento, autoridades, integridad, concurrencia, contratos y medición. El cierre técnico del catálogo se distingue del alcance pendiente de evidencia, viabilidad, incidentes e informes BE-EXC-03/04/05; la decisión administrativa corresponde al Product Owner.
+
+## Garantías transversales de excepciones clínicas
+
+[BE-EXC-06 — integridad transversal](docs/sprint-2/BE-EXC-06-integridad-transversal.md) documenta la protección SQL de auditoría, el orden de bloqueos de revisiones, la autorización interna compartida y las pruebas PostgreSQL del circuito BE-EXC-02/03/04/05 con BE-S2-08/09.1. Incluye resultados, límites y recomendaciones para aplicar la migración aditiva; no acredita despliegue ni modifica decisiones aprobadas.
+
+Este seguimiento es posterior al corte BE-EXC-02.6: las referencias anteriores a BE-EXC-03/04/05 pendientes corresponden a aquel corte histórico.

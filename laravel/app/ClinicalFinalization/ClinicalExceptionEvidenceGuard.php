@@ -130,11 +130,4 @@ final class ClinicalExceptionEvidenceGuard
             throw new ClinicalConflict($status['blocking_reasons'][0], 'Review the current clinical evidence and viability before continuing.', ['clinical_eligibility' => $status]);
         }
     }
-
-    public function remember(Laboratory $lab, ClinicalExceptionRequest $request, int $actorId, string $justification, string $kind): int
-    {
-        return DB::table('clinical_exception_evidence_reviews')->insertGetId(['laboratory_id' => $lab->id, 'laboratory_order_id' => $request->laboratory_order_id,
-            'laboratory_order_exam_id' => $request->laboratory_order_exam_id, 'exception_request_id' => $request->id, 'reviewed_by' => $actorId,
-            'kind' => $kind, 'justification' => $justification, 'dependency_snapshot' => $this->dependencies($request->laboratory_order_exam_id), 'created_at' => now()]);
-    }
 }

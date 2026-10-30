@@ -20,9 +20,6 @@ final class ReplacementAuthority
 
     public function check(Laboratory $lab, User $actor, string $permission): void
     {
-        abort_unless(Laboratory::whereKey($lab->id)->where('is_active', true)->sharedLock()->exists(), 403);
-        $this->authority->permission($lab, $actor, $permission, true);
-        $subscription = $lab->subscriptions()->active()->sharedLock()->first();
-        abort_unless($subscription && $subscription->hasStarted() && ! $subscription->hasExpired(), 403, 'An active subscription is required.');
+        $this->authority->access($lab, $actor, $permission);
     }
 }
