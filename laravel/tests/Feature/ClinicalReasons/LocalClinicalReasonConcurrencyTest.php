@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Tests\Feature\ClinicalResults\ClinicalResultScenario;
+use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 use Throwable;
 
@@ -34,8 +35,9 @@ class LocalClinicalReasonConcurrencyTest extends TestCase
     {
         [$lab, $actor, $order, $line] = $this->scenario(false);
         $this->assignLaboratoryRole($actor, $lab, 'owner');
+        StructuredClinicalReasonFixture::medicalEvidence($lab, $actor);
         $manager = app(LocalClinicalReasonManager::class);
-        $definition = ['name' => 'FICTICIO: local', 'description' => 'FICTICIO', 'classification' => 'terminal_candidate', 'evidence_requirements' => ['schema_version' => 1, 'requirements' => []], 'is_active' => true, 'change_reason' => 'FICTICIO'];
+        $definition = ['name' => 'FICTICIO: local', 'description' => 'FICTICIO', 'classification' => 'terminal_candidate', 'evidence_requirements' => ['schema_version' => 1, 'requirements' => ['medical_instruction']], 'is_active' => true, 'change_reason' => 'FICTICIO'];
         $data = $manager->create($lab, $actor, ['code' => 'ficticio', 'definition' => $definition])['data'];
         $reference = ['source' => 'local', 'reason_id' => $data['reason']->id, 'version_id' => $data['version']->id];
         $approver = $this->createLaboratoryMember($lab);

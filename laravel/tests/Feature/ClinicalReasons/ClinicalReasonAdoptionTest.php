@@ -150,7 +150,8 @@ class ClinicalReasonAdoptionTest extends TestCase
         $this->assertSame($global['version']->id, $review->adopted_version_id);
         $this->actingAs($owner)->withHeader('X-Laboratory-ID', (string) $lab->id)->getJson(self::BASE.'/'.$id.'/eligibility')->assertOk()->assertJsonPath('data.can_request', false)->assertJsonPath('data.can_approve', false);
         $url = self::BASE.'/'.$id.'/reviews/'.$review->id.'/resolutions';
-        $this->postJson($url, $this->resolution())->assertForbidden();
+        $unprivileged = $this->createLaboratoryMember($lab);
+        $this->actingAs($unprivileged)->postJson($url, $this->resolution())->assertForbidden();
         $this->actingAs($reviewer)->postJson($url, ['expected_revision' => 0, 'outcome' => 'favorable', 'justification' => 'FICTICIO'])->assertUnprocessable()->assertJsonValidationErrors('assessment');
         $this->postJson($url, $this->resolution('non_favorable'))->assertCreated()->assertJsonPath('review_status', 'pending');
         $this->getJson(self::BASE.'/'.$id.'/eligibility')->assertOk()->assertJsonPath('data.can_request', false);
@@ -301,7 +302,7 @@ class ClinicalReasonAdoptionTest extends TestCase
         $this->assertDatabaseCount('clinical_reason_adoption_versions', 1);
     }
 
-    public function test_non_owner_with_adopt_permission_cannot_adopt_and_owner_does_not_inherit_review(): void
+    public function test_administrator_with_adopt_permission_cannot_adopt_or_review(): void
     {
         [$operator] = $this->operator();
         $g = $this->globalReason($operator);
@@ -404,9 +405,10 @@ class ClinicalReasonAdoptionTest extends TestCase
         $this->declareImpact($operator, $global, 'restrictive');
         $ra = ClinicalReasonImpactReview::where('laboratory_id', $a->id)->sole();
         $rb = ClinicalReasonImpactReview::where('laboratory_id', $b->id)->sole();
-        $this->assignDirectLaboratoryPermission($owner, $a, Tenant::REVIEW);
+        $reviewer = $this->reviewer($a);
+        $reviewer->laboratories()->attach($b, ['is_active' => true]);
         $path = fn ($adoption, $review) => self::BASE.'/'.$adoption.'/reviews/'.$review.'/resolutions';
-        $this->actingAs($owner)->withHeader('X-Laboratory-ID', (string) $b->id)->postJson($path($sb['adoption']->id, $rb->id), $this->resolution())->assertForbidden();
+        $this->actingAs($reviewer)->withHeader('X-Laboratory-ID', (string) $b->id)->postJson($path($sb['adoption']->id, $rb->id), $this->resolution())->assertForbidden();
         $this->withHeader('X-Laboratory-ID', (string) $a->id)->postJson($path($sa['adoption']->id, $ra->id), $this->resolution())->assertCreated();
         $this->withHeader('X-Laboratory-ID', (string) $b->id)->postJson($path($sb['adoption']->id, $rb->id), $this->resolution())->assertForbidden();
         $this->assertSame('pending', $rb->fresh()->status);

@@ -27,6 +27,11 @@ final class ClinicalFinalizationController extends Controller
         return response()->json(['data' => $this->service->decideException($this->current->get(), $r->user(), $order, $line, $exception, true, $r->all())]);
     }
 
+    public function review(Request $r, int $order, int $line, int $exception): JsonResponse
+    {
+        return response()->json(['data' => $this->service->reviewException($this->current->get(), $r->user(), $order, $line, $exception, $r->all())]);
+    }
+
     public function reject(Request $r, int $order, int $line, int $exception): JsonResponse
     {
         return response()->json(['data' => $this->service->decideException($this->current->get(), $r->user(), $order, $line, $exception, false, $r->all())]);

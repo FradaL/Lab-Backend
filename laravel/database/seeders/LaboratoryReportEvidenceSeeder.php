@@ -82,6 +82,7 @@ final class LaboratoryReportEvidenceSeeder extends Seeder
                         foreach ($order->orderExams()->orderBy('id')->get() as $i => $line) {
                             if ($i === 2) {
                                 if ($kind === 'complete') {
+                                    DemoClinicalReason::medicalEvidence($lab, $manager, $line);
                                     $r = $resolution->requestException($lab, $manager, $order->id, $line->id, ['clinical_revision' => $order->fresh()->clinical_revision, 'result_revision' => 0, 'reason_reference' => DemoClinicalReason::reference($lab, $manager), 'justification' => DemoDataset::DISCLAIMER]);
                                     $resolution->decideException($lab, $actors['b'], $order->id, $line->id, $r['exception']['id'], true, ['clinical_revision' => $r['clinical_revision'], 'request_revision' => 1]);
                                 }

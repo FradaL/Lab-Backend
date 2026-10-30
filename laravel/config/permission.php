@@ -215,6 +215,7 @@ return [
          * file. Using 'default' here means to use the `default` set in cache.php.
          */
 
-        'store' => 'default',
+        // Request-local cache; SetPermissionTeamContext resets it on each operation.
+        'store' => 'array',
     ],
 ];

@@ -331,6 +331,10 @@ class StructuredClinicalExceptionTest extends TestCase
         $approver = $this->createLaboratoryMember($lab);
         $integration = require database_path('migrations/2026_10_25_200359_create_clinical_exception_reason_references.php');
         $localIntegration = require database_path('migrations/2026_10_25_213438_integrate_local_clinical_reason_references_and_reviews.php');
+        $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
+        $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $reportExceptions->down();
+        $exceptionEvidence->down();
         $localIntegration->down();
         $integration->down();
         $request = ClinicalExceptionRequest::create(['laboratory_id' => $lab->id, 'laboratory_order_id' => $order->id, 'laboratory_order_exam_id' => $line->id, 'reason' => 'FICTICIO: texto anterior irremplazable', 'requested_by' => $actor->id, 'requested_at' => now(), 'capture_revision' => 0, 'processing_started_at' => null, 'clinical_configuration_source' => $line->clinical_configuration_source]);
@@ -341,15 +345,20 @@ class StructuredClinicalExceptionTest extends TestCase
         $report = app(ClinicalReportService::class)->issue($lab, $actor, $order->id, ['type' => 'complete', 'clinical_revision' => $order->fresh()->clinical_revision, 'identity_confirmation' => true], 'ficticio-historical-report');
         $before = [$request->fresh()->getRawOriginal(), $decision->fresh()->getRawOriginal(), $report->fresh()->getRawOriginal(), DB::scalar('SELECT report_line_snapshot(?)::text', [$line->id]), Storage::disk('clinical_reports')->get($report->private_path)];
 
-        DB::transaction(function () use ($integration, $localIntegration): void { $integration->up(); $localIntegration->up(); });
+        DB::transaction(function () use ($integration, $localIntegration, $exceptionEvidence, $reportExceptions): void {
+            $integration->up();
+            $localIntegration->up();
+            $exceptionEvidence->up();
+            $reportExceptions->up();
+        });
 
-        $this->assertSame($before, [$request->fresh()->getRawOriginal(), $decision->fresh()->getRawOriginal(), $report->fresh()->getRawOriginal(), DB::scalar('SELECT report_line_snapshot(?)::text', [$line->id]), Storage::disk('clinical_reports')->get($report->private_path)]);
+        $this->assertSame($before, [$request->fresh()->getRawOriginal(), $decision->fresh()->getRawOriginal(), array_intersect_key($report->fresh()->getRawOriginal(), $before[2]), DB::scalar('SELECT report_line_snapshot_v1(?)::text', [$line->id]), Storage::disk('clinical_reports')->get($report->private_path)]);
         $this->getJson($this->url($order, $line))->assertOk()->assertJsonPath('data.0.reason_reference', null);
         $this->assertDatabaseCount('clinical_exception_reason_references', 0);
         $this->assertDatabaseHas('clinical_exception_legacy_requests', ['exception_request_id' => $request->id]);
     }
 
-    public function test_preexisting_pending_request_can_be_decided_without_inventing_a_catalog_link(): void
+    public function test_preexisting_pending_request_cannot_bypass_clinical_evidence_without_inventing_a_catalog_link(): void
     {
         [$lab, $actor, $order, $line] = $this->scenario(false);
         $approver = $this->createLaboratoryMember($lab);
@@ -359,9 +368,12 @@ class StructuredClinicalExceptionTest extends TestCase
         $localIntegration->down();
         $integration->down();
         $request = ClinicalExceptionRequest::create(['laboratory_id' => $lab->id, 'laboratory_order_id' => $order->id, 'laboratory_order_exam_id' => $line->id, 'reason' => 'FICTICIO: anterior', 'requested_by' => $actor->id, 'requested_at' => now(), 'capture_revision' => 0, 'processing_started_at' => null, 'clinical_configuration_source' => $line->clinical_configuration_source]);
-        DB::transaction(function () use ($integration, $localIntegration): void { $integration->up(); $localIntegration->up(); });
-        $this->actingAs($approver)->postJson($this->url($order, $line).'/'.$request->id.'/approve', ['clinical_revision' => $order->fresh()->clinical_revision, 'request_revision' => 1])->assertOk()->assertJsonPath('data.reason_reference', null);
-        $this->assertDatabaseCount('clinical_line_resolutions', 1);
+        DB::transaction(function () use ($integration, $localIntegration): void {
+            $integration->up();
+            $localIntegration->up();
+        });
+        $this->actingAs($approver)->postJson($this->url($order, $line).'/'.$request->id.'/approve', ['clinical_revision' => $order->fresh()->clinical_revision, 'request_revision' => 1])->assertConflict()->assertJsonPath('code', 'clinical_evidence_policy_unconfigured');
+        $this->assertDatabaseCount('clinical_line_resolutions', 0);
         $this->assertSame('FICTICIO: anterior', $request->fresh()->reason);
         $this->assertDatabaseCount('clinical_exception_reason_references', 0);
     }

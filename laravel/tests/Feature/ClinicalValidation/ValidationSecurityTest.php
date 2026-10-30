@@ -48,6 +48,8 @@ class ValidationSecurityTest extends TestCase
             $actor->syncPermissions([]);
             $role = $this->assignLaboratoryRole($actor, $lab, $case);
             $role->syncPermissions(RbacCatalog::rolePermissions()[$case]);
+            // An existing owner matrix can lack this permission; role name alone must not bypass authorization.
+            $role->revokePermissionTo('results.validate');
         }
         if ($case === 'cancelled') {
             $order->update(['status' => 'cancelled']);
@@ -69,6 +71,21 @@ class ValidationSecurityTest extends TestCase
     public static function denials(): array
     {
         return [['inactive', 403], ['membership', 403], ['permission', 403], ['owner', 403], ['administrator', 403], ['cancelled', 409], ['pending', 409], ['other_lab', 404]];
+    }
+
+    public function test_default_owner_can_validate_but_still_requires_an_authorized_professional_when_policy_demands_it(): void
+    {
+        [$lab, $actor, $order, $line, $url] = $this->filled();
+        $actor->syncPermissions([]);
+        $this->assignLaboratoryRole($actor, $lab, 'owner')->syncPermissions(RbacCatalog::rolePermissions()['owner']);
+        app(ValidationAdministrationService::class)->setPolicy($lab, $actor, ['validation_policy' => 'professional_required']);
+        $body = ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11']];
+        $this->postJson($url.'/validate', $body)->assertForbidden();
+        $this->assertDatabaseCount('laboratory_result_validations', 0);
+        setPermissionsTeamId($lab->id);
+        app(ValidationAdministrationService::class)->setPolicy($lab, $actor, ['validation_policy' => 'permission_based']);
+        $this->postJson($url.'/validate', $body)->assertOk();
+        $this->assertDatabaseCount('laboratory_result_validations', 1);
     }
 
     public function test_missing_reference_context_and_historical_snapshot(): void
