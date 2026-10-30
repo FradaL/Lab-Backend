@@ -23,7 +23,6 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
 class ClinicalReportTest extends TestCase
@@ -376,7 +375,7 @@ class ClinicalReportTest extends TestCase
 
     public function test_default_dataset_prepares_evidence_and_explicit_pdf_seeder_is_idempotent(): void
     {
-        StructuredClinicalReasonFixture::prepareDemoCatalog();
+        config(['saas.demo_clinical_reason_id' => '']);
         $this->seed(DatabaseSeeder::class);
         $this->assertDatabaseCount('laboratory_report_issuances', 0);
         $this->seed(LaboratoryReportIssuanceSeeder::class);

@@ -106,6 +106,9 @@ class ClinicalReportRenderer
                     $professional = $v['professional_snapshot'];
                     $text($professional === null ? 'Validación autorizada. Identificador del validador: '.$v['validated_by'].'. Sin identidad profesional registrada en esta evidencia.'
                         : 'Profesional: '.$professional['professional_name'].' | '.$professional['profession'].' | Registro: '.($professional['registration_number'] ?? 'No registrado'));
+                } elseif (($document['format_version'] ?? 'donqer-clinical-1') === 'donqer-clinical-2') {
+                    $text($line['clinical_display']['label'].'. No constituye un resultado clínico.');
+                    $text('Motivo clínico: '.$line['clinical_display']['reason']);
                 } else {
                     $text('EXCEPCIÓN CLÍNICA AUTORIZADA. No constituye un resultado clínico.');
                     $text('Motivo documentado: '.$line['exception']['request']['reason']);
@@ -116,6 +119,15 @@ class ClinicalReportRenderer
                     }
                 }
                 $text(' ');
+            }
+        }
+
+        if (($document['pending_lines'] ?? []) !== []) {
+            $text('EXÁMENES PENDIENTES — sin resultados clínicos publicados');
+            foreach ($document['pending_lines'] as $pending) {
+                $text($pending['exam_code'].' — '.$pending['exam_name'].' | Línea '.$pending['line_id']);
+                $text($pending['clinical_status'] === 'incomplete' ? 'Incompleto — situación clínica pendiente.' : 'Pendiente de resolución clínica.');
+                $text($pending['processing_started'] ? 'Procesamiento iniciado; sin resolución definitiva.' : 'El procesamiento no ha comenzado.');
             }
         }
 
