@@ -107,6 +107,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/laboratory/roles', LaboratoryRoleController::class)->middleware('can:roles.view');
         Route::get('/laboratory/report-settings', [ClinicalReportController::class, 'settings'])->middleware('can:reports.settings.view');
         Route::put('/laboratory/report-settings', [ClinicalReportController::class, 'updateSettings'])->middleware('can:reports.settings.edit');
+        Route::get('/laboratory/report-settings/logo', [ClinicalReportController::class, 'readLogo'])->middleware('can:reports.settings.view');
         Route::post('/laboratory/report-settings/logo', [ClinicalReportController::class, 'logo'])->middleware('can:reports.settings.edit');
         Route::post('/laboratory-orders/{order}/reports', [ClinicalReportController::class, 'issue'])->middleware('can:reports.issue')->whereNumber('order');
         Route::get('/laboratory-orders/{order}/reports', [ClinicalReportController::class, 'history'])->middleware('can:reports.view_history')->whereNumber('order');

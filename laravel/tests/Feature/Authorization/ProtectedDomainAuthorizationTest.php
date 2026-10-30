@@ -47,7 +47,7 @@ final class ProtectedDomainAuthorizationTest extends TestCase
         ksort($expected);
 
         $this->assertSame($expected, $actual);
-        $this->assertCount(150, $actual);
+        $this->assertCount(151, $actual);
         $this->assertEmpty(array_diff(array_values($actual), RbacCatalog::PERMISSIONS));
         $this->assertSame(47, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
@@ -445,6 +445,7 @@ final class ProtectedDomainAuthorizationTest extends TestCase
             'GET api/v1/laboratory-orders/{order}/reports/{report}/deliveries' => 'reports.delivery_history.view',
             'POST api/v1/laboratory/report-settings/logo' => 'reports.settings.edit',
             'PUT api/v1/laboratory/report-settings' => 'reports.settings.edit',
+            'GET api/v1/laboratory/report-settings/logo' => 'reports.settings.view',
             'GET api/v1/laboratory/report-settings' => 'reports.settings.view',
             'GET api/v1/laboratory/report-delivery-policy' => 'reports.delivery_policy.view',
             'PUT api/v1/laboratory/report-delivery-policy' => 'reports.delivery_policy.manage',

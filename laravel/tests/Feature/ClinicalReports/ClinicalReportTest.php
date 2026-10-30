@@ -424,7 +424,12 @@ class ClinicalReportTest extends TestCase
     public function test_unsupported_glyph_blocks_instead_of_misrepresenting_report_text(): void
     {
         [$lab,$actor,$order,$line] = $this->resolved();
-        app(ReportSettingsService::class)->update($lab, $actor, ['revision' => 0, 'header' => '🧪']);
+        $this->putJson('/api/v1/laboratory/report-settings', ['revision' => 0, 'header' => '🧪'])->assertConflict()->assertJsonPath('code', 'report_unsupported_character');
+        $this->assertDatabaseCount('laboratory_report_settings', 0);
+        // A legacy invalid row must still be rejected at issuance.
+        [, $presentation] = app(ReportSettingsService::class)->snapshot($lab);
+        $presentation['header'] = '🧪';
+        DB::table('laboratory_report_settings')->insert(['laboratory_id' => $lab->id, 'revision' => 1, 'presentation' => json_encode($presentation)]);
         $this->withHeader('Idempotency-Key', 'unsupported-glyph-report-key')->postJson("/api/v1/laboratory-orders/$order->id/reports", $this->body($order, $line))->assertConflict()->assertJsonPath('code', 'report_unsupported_character');
         $this->assertDatabaseCount('laboratory_report_issuances', 0);
         $this->assertCount(0, Storage::disk('clinical_reports')->allFiles());
