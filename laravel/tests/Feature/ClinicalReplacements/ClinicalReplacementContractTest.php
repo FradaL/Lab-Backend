@@ -36,8 +36,8 @@ class ClinicalReplacementContractTest extends TestCase
             $this->assertContains('saas', $route->gatherMiddleware());
             $this->assertNotEmpty(array_filter($route->gatherMiddleware(), fn ($m) => str_starts_with($m, 'can:orders.clinical_replacements.')));
         }
-        foreach (RbacCatalog::rolePermissions() as $permissions) {
-            $this->assertSame([], array_values(array_intersect(ReplacementAuthority::PERMISSIONS, $permissions)));
+        foreach (RbacCatalog::rolePermissions() as $name => $permissions) {
+            $this->assertEqualsCanonicalizing($name === 'owner' ? ReplacementAuthority::PERMISSIONS : [], array_values(array_intersect(ReplacementAuthority::PERMISSIONS, $permissions)));
         }
     }
 

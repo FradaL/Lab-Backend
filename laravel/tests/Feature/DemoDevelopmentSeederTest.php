@@ -85,7 +85,7 @@ class DemoDevelopmentSeederTest extends TestCase
         $this->assertDatabaseCount('laboratory_user', 5);
         $this->assertDatabaseCount('saas_audit_logs', 81);
         $this->assertDatabaseCount('saas_capability_assignments', 25);
-        $this->assertDatabaseCount('model_has_permissions', 186);
+        $this->assertDatabaseCount('model_has_permissions', 2 * count(RbacCatalog::PERMISSIONS) - 10);
         $this->assertDatabaseHas('audit_logs', ['event' => 'demo_development.permissions_granted']);
         $before = $this->snapshot();
         $this->provision();
@@ -256,7 +256,7 @@ class DemoDevelopmentSeederTest extends TestCase
             $this->getJson('/api/v1/auth/authorization')->assertOk()->assertJsonPath('data.permissions', $original);
             $this->getJson('/api/v1/patients')->assertForbidden();
         }
-        $this->assertDatabaseCount('permissions', 98);
+        $this->assertDatabaseCount('permissions', count(RbacCatalog::PERMISSIONS));
     }
 
     public function test_superadmin_permissions_do_not_bypass_professional_self_authorization_or_tenant_access(): void

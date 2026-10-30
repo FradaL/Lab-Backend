@@ -250,7 +250,7 @@ class LaboratoryUserAdministrationTest extends TestCase
             ->withHeader('X-Laboratory-ID', (string) $laboratory->id)
             ->patchJson('/api/v1/laboratory/users/'.$owner->id.'/status', ['status' => 'inactive'])
             ->assertConflict()
-            ->assertJsonPath('code', 'laboratory_last_administrator');
+            ->assertJsonPath('code', 'laboratory_last_owner');
 
         $secondAdmin = $this->createLaboratoryMember($laboratory);
         $this->assignLaboratoryRole($secondAdmin, $laboratory, 'administrator');

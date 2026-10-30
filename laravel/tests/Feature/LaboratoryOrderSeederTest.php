@@ -320,6 +320,7 @@ final class LaboratoryOrderSeederTest extends TestCase
 
     public function test_late_audit_failure_rolls_back_the_entire_dataset(): void
     {
+        $permissionsBefore = DB::table('permissions')->orderBy('id')->get()->all();
         AuditLog::creating(static function (AuditLog $event): void {
             if ($event->event === 'order_exam.added') {
                 throw new LogicException('Simulated late audit failure');
@@ -333,9 +334,10 @@ final class LaboratoryOrderSeederTest extends TestCase
         } finally {
             AuditLog::flushEventListeners();
         }
-        foreach (['users', 'laboratories', 'laboratory_exam_versions', 'laboratory_orders', 'laboratory_order_exams', 'laboratory_order_sample_requirements', 'audit_logs', 'demo_datasets', 'demo_dataset_records', 'roles', 'permissions'] as $table) {
+        foreach (['users', 'laboratories', 'laboratory_exam_versions', 'laboratory_orders', 'laboratory_order_exams', 'laboratory_order_sample_requirements', 'audit_logs', 'demo_datasets', 'demo_dataset_records', 'roles'] as $table) {
             $this->assertDatabaseCount($table, 0);
         }
+        $this->assertEquals($permissionsBefore, DB::table('permissions')->orderBy('id')->get()->all());
     }
 
     public function test_missing_registered_dependency_is_not_recreated(): void
