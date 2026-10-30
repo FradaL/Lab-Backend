@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\V1\PriceListExamController;
 use App\Http\Controllers\Api\V1\PricingResolutionController;
 use App\Http\Controllers\Api\V1\ReportDeliveryController;
 use App\Http\Controllers\Api\V1\ResultValidationController;
+use App\Http\Controllers\Api\V1\RolePermissionController;
 use App\Http\Controllers\Api\V1\SaasAccessController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
@@ -106,6 +107,9 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('/laboratory/users/{user}/role', [LaboratoryUserController::class, 'updateRole'])->middleware('can:users.assign_role')->whereNumber('user');
         Route::patch('/laboratory/users/{user}/status', [LaboratoryUserController::class, 'updateStatus'])->middleware('can:users.change_status')->whereNumber('user');
         Route::get('/laboratory/roles', LaboratoryRoleController::class)->middleware('can:roles.view');
+        Route::get('/laboratory/permissions', [RolePermissionController::class, 'index'])->middleware('can:roles.permissions.manage');
+        Route::get('/laboratory/roles/{role}/permissions', [RolePermissionController::class, 'show'])->middleware('can:roles.permissions.manage');
+        Route::put('/laboratory/roles/{role}/permissions', [RolePermissionController::class, 'update'])->middleware('can:roles.permissions.manage');
         Route::get('/laboratory/report-settings', [ClinicalReportController::class, 'settings'])->middleware('can:reports.settings.view');
         Route::put('/laboratory/report-settings', [ClinicalReportController::class, 'updateSettings'])->middleware('can:reports.settings.edit');
         Route::post('/laboratory/report-settings/logo', [ClinicalReportController::class, 'logo'])->middleware('can:reports.settings.edit');

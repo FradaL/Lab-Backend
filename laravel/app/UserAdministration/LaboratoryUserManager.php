@@ -228,6 +228,10 @@ final class LaboratoryUserManager
                 return $this->memberForResponse($laboratory, $target);
             }
 
+            if ($membership->is_active && $target->is_active && in_array('owner', $oldRoles, true) && $roleName !== 'owner') {
+                $this->assertAnotherActiveAdministrator($laboratory, $target, true);
+            }
+
             if ($membership->is_active && $this->hasAdministrativeRole($oldRoles) && ! in_array($roleName, self::ADMINISTRATIVE_ROLES, true)) {
                 $this->assertAnotherActiveAdministrator($laboratory, $target);
             }
@@ -266,6 +270,10 @@ final class LaboratoryUserManager
 
             if ($membership->is_active === $newActive) {
                 return $this->memberForResponse($laboratory, $target);
+            }
+
+            if (! $newActive && $target->is_active && in_array('owner', $targetRoles, true)) {
+                $this->assertAnotherActiveAdministrator($laboratory, $target, true);
             }
 
             if (! $newActive && $this->hasAdministrativeRole($targetRoles)) {
@@ -355,7 +363,7 @@ final class LaboratoryUserManager
         return array_intersect($roles, self::ADMINISTRATIVE_ROLES) !== [];
     }
 
-    private function assertAnotherActiveAdministrator(Laboratory $laboratory, User $target): void
+    private function assertAnotherActiveAdministrator(Laboratory $laboratory, User $target, bool $ownerOnly = false): void
     {
         $exists = DB::table('laboratory_user')
             ->join('users', 'users.id', '=', 'laboratory_user.user_id')
@@ -369,14 +377,14 @@ final class LaboratoryUserManager
             ->where('users.is_active', true)
             ->where('model_has_roles.laboratory_id', $laboratory->getKey())
             ->where('roles.laboratory_id', $laboratory->getKey())
-            ->whereIn('roles.name', self::ADMINISTRATIVE_ROLES)
+            ->whereIn('roles.name', $ownerOnly ? ['owner'] : self::ADMINISTRATIVE_ROLES)
             ->where('laboratory_user.user_id', '!=', $target->getKey())
             ->exists();
 
         if (! $exists) {
             throw new UserAdministrationConflict(
-                'laboratory_last_administrator',
-                'El laboratorio debe conservar al menos un owner o administrator activo.',
+                $ownerOnly ? 'laboratory_last_owner' : 'laboratory_last_administrator',
+                $ownerOnly ? 'El laboratorio debe conservar al menos un owner activo.' : 'El laboratorio debe conservar al menos un owner o administrator activo.',
             );
         }
     }

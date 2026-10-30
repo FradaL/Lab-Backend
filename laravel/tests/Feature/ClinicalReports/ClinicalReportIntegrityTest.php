@@ -64,10 +64,11 @@ class ClinicalReportIntegrityTest extends TestCase
         $this->assertDatabaseCount('laboratory_report_issuances', 1);
     }
 
-    public function test_no_settings_or_issuance_permission_is_automatically_assigned_to_roles(): void
+    public function test_report_permissions_are_defaulted_only_to_owner(): void
     {
-        foreach (RbacCatalog::rolePermissions() as $permissions) {
-            $this->assertEmpty(array_intersect(['reports.issue', 'reports.download', 'reports.view_history', 'reports.settings.view', 'reports.settings.edit'], $permissions));
+        $reportPermissions = ['reports.issue', 'reports.download', 'reports.view_history', 'reports.settings.view', 'reports.settings.edit'];
+        foreach (RbacCatalog::rolePermissions() as $role => $permissions) {
+            $this->assertEqualsCanonicalizing($role === 'owner' ? $reportPermissions : [], array_values(array_intersect($reportPermissions, $permissions)));
         }
     }
 

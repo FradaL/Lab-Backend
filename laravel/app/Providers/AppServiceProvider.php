@@ -7,10 +7,13 @@ use App\ReportDelivery\UnavailableCommercialComplianceProvider;
 use App\Tenancy\CurrentLaboratory;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Env;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\Support\TestingDatabaseServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -36,6 +39,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Event::listen(JobProcessing::class, function (): void {
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
+        });
+
         RateLimiter::for('report-verification', fn (Request $request) => Limit::perMinute(30)->by($request->ip()));
         RateLimiter::for('login', function (Request $request): Limit {
             $email = Str::lower((string) $request->input('email'));

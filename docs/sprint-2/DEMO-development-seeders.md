@@ -257,10 +257,11 @@ El `owner` de estos laboratorios DEMO tiene exactamente cinco permisos:
 `clinical_reasons.global.view`, `clinical_reasons.adoptions.view`,
 `clinical_reasons.adoptions.create`, `clinical_reasons.adoptions.update` y
 `clinical_reasons.adoptions.history`. **No se amplía ese rol compartido.** La
-matriz general de `RbacCatalog::rolePermissions()['owner']` tiene 75 permisos,
-excluye facultades sensibles y tampoco se modifica ni se aplica a estos roles DEMO.
+matriz general de `RbacCatalog::rolePermissions()['owner']` contiene ahora todo el
+catálogo operativo (99 permisos; ver `BE-S2-roles-permisos-administracion.md`).
+Esa plantilla inicial no se aplica retrospectivamente a estos roles DEMO existentes.
 
-Para el nuevo usuario se complementan los cinco permisos con los **90 permisos
+Para el nuevo usuario se complementan los cinco permisos con los **94 permisos
 restantes de `RbacCatalog::PERMISSIONS`**, como permisos directos de Spatie,
 limitados al usuario y a cada laboratorio. Se reutiliza el mecanismo de
 aprovisionamiento de `AdminDemoPermissionSeeder` y de los seeders de validación y
@@ -271,7 +272,7 @@ usuario destinatario, lista concedida y origen del seeder; el actor nulo represe
 aprovisionamiento de sistema, no una autoconcesión de la cuenta. `DemoDataset`
 registra su procedencia y verifica el resultado exacto en cada repetición.
 
-La autorización efectiva es de **95 permisos en cada laboratorio**, desglosados
+La autorización efectiva es de **99 permisos en cada laboratorio**, desglosados
 abajo. Cada nombre resulta de unir el prefijo y el sufijo con un punto:
 
 | Prefijo | Sufijos concedidos |
@@ -287,12 +288,12 @@ abajo. Cada nombre resulta de unir el prefijo y el sufijo con un punto:
 | `exam_prices` | `view`, `manage` |
 | `commercial_price_assignments` | `view`, `manage` |
 | `pricing` | `resolve` |
-| `orders` | `view`, `create`, `add_exam`, `remove_exam`, `manage_discount`, `change_status`, `clinical_finalize`, `exams.clinical_finalize`, `clinical_exceptions.request`, `clinical_exceptions.approve`, `clinical_exceptions.view`, `clinical_finalization.view`, `start_exam` |
+| `orders` | `view`, `create`, `add_exam`, `remove_exam`, `manage_discount`, `change_status`, `clinical_finalize`, `exams.clinical_finalize`, `clinical_exceptions.request`, `clinical_exceptions.approve`, `clinical_exceptions.view`, `clinical_finalization.view`, `start_exam`, `clinical_replacements.view`, `clinical_replacements.record`, `clinical_replacements.evaluate` |
 | `results` | `view`, `capture`, `edit`, `view_history`, `validate`, `rectify`, `validation_history`, `validation_policy.manage`, `professionals.manage` |
 | `reports` | `view_history`, `issue`, `download`, `settings.view`, `settings.edit`, `delivery_policy.view`, `delivery_policy.manage`, `delivery.evaluate`, `delivery_history.view`, `delivery.prepare`, `delivery.confirm`, `delivery_exceptions.authorize`, `delivery_exceptions.view` |
 | `samples` | `view`, `collect`, `receive`, `evaluate`, `associate` |
 | `users` | `view`, `create`, `assign_role`, `change_status` |
-| `roles` | `view` |
+| `roles` | `view`, `permissions.manage` |
 | `clinical_reasons` | `global.view`, `adoptions.view`, `adoptions.create`, `adoptions.update`, `adoptions.history`, `review_impact`, `local.view`, `local.create`, `local.publish`, `local.manage`, `local.history` |
 
 Estos permisos adicionales se obtienen ejecutando el aprovisionamiento autorizado
@@ -309,7 +310,7 @@ No utilizarla como sustituto del aprovisionamiento DEMO ni escribir permisos en 
    Se mantiene el contrato existente: `/auth/me` no incorpora membresías ni roles.
 4. Seleccionar un ID devuelto y enviarlo en `X-Laboratory-ID`; consultar
    `GET /api/v1/auth/authorization`, que devuelve ese laboratorio, `roles: ["owner"]`
-   y los 95 nombres de permisos ordenados. Para cambiar de laboratorio enviar
+   y los 99 nombres de permisos ordenados. Para cambiar de laboratorio enviar
    el otro ID en la siguiente petición; no es necesario volver a iniciar sesión.
 5. Usar las operaciones SaaS en `/platform/...` y las de laboratorio con el
    contexto elegido. El aislamiento tenant, las membresías activas y la
