@@ -50,7 +50,7 @@ use OpenApi\Attributes as OA;
 ])]
 #[OA\Schema(schema: 'SampleReasonInput', type: 'object', additionalProperties: false, required: ['reason'], properties: [new OA\Property(property: 'reason', type: 'string', minLength: 1, maxLength: 1000)])]
 #[OA\Schema(schema: 'SampleEmptyInput', type: 'object', additionalProperties: false)]
-#[OA\Schema(schema: 'PhysicalSample', type: 'object', required: ['id', 'identifier', 'laboratory_order_id', 'sample_type_id', 'status', 'provenance', 'facts', 'collection', 'reception', 'events', 'associations'], properties: [
+#[OA\Schema(schema: 'PhysicalSample', description: 'Receipt already records acceptance. New samples stay received or collected; accepted is retained only for historical records.', type: 'object', required: ['id', 'identifier', 'laboratory_order_id', 'sample_type_id', 'status', 'provenance', 'facts', 'collection', 'reception', 'events', 'associations'], properties: [
     new OA\Property(property: 'id', type: 'integer'),
     new OA\Property(property: 'identifier', type: 'string', minLength: 26, maxLength: 26, description: 'Immutable backend ULID, globally unique and barcode-compatible.'),
     new OA\Property(property: 'laboratory_order_id', type: 'integer'),

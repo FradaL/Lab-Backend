@@ -71,7 +71,7 @@ class PhysicalSampleTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_received_sample_acceptance_and_explicit_start_preserve_historical_dependencies(): void
+    public function test_received_sample_is_usable_without_separate_acceptance_and_start_preserves_dependencies(): void
     {
         [$lab, $actor, $branch, $type, $order, $line] = $this->scenario();
         $base = "/api/v1/laboratory-orders/$order->id";
@@ -80,7 +80,6 @@ class PhysicalSampleTest extends TestCase
         $sample = $this->postJson("$base/samples/receive", $this->externalInput($branch, $type))->assertCreated()->assertJsonPath('data.status', 'received')->json('data.id');
         $this->postJson("$base/samples/$sample/associations", ['sample_requirement_ids' => [$line->sampleRequirements->first()->id]])->assertOk();
         $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.operational_status', 'ready');
-        $this->postJson("$base/samples/$sample/accept")->assertOk()->assertJsonPath('data.status', 'accepted');
         $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.status', 'pending')->assertJsonPath('data.exams.0.operational_status', 'ready');
         $this->postJson("$base/exams/$line->id/start")->assertOk()->assertJsonPath('data.operational_status', 'started')->assertJsonPath('data.processing_started_by', $actor->id);
         $this->assertSame('in_process', $order->refresh()->status);
@@ -88,7 +87,7 @@ class PhysicalSampleTest extends TestCase
         $this->postJson("$base/samples/$sample/reject", ['reason' => 'Correction'])->assertConflict()->assertJsonPath('code', 'sample_has_clinical_activity');
         $association = DB::table('laboratory_sample_associations')->value('id');
         $this->postJson("$base/samples/$sample/associations/$association/release", ['reason' => 'Correction'])->assertConflict()->assertJsonPath('code', 'association_has_clinical_activity');
-        $this->assertDatabaseCount('laboratory_sample_events', 4);
+        $this->assertDatabaseCount('laboratory_sample_events', 3);
         $this->assertNotNull($line->refresh()->processing_started_at);
     }
 
@@ -160,6 +159,56 @@ class PhysicalSampleTest extends TestCase
             ->assertJsonPath('data.associations.0.released_by_user.name', $actor->name);
     }
 
+    public function test_receipt_is_acceptance_and_legacy_accept_call_never_changes_state_or_history(): void
+    {
+        [$lab, $actor, $branch, $type, $order] = $this->scenario();
+        $base = "/api/v1/laboratory-orders/$order->id";
+        $input = $this->externalInput($branch, $type, ['collected_at' => null]);
+        $sample = $this->postJson("$base/samples/receive", $input)->assertCreated()->assertJsonPath('data.status', 'received')->json('data.id');
+        foreach ([1, 2] as $retry) {
+            $this->postJson("$base/samples/$sample/accept")->assertOk()->assertJsonPath('data.status', 'received');
+        }
+        $this->assertDatabaseCount('laboratory_sample_events', 1);
+        $this->assertDatabaseMissing('laboratory_sample_events', ['event' => 'accepted']);
+        try {
+            DB::transaction(fn () => DB::table('laboratory_samples')->where('id', $sample)->update(['status' => 'accepted']));
+            $this->fail('Received samples must retain received as their state.');
+        } catch (QueryException $error) {
+            $this->assertSame('23514', $error->errorInfo[0]);
+            $this->assertStringContainsString('reception already records acceptance', $error->getMessage());
+        }
+        $this->getJson("$base/samples/$sample")->assertOk()->assertJsonPath('data.status', 'received');
+    }
+
+    public function test_acceptance_migration_preserves_existing_accepted_samples_and_can_be_reapplied(): void
+    {
+        [$lab, $actor, $branch, $type, $order] = $this->scenario();
+        $base = "/api/v1/laboratory-orders/$order->id";
+        $sample = $this->postJson("$base/samples/receive", $this->externalInput($branch, $type))->assertCreated()->json('data.id');
+        $migration = require database_path('migrations/2026_11_01_000002_keep_received_samples_without_separate_acceptance.php');
+        $definitions = fn () => array_map(fn ($name) => DB::selectOne('SELECT pg_get_functiondef(?::regprocedure) AS definition', [$name])->definition,
+            ['protect_clinical_replacement_record()', 'require_current_clinical_exception_evidence()']);
+        foreach ($definitions() as $definition) {
+            $this->assertStringContainsString("s.status IN ('received', 'accepted')", $definition);
+        }
+        $migration->down();
+        try {
+            foreach ($definitions() as $definition) {
+                $this->assertStringContainsString("s.status='accepted'", $definition);
+            }
+            // Reproduce a valid accepted row under the previous schema.
+            DB::table('laboratory_samples')->where('id', $sample)->update(['status' => 'accepted']);
+        } finally {
+            $migration->up();
+        }
+        foreach ($definitions() as $definition) {
+            $this->assertStringContainsString("s.status IN ('received', 'accepted')", $definition);
+        }
+        $this->getJson("$base/samples/$sample")->assertOk()->assertJsonPath('data.status', 'accepted');
+        $this->postJson("$base/samples/$sample/accept")->assertOk()->assertJsonPath('data.status', 'accepted');
+        $this->postJson("$base/samples/$sample/reject", ['reason' => 'Corrección de material histórico'])->assertOk();
+    }
+
     public function test_idempotency_replays_original_response_and_rejects_changed_payload(): void
     {
         [$lab, $actor, $branch, $type, $order] = $this->scenario();
@@ -182,7 +231,7 @@ class PhysicalSampleTest extends TestCase
         $this->postJson("$base/samples/$sample/accept")->assertOk();
         $this->postJson("$base/samples/$sample/associations", ['sample_requirement_ids' => [$line->sampleRequirements->first()->id]])->assertConflict()->assertJsonPath('code', 'sample_requirement_incompatible');
         $this->assertDatabaseCount('laboratory_sample_associations', 0);
-        $this->assertSame('accepted', LaboratorySample::findOrFail($sample)->status);
+        $this->assertSame('received', LaboratorySample::findOrFail($sample)->status);
     }
 
     private function externalInput(Branch $branch, SampleType $type, array $extra = []): array
@@ -226,7 +275,7 @@ class PhysicalSampleTest extends TestCase
         $this->assertDatabaseCount('laboratory_sample_associations', 1);
         $this->assertDatabaseHas('laboratory_sample_associations', ['id' => $association, 'release_reason' => 'Wrong selection', 'released_by' => $actor->id]);
         $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.sample_requirements.0.status', 'pending');
-        $this->assertSame('accepted', LaboratorySample::findOrFail($sample)->status);
+        $this->assertSame('received', LaboratorySample::findOrFail($sample)->status);
         $this->deleteJson("$base/exams/$line->id")->assertConflict()->assertJsonPath('code', 'order_exam_has_clinical_activity');
         $this->postJson("$base/exams/$line->id/start")->assertOk();
     }
@@ -245,7 +294,7 @@ class PhysicalSampleTest extends TestCase
         $this->assertNotSame($sample['identifier'], $next);
         $this->assertDatabaseCount('laboratory_samples', 2);
         $this->assertDatabaseCount('laboratory_sample_associations', 1);
-        $this->assertDatabaseCount('laboratory_sample_events', 6);
+        $this->assertDatabaseCount('laboratory_sample_events', 5);
     }
 
     #[DataProvider('incompatibleFacts')]
@@ -296,7 +345,7 @@ class PhysicalSampleTest extends TestCase
         DB::unprepared("CREATE OR REPLACE FUNCTION sample_operation_time() RETURNS timestamptz LANGUAGE sql STABLE AS $$ SELECT '2026-01-01 10:06:00+00'::timestamptz $$");
         $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.operational_status', 'ready');
         $this->postJson("$base/exams/$line->id/start")->assertOk();
-        $this->assertSame('accepted', LaboratorySample::findOrFail($sample)->status);
+        $this->assertSame('received', LaboratorySample::findOrFail($sample)->status);
         $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 0);
         $this->assertNotNull($line->refresh()->processing_started_at);
     }

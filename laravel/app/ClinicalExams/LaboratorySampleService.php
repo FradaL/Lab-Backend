@@ -193,6 +193,11 @@ final class LaboratorySampleService
         return $this->transaction(function () use ($lab, $actor, $orderId, $sampleId, $target, $data): LaboratorySample {
             $this->order($lab, $orderId);
             $sample = $this->sample($lab, $orderId, $sampleId, true);
+            // Reception already records acceptance for the current workflow.
+            // Keep the old endpoint idempotent without creating another state/event.
+            if ($target === 'accepted' && $sample->status === 'received') {
+                return $sample;
+            }
             if ($sample->status === $target) {
                 if ($target === 'rejected' && $sample->events()->where('event', 'rejected')->latest('id')->first()?->context['reason'] !== $data['reason']) {
                     throw new ClinicalConflict('sample_rejection_conflict', 'A rejection already exists with another reason.');
@@ -338,7 +343,7 @@ final class LaboratorySampleService
             $lines = $order->orderExams()->with(['clinicalVersion', 'sampleRequirements', 'resultCapture:id,laboratory_order_exam_id,revision,status', 'clinicalResolution:id,laboratory_order_exam_id,resolution_type,resolved_by,resolved_at', 'clinicalExceptions:id,laboratory_order_exam_id,status', 'results:id,laboratory_order_exam_id,parameter_code'])->orderBy('id')->get();
             $samples = LaboratorySample::forLaboratory($lab)->where('laboratory_order_id', $orderId)->with(LaboratorySample::DETAIL_RELATIONS)->orderBy('id')->get();
             $assessments = $this->compatibility->assessments($lab, $orderId);
-            $qualified = $assessments->filter(fn ($row) => $row->released_at === null && $row->sample_status === 'accepted' && $row->errors === '[]')->groupBy('sample_requirement_id');
+            $qualified = $assessments->filter(fn ($row) => $row->released_at === null && in_array($row->sample_status, ['received', 'accepted'], true) && $row->errors === '[]')->groupBy('sample_requirement_id');
             $assessments = $assessments->groupBy('sample_requirement_id');
             $dependencies = LaboratorySampleProcessingDependency::forLaboratory($lab)->where('laboratory_order_id', $orderId)->orderBy('id')->get()->groupBy('laboratory_order_exam_id');
 

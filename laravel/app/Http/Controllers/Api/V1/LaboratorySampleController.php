@@ -79,7 +79,7 @@ class LaboratorySampleController extends Controller
     }
 
     #[OA\Post(
-        path: '/api/v1/laboratory-orders/{order}/samples/{sample}/accept', operationId: 'physicalSampleAccept', summary: 'accept; requires samples.evaluate',
+        path: '/api/v1/laboratory-orders/{order}/samples/{sample}/accept', operationId: 'physicalSampleAccept', summary: 'Legacy idempotent acknowledgement; received samples keep their state; requires samples.evaluate',
         security: [['sanctumCookie' => []]], tags: ['Physical Samples'],
         parameters: [new OA\Parameter(ref: '#/components/parameters/LaboratoryContextHeader'), new OA\Parameter(name: 'order', in: 'path', required: true, schema: new OA\Schema(type: 'integer', minimum: 1)), new OA\Parameter(name: 'sample', in: 'path', required: true, schema: new OA\Schema(type: 'integer', minimum: 1))],
         requestBody: new OA\RequestBody(required: false, content: new OA\JsonContent(ref: '#/components/schemas/SampleEmptyInput')),

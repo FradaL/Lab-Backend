@@ -38,7 +38,7 @@ class ClinicalReplacementConcurrencyTest extends TestCase
             match ($name) {
                 'assess' => $service->assess($lab, $actor, $order->id, $line->id, $assessment),
                 'evidence' => $service->recordEvidence($lab, $actor, $order->id, $line->id, $this->evidenceBody(3)),
-                'sample' => app(LaboratorySampleService::class)->evaluate($lab, $actor, $order->id, $sample, 'accepted'),
+                'sample' => app(LaboratorySampleService::class)->evaluate($lab, $actor, $order->id, $sample, 'rejected', ['reason' => 'FICTICIO: revisión de material']),
             };
         };
         $directory = sys_get_temp_dir().'/exc03-race-'.bin2hex(random_bytes(8));

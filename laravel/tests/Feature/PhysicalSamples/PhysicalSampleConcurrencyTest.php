@@ -133,7 +133,7 @@ class PhysicalSampleConcurrencyTest extends TestCase
                 $this->assertDatabaseCount('laboratory_sample_associations', $writer === 'register' ? 0 : 1);
             } elseif ($writer === 'start') {
                 $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 1);
-                $this->assertSame('accepted', LaboratorySample::findOrFail($sampleId)->status);
+                $this->assertSame('received', LaboratorySample::findOrFail($sampleId)->status);
                 $this->assertDatabaseHas('laboratory_sample_associations', ['id' => $associationId, 'released_at' => null]);
             } else {
                 $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 0);

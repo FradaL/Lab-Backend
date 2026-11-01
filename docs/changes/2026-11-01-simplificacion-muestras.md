@@ -52,3 +52,15 @@ Ramas: backend `feature/simplify-samples-backend` desde `develop`; frontend `fea
 Para probar: registrar una recolección, comprobar que siga recolectada y sin acción de recepción; luego registrar por separado una muestra entregada por un paciente, comprobar que figure recibida y que el formulario ya no incluya contexto del recolector ni campos de recolección.
 
 Verificación del ajuste: suite de muestras 50/50 aprobada; las dos pruebas focalizadas de recepción mínima y bloqueo API/SQL también aprobadas con aserciones adicionales. Build y 27 utilidades de frontend aprobados; recorrido Chromium de escritorio y móvil aprobado. No se migró la base de desarrollo.
+
+## Recepción sin aceptación separada — DF-020 1.1
+
+Registrar material recibido ya representa su aceptación operativa por parte del usuario. Su estado continúa siendo `received`, que lo distingue de `collected`; la interfaz retira **Aceptar muestra**. No se crea otro evento de aceptación. El endpoint antiguo `/samples/{sample}/accept` conserva sus permisos y responde idempotentemente sin cambiar recibidas ni reescribir aceptaciones históricas. Rechazos, compatibilidad por requisito y demás controles clínicos permanecen.
+
+La migración `2026_11_01_000002_keep_received_samples_without_separate_acceptance.php` impide nuevas transiciones a `accepted` y reconoce material `received` junto al `accepted` histórico en asociaciones, dependencias, cumplimiento de reposiciones y sus guardas de evidencia. Reemplaza exclusivamente los predicados de estado pertinentes; no completa automáticamente intenciones de reposición ni autoriza excepciones terminales. Los demás controles SQL se preservan. No actualiza ni elimina muestras/eventos anteriores.
+
+Aplicar las migraciones pendientes mediante `php artisan migrate` desde el entorno Laravel. Para probar: registrar material recibido, comprobar que siga **Recibida** y sin opción **Aceptar muestra**, iniciar/capturar según el flujo actual y verificar que rechazar sigue exigiendo permisos/motivo. Los datos demo nuevos usan una muestra recibida directamente; no convierten una recolectada ni ejecutan aceptación adicional.
+
+Verificación de recepción/aceptación: 54 casos de muestras pasaron en la corrida inicial. La regresión de 126 casos de reposiciones, elegibilidad de excepciones, captura y datos demo tuvo un error de fixture histórico: reconstruía funciones antiguas sin reaplicar las migraciones recientes. Se corrigió la preparación; el caso y las dos pruebas reforzadas de recepción/rollback se repitieron satisfactoriamente (3 pruebas/27 aserciones). Los otros 125 casos de esa regresión no tuvieron fallos. No se contabilizan las repeticiones como pruebas únicas adicionales.
+
+Frontend: build, 27 archivos de pruebas de utilidades y recorrido Chromium de escritorio/móvil aprobados; se comprobó ausencia de aceptación separada y conservación de permisos de rechazo y contexto. El navegador usa respuestas simuladas. Pint, sintaxis PHP y comprobación de diff aprobados. La migración se aplicó/revirtió/reaplicó únicamente en PostgreSQL temporal; no se modificaron `.env` ni datos de desarrollo.
