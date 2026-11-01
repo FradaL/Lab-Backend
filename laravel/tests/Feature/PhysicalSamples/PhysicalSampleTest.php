@@ -125,6 +125,41 @@ class PhysicalSampleTest extends TestCase
         $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 0);
     }
 
+    public function test_sample_detail_exposes_actor_names_without_private_user_fields(): void
+    {
+        [$lab, $actor, $branch, $type, $order] = $this->scenario();
+        $collector = $this->createLaboratoryMember($lab);
+        $collector->update(['name' => 'María Recolectora']);
+        $base = "/api/v1/laboratory-orders/$order->id";
+        $sample = $this->postJson("$base/samples/collect", $this->collection($branch, $type, ['collected_by' => $collector->id]))
+            ->assertCreated()->assertJsonPath('data.collection.actor', ['id' => $collector->id, 'name' => 'María Recolectora'])
+            ->assertJsonPath('data.events.0.actor', ['id' => $actor->id, 'name' => $actor->name])->json('data.id');
+        $collector->update(['is_active' => false]);
+        $this->getJson("$base/samples/$sample")->assertOk()->assertJsonPath('data.collection.actor.name', 'María Recolectora')
+            ->assertJsonPath('data.reception.actor', null)->assertJsonMissingPath('data.collection.actor.email')
+            ->assertJsonMissingPath('data.events.0.actor.email');
+        $this->getJson("$base/samples")->assertOk()->assertJsonPath('data.0.collection.actor.name', 'María Recolectora');
+        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.samples.0.events.0.actor.name', $actor->name);
+        $otherLab = Laboratory::factory()->create();
+        $otherOrder = LaboratoryOrder::factory()->for($otherLab)->create();
+        $this->getJson("/api/v1/laboratory-orders/$otherOrder->id/samples/$sample")->assertNotFound();
+    }
+
+    public function test_received_sample_history_and_historical_associations_include_user_names(): void
+    {
+        [$lab, $actor, $branch, $type, $order, $line] = $this->scenario();
+        $base = "/api/v1/laboratory-orders/$order->id";
+        $input = $this->externalInput($branch, $type, ['collected_at' => null]);
+        $sample = $this->postJson("$base/samples/receive", $input)->assertCreated()
+            ->assertJsonPath('data.collection.actor', null)->assertJsonPath('data.reception.actor.name', $actor->name)
+            ->assertJsonPath('data.events.0.event', 'received')->assertJsonPath('data.events.0.actor.name', $actor->name)->json('data.id');
+        $this->postJson("$base/samples/$sample/associations", ['sample_requirement_ids' => [$line->sampleRequirements->first()->id]])->assertOk()
+            ->assertJsonPath('data.associations.0.associated_by', $actor->id)->assertJsonPath('data.associations.0.associated_by_user.name', $actor->name);
+        $association = DB::table('laboratory_sample_associations')->value('id');
+        $this->postJson("$base/samples/$sample/associations/$association/release", ['reason' => 'Corrección'])->assertOk()
+            ->assertJsonPath('data.associations.0.released_by_user.name', $actor->name);
+    }
+
     public function test_idempotency_replays_original_response_and_rejects_changed_payload(): void
     {
         [$lab, $actor, $branch, $type, $order] = $this->scenario();

@@ -64,18 +64,25 @@ use OpenApi\Attributes as OA;
     new OA\Property(property: 'events', type: 'array', items: new OA\Items(ref: '#/components/schemas/SampleHistoryEvent')),
     new OA\Property(property: 'associations', type: 'array', items: new OA\Items(ref: '#/components/schemas/SampleAssociation')),
 ])]
+#[OA\Schema(schema: 'SampleActor', type: ['object', 'null'], properties: [
+    new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'name', type: 'string'),
+])]
 #[OA\Schema(schema: 'SampleEventContext', type: 'object', properties: [
     new OA\Property(property: 'occurred_at', type: ['string', 'null'], format: 'date-time'),
     new OA\Property(property: 'branch_id', type: ['integer', 'null']),
     new OA\Property(property: 'branch_name', type: ['string', 'null']),
     new OA\Property(property: 'actor_id', type: ['integer', 'null'], description: 'Actual internal collector or receiver; external collector remains null.'),
+    new OA\Property(property: 'actor', ref: '#/components/schemas/SampleActor'),
 ])]
 #[OA\Schema(schema: 'SampleHistoryEvent', type: 'object', properties: [
     new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'event', type: 'string', enum: ['collected', 'received', 'accepted', 'rejected', 'associated', 'released']),
     new OA\Property(property: 'actor_id', type: 'integer', description: 'User who recorded the event; not an inferred external collector.'),
+    new OA\Property(property: 'actor', ref: '#/components/schemas/SampleActor'),
     new OA\Property(property: 'occurred_at', type: 'string', format: 'date-time'), new OA\Property(property: 'recorded_at', type: 'string', format: 'date-time'), new OA\Property(property: 'context', type: 'object'),
 ])]
 #[OA\Schema(schema: 'SampleAssociation', type: 'object', properties: [
+    new OA\Property(property: 'associated_by_user', ref: '#/components/schemas/SampleActor'),
+    new OA\Property(property: 'released_by_user', ref: '#/components/schemas/SampleActor'),
     new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'sample_requirement_id', type: 'integer'),
     new OA\Property(property: 'associated_by', type: 'integer'), new OA\Property(property: 'associated_at', type: 'string', format: 'date-time'),
     new OA\Property(property: 'released_by', type: ['integer', 'null']), new OA\Property(property: 'released_at', type: ['string', 'null'], format: 'date-time'), new OA\Property(property: 'release_reason', type: ['string', 'null']),

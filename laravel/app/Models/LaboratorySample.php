@@ -15,6 +15,11 @@ class LaboratorySample extends Model
     use BelongsToLaboratory;
     use HasFactory;
 
+    public const DETAIL_RELATIONS = [
+        'events.actor:id,name', 'associations.associatedBy:id,name', 'associations.releasedBy:id,name',
+        'sampleType', 'collectionBranch', 'receivingBranch', 'collectedBy:id,name', 'receivedBy:id,name',
+    ];
+
     protected $dateFormat = 'Y-m-d H:i:s.u';
 
     protected function casts(): array
@@ -35,6 +40,16 @@ class LaboratorySample extends Model
     public function receivingBranch(): BelongsTo
     {
         return $this->belongsTo(Branch::class, 'receiving_branch_id');
+    }
+
+    public function collectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'collected_by');
+    }
+
+    public function receivedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'received_by');
     }
 
     public function events(): HasMany

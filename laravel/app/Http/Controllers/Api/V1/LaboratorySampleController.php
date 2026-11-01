@@ -75,7 +75,7 @@ class LaboratorySampleController extends Controller
     )]
     public function receive(LaboratorySampleRequest $request, int $order, int $sample): LaboratorySampleResource
     {
-        return LaboratorySampleResource::make($this->service->receive($this->current->get(), $request->user(), $order, $sample, $request->validated())->load(['events', 'associations', 'sampleType', 'collectionBranch', 'receivingBranch']));
+        return LaboratorySampleResource::make($this->service->receive($this->current->get(), $request->user(), $order, $sample, $request->validated())->load(LaboratorySample::DETAIL_RELATIONS));
     }
 
     #[OA\Post(
@@ -95,7 +95,7 @@ class LaboratorySampleController extends Controller
     )]
     public function accept(LaboratorySampleRequest $request, int $order, int $sample): LaboratorySampleResource
     {
-        return LaboratorySampleResource::make($this->service->evaluate($this->current->get(), $request->user(), $order, $sample, 'accepted', $request->validated())->load(['events', 'associations', 'sampleType', 'collectionBranch', 'receivingBranch']));
+        return LaboratorySampleResource::make($this->service->evaluate($this->current->get(), $request->user(), $order, $sample, 'accepted', $request->validated())->load(LaboratorySample::DETAIL_RELATIONS));
     }
 
     #[OA\Post(
@@ -115,7 +115,7 @@ class LaboratorySampleController extends Controller
     )]
     public function reject(LaboratorySampleRequest $request, int $order, int $sample): LaboratorySampleResource
     {
-        return LaboratorySampleResource::make($this->service->evaluate($this->current->get(), $request->user(), $order, $sample, 'rejected', $request->validated())->load(['events', 'associations', 'sampleType', 'collectionBranch', 'receivingBranch']));
+        return LaboratorySampleResource::make($this->service->evaluate($this->current->get(), $request->user(), $order, $sample, 'rejected', $request->validated())->load(LaboratorySample::DETAIL_RELATIONS));
     }
 
     #[OA\Post(
@@ -135,7 +135,7 @@ class LaboratorySampleController extends Controller
     )]
     public function associate(LaboratorySampleRequest $request, int $order, int $sample): LaboratorySampleResource
     {
-        return LaboratorySampleResource::make($this->service->associate($this->current->get(), $request->user(), $order, $sample, $request->validated())->load(['events', 'associations', 'sampleType', 'collectionBranch', 'receivingBranch']));
+        return LaboratorySampleResource::make($this->service->associate($this->current->get(), $request->user(), $order, $sample, $request->validated())->load(LaboratorySample::DETAIL_RELATIONS));
     }
 
     #[OA\Post(
@@ -155,7 +155,7 @@ class LaboratorySampleController extends Controller
     )]
     public function release(LaboratorySampleRequest $request, int $order, int $sample, int $association): LaboratorySampleResource
     {
-        return LaboratorySampleResource::make($this->service->release($this->current->get(), $request->user(), $order, $sample, $association, $request->validated())->load(['events', 'associations', 'sampleType', 'collectionBranch', 'receivingBranch']));
+        return LaboratorySampleResource::make($this->service->release($this->current->get(), $request->user(), $order, $sample, $association, $request->validated())->load(LaboratorySample::DETAIL_RELATIONS));
     }
 
     #[OA\Get(
@@ -195,7 +195,7 @@ class LaboratorySampleController extends Controller
     {
         LaboratoryOrder::forLaboratory($this->current->get())->findOrFail($order);
 
-        return response()->json(LaboratorySampleResource::collection(LaboratorySample::forLaboratory($this->current->get())->where('laboratory_order_id', $order)->with(['events', 'associations', 'sampleType', 'collectionBranch', 'receivingBranch'])->orderBy('id')->paginate(50))->response()->getData(true));
+        return response()->json(LaboratorySampleResource::collection(LaboratorySample::forLaboratory($this->current->get())->where('laboratory_order_id', $order)->with(LaboratorySample::DETAIL_RELATIONS)->orderBy('id')->paginate(50))->response()->getData(true));
     }
 
     #[OA\Get(
@@ -214,7 +214,7 @@ class LaboratorySampleController extends Controller
     )]
     public function show(LaboratorySampleRequest $request, int $order, int $sample): LaboratorySampleResource
     {
-        return LaboratorySampleResource::make($this->service->sample($this->current->get(), $order, $sample)->load(['events', 'associations', 'sampleType', 'collectionBranch', 'receivingBranch']));
+        return LaboratorySampleResource::make($this->service->sample($this->current->get(), $order, $sample)->load(LaboratorySample::DETAIL_RELATIONS));
     }
 
     #[OA\Get(

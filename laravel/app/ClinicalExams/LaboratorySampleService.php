@@ -159,7 +159,7 @@ final class LaboratorySampleService
             if (! $collection) {
                 $this->event($lab, $actor, $sample, 'received', $sample->received_at, ($data['context'] ?? []) + ['observed_facts' => (object) $sample->facts, 'reported_collector_id' => $sample->collected_by, 'collection_branch_id' => $sample->collection_branch_id]);
             }
-            $result = json_encode(['data' => LaboratorySampleResource::make($sample->load(['events', 'associations', 'sampleType', 'collectionBranch', 'receivingBranch']))->resolve()], JSON_THROW_ON_ERROR);
+            $result = json_encode(['data' => LaboratorySampleResource::make($sample->load(LaboratorySample::DETAIL_RELATIONS))->resolve()], JSON_THROW_ON_ERROR);
             $keys->where('id', $idempotency->id)->update(['laboratory_sample_id' => $sample->id, 'response' => $result]);
 
             return $this->registrationResponse($result);
@@ -336,7 +336,7 @@ final class LaboratorySampleService
             $order = LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->sharedLock()->firstOrFail();
             $order->load('clinicalFinalization');
             $lines = $order->orderExams()->with(['clinicalVersion', 'sampleRequirements', 'resultCapture:id,laboratory_order_exam_id,revision,status', 'clinicalResolution:id,laboratory_order_exam_id,resolution_type,resolved_by,resolved_at', 'clinicalExceptions:id,laboratory_order_exam_id,status', 'results:id,laboratory_order_exam_id,parameter_code'])->orderBy('id')->get();
-            $samples = LaboratorySample::forLaboratory($lab)->where('laboratory_order_id', $orderId)->with(['events', 'associations', 'sampleType', 'collectionBranch', 'receivingBranch'])->orderBy('id')->get();
+            $samples = LaboratorySample::forLaboratory($lab)->where('laboratory_order_id', $orderId)->with(LaboratorySample::DETAIL_RELATIONS)->orderBy('id')->get();
             $assessments = $this->compatibility->assessments($lab, $orderId);
             $qualified = $assessments->filter(fn ($row) => $row->released_at === null && $row->sample_status === 'accepted' && $row->errors === '[]')->groupBy('sample_requirement_id');
             $assessments = $assessments->groupBy('sample_requirement_id');
