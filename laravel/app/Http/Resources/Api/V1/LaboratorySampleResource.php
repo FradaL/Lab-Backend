@@ -11,9 +11,10 @@ class LaboratorySampleResource extends JsonResource
     {
         return [
             'id' => $this->id, 'identifier' => $this->identifier, 'laboratory_order_id' => $this->laboratory_order_id,
+            'sample_type' => $this->whenLoaded('sampleType', fn () => ['id' => $this->sampleType->id, 'name' => $this->sampleType->name]),
             'sample_type_id' => $this->sample_type_id, 'status' => $this->status, 'provenance' => $this->provenance,
-            'collection' => ['occurred_at' => $this->collected_at?->toISOString(), 'branch_id' => $this->collection_branch_id, 'actor_id' => $this->collected_by],
-            'reception' => ['occurred_at' => $this->received_at?->toISOString(), 'branch_id' => $this->receiving_branch_id, 'actor_id' => $this->received_by],
+            'collection' => ['occurred_at' => $this->collected_at?->toISOString(), 'branch_id' => $this->collection_branch_id, 'branch_name' => $this->whenLoaded('collectionBranch', fn () => $this->collectionBranch?->name), 'actor_id' => $this->collected_by],
+            'reception' => ['occurred_at' => $this->received_at?->toISOString(), 'branch_id' => $this->receiving_branch_id, 'branch_name' => $this->whenLoaded('receivingBranch', fn () => $this->receivingBranch?->name), 'actor_id' => $this->received_by],
             'facts' => (object) $this->facts,
             'events' => $this->whenLoaded('events', fn () => $this->events->map(fn ($event) => [
                 'id' => $event->id, 'event' => $event->event, 'actor_id' => $event->actor_id,

@@ -71,17 +71,15 @@ class PhysicalSampleTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_real_collection_reception_acceptance_and_explicit_start_preserve_dependencies(): void
+    public function test_received_sample_acceptance_and_explicit_start_preserve_historical_dependencies(): void
     {
         [$lab, $actor, $branch, $type, $order, $line] = $this->scenario();
         $base = "/api/v1/laboratory-orders/$order->id";
         $this->assertSame('pgsql', DB::getDriverName());
         $this->assertDatabaseCount('laboratory_samples', 0);
-        $sample = $this->postJson("$base/samples/collect", $this->collection($branch, $type))->assertCreated()->assertJsonPath('data.status', 'collected')->json('data.id');
+        $sample = $this->postJson("$base/samples/receive", $this->externalInput($branch, $type))->assertCreated()->assertJsonPath('data.status', 'received')->json('data.id');
         $this->postJson("$base/samples/$sample/associations", ['sample_requirement_ids' => [$line->sampleRequirements->first()->id]])->assertOk();
-        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.operational_status', 'pending_samples');
-        $this->postJson("$base/samples/$sample/receive", ['received_at' => now()->subMinute()->toISOString(), 'receiving_branch_id' => $branch->id])->assertOk()->assertJsonPath('data.status', 'received');
-        $this->postJson("$base/exams/$line->id/start")->assertConflict()->assertJsonPath('code', 'order_exam_not_ready');
+        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.operational_status', 'ready');
         $this->postJson("$base/samples/$sample/accept")->assertOk()->assertJsonPath('data.status', 'accepted');
         $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.status', 'pending')->assertJsonPath('data.exams.0.operational_status', 'ready');
         $this->postJson("$base/exams/$line->id/start")->assertOk()->assertJsonPath('data.operational_status', 'started')->assertJsonPath('data.processing_started_by', $actor->id);
@@ -92,6 +90,39 @@ class PhysicalSampleTest extends TestCase
         $this->postJson("$base/samples/$sample/associations/$association/release", ['reason' => 'Correction'])->assertConflict()->assertJsonPath('code', 'association_has_clinical_activity');
         $this->assertDatabaseCount('laboratory_sample_events', 4);
         $this->assertNotNull($line->refresh()->processing_started_at);
+    }
+
+    public function test_minimal_collection_with_notes_can_start_and_capture_results_without_sample_steps(): void
+    {
+        [$lab, $actor, $branch, $type, $order, $line] = $this->scenario(['container' => 'EXACT-LEGACY-NAME', 'volume' => 5, 'volume_unit' => 'mL']);
+        $base = "/api/v1/laboratory-orders/$order->id";
+        $input = $this->collection($branch, $type, ['context' => ['notes' => 'Recolección de rutina']]);
+        $first = $this->postJson("$base/samples/collect", $input)->assertCreated()
+            ->assertJsonPath('data.status', 'collected')
+            ->assertJsonPath('data.sample_type.name', $type->name)
+            ->assertJsonPath('data.collection.branch_name', $branch->name)
+            ->assertJsonPath('data.events.0.context.notes', 'Recolección de rutina')->json();
+        $this->postJson("$base/samples/collect", $input)->assertCreated()->assertExactJson($first);
+        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.can_start', true)
+            ->assertJsonPath('data.exams.0.blocking_requirement_ids', []);
+        $this->postJson("$base/exams/$line->id/start")->assertOk();
+        $this->postJson("$base/exams/$line->id/start")->assertOk();
+        $this->putJson("$base/exams/$line->id/results", ['revision' => 0, 'results' => [['parameter_code' => 'DEMO', 'value' => 'Resultado de prueba']]])->assertOk();
+        $this->assertDatabaseCount('laboratory_samples', 1);
+        $this->assertDatabaseCount('laboratory_sample_events', 1);
+        $this->assertDatabaseCount('laboratory_sample_associations', 0);
+        $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 0);
+        $this->assertSame('in_process', $order->refresh()->status);
+    }
+
+    public function test_processing_can_start_without_registering_a_sample(): void
+    {
+        [, , , , $order, $line] = $this->scenario(['container' => 'LEGACY']);
+        $base = "/api/v1/laboratory-orders/$order->id";
+        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.can_start', true);
+        $this->postJson("$base/exams/$line->id/start")->assertOk();
+        $this->assertDatabaseCount('laboratory_samples', 0);
+        $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 0);
     }
 
     public function test_idempotency_replays_original_response_and_rejects_changed_payload(): void
@@ -144,7 +175,7 @@ class PhysicalSampleTest extends TestCase
         $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 1);
     }
 
-    public function test_partial_readiness_does_not_start_other_requirements_and_corrected_associations_keep_history(): void
+    public function test_pending_historical_requirements_do_not_block_processing_and_corrected_associations_keep_history(): void
     {
         [$lab, $actor, $branch, $type, $order, $line] = $this->scenario([], true);
         $base = "/api/v1/laboratory-orders/$order->id";
@@ -152,9 +183,8 @@ class PhysicalSampleTest extends TestCase
         $first = $line->sampleRequirements->first()->id;
         $this->postJson("$base/samples/$sample/associations", ['sample_requirement_ids' => [$first]])->assertOk();
         $this->postJson("$base/samples/$sample/accept")->assertOk();
-        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.sample_requirements.0.status', 'satisfied')->assertJsonPath('data.exams.0.sample_requirements.1.status', 'pending')->assertJsonPath('data.exams.0.operational_status', 'pending_samples');
+        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.sample_requirements.0.status', 'satisfied')->assertJsonPath('data.exams.0.sample_requirements.1.status', 'pending')->assertJsonPath('data.exams.0.operational_status', 'ready');
         $this->getJson("$base/exams")->assertOk()->assertJsonPath('data.0.sample_requirements.0.status', 'satisfied');
-        $this->postJson("$base/exams/$line->id/start")->assertConflict();
         $association = DB::table('laboratory_sample_associations')->value('id');
         $this->postJson("$base/samples/$sample/associations/$association/release", ['reason' => 'Wrong selection'])->assertOk();
         $this->postJson("$base/samples/$sample/associations/$association/release", ['reason' => 'Wrong selection'])->assertOk();
@@ -163,6 +193,7 @@ class PhysicalSampleTest extends TestCase
         $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.sample_requirements.0.status', 'pending');
         $this->assertSame('accepted', LaboratorySample::findOrFail($sample)->status);
         $this->deleteJson("$base/exams/$line->id")->assertConflict()->assertJsonPath('code', 'order_exam_has_clinical_activity');
+        $this->postJson("$base/exams/$line->id/start")->assertOk();
     }
 
     public function test_rejection_recalculates_live_satisfaction_and_new_collection_has_another_identifier(): void
@@ -211,7 +242,7 @@ class PhysicalSampleTest extends TestCase
         ];
     }
 
-    public function test_temporal_expiration_blocks_start_using_historical_configuration_without_rejecting_sample(): void
+    public function test_expired_historical_association_does_not_block_processing_or_create_a_dependency(): void
     {
         [$lab, $actor, $branch, $type, $order, $line] = $this->scenario(['max_age_minutes' => 5]);
         DB::unprepared("CREATE OR REPLACE FUNCTION sample_operation_time() RETURNS timestamptz LANGUAGE sql STABLE AS $$ SELECT '2026-01-01 10:01:00+00'::timestamptz $$");
@@ -228,11 +259,11 @@ class PhysicalSampleTest extends TestCase
         $draft = $service->update($lab, $actor, $line->laboratory_exam_id, $draft->id, 1, $config);
         $service->publish($lab, $actor, $line->laboratory_exam_id, $draft->id, $draft->revision);
         DB::unprepared("CREATE OR REPLACE FUNCTION sample_operation_time() RETURNS timestamptz LANGUAGE sql STABLE AS $$ SELECT '2026-01-01 10:06:00+00'::timestamptz $$");
-        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.operational_status', 'pending_samples');
-        $this->postJson("$base/exams/$line->id/start")->assertConflict()->assertJsonPath('code', 'order_exam_not_ready');
+        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.operational_status', 'ready');
+        $this->postJson("$base/exams/$line->id/start")->assertOk();
         $this->assertSame('accepted', LaboratorySample::findOrFail($sample)->status);
         $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 0);
-        $this->assertNull($line->refresh()->processing_started_at);
+        $this->assertNotNull($line->refresh()->processing_started_at);
     }
 
     public function test_foreign_order_and_lab_associations_and_branches_never_leak_or_persist(): void
@@ -278,19 +309,39 @@ class PhysicalSampleTest extends TestCase
         $this->assertDatabaseCount('laboratory_sample_idempotencies', 0);
     }
 
-    public function test_first_reception_can_complete_unknown_facts_but_cannot_rewrite_known_observations(): void
+    public function test_collected_sample_cannot_be_received_through_api_or_direct_database_write(): void
     {
-        [$lab, $actor, $branch, $type, $order, $line] = $this->scenario(['storage_conditions' => ['demo' => 'known']]);
+        [, $actor, $branch, $type, $order] = $this->scenario();
         $base = "/api/v1/laboratory-orders/$order->id";
-        $sample = $this->postJson("$base/samples/collect", $this->collection($branch, $type, ['facts' => ['container' => 'original']]))->assertCreated()->json('data.id');
-        $receivingBranch = Branch::factory()->for($lab)->create(['status' => 'active']);
-        $reception = ['received_at' => now()->subMinute()->toISOString(), 'receiving_branch_id' => $receivingBranch->id];
-        $this->postJson("$base/samples/$sample/receive", $reception + ['facts' => ['container' => 'replacement']])->assertConflict()->assertJsonPath('code', 'sample_observation_conflict');
-        $this->postJson("$base/samples/$sample/receive", $reception + ['facts' => ['storage_conditions' => ['demo' => 'known']]])->assertOk()->assertJsonPath('data.collection.branch_id', $branch->id)->assertJsonPath('data.reception.branch_id', $receivingBranch->id)->assertJsonPath('data.facts.container', 'original');
-        $this->postJson("$base/samples/$sample/receive", $reception + ['facts' => ['container' => 'replacement']])->assertConflict();
-        $this->postJson("$base/samples/$sample/associations", ['sample_requirement_ids' => [$line->sampleRequirements->first()->id]])->assertOk();
-        $this->assertDatabaseCount('laboratory_sample_events', 3);
-        $this->assertDatabaseCount('laboratory_sample_associations', 1);
+        $sample = $this->postJson("$base/samples/collect", $this->collection($branch, $type))->assertCreated()->json('data.id');
+        $reception = ['received_at' => now()->subMinute()->toISOString(), 'receiving_branch_id' => $branch->id];
+        $this->postJson("$base/samples/$sample/receive", $reception)->assertConflict()->assertJsonPath('code', 'sample_state_conflict');
+        foreach ([['status' => 'received', 'received_by' => $actor->id] + $reception, $reception] as $changes) {
+            try {
+                DB::transaction(fn () => DB::table('laboratory_samples')->where('id', $sample)->update($changes));
+                $this->fail('A collected sample must not acquire a reception.');
+            } catch (QueryException $error) {
+                $this->assertSame('23514', $error->errorInfo[0]);
+                $this->assertStringContainsString('collection cannot become reception', $error->getMessage());
+            }
+        }
+        $this->getJson("$base/samples/$sample")->assertOk()->assertJsonPath('data.status', 'collected')->assertJsonPath('data.reception.occurred_at', null);
+        $this->assertDatabaseCount('laboratory_sample_events', 1);
+        $this->postJson("$base/samples/$sample/reject", ['reason' => 'Muestra inadecuada'])->assertOk();
+    }
+
+    public function test_minimal_patient_provided_reception_does_not_require_collection_context(): void
+    {
+        [, , $branch, $type, $order] = $this->scenario();
+        $input = ['idempotency_key' => 'patient-minimal', 'sample_type_id' => $type->id, 'provenance' => 'patient_provided',
+            'received_at' => now()->subMinute()->toISOString(), 'receiving_branch_id' => $branch->id, 'context' => ['notes' => 'Entregada por el paciente']];
+        $url = "/api/v1/laboratory-orders/$order->id/samples/receive";
+        $first = $this->postJson($url, $input)->assertCreated()->assertJsonPath('data.status', 'received')
+            ->assertJsonPath('data.collection.occurred_at', null)->assertJsonPath('data.collection.actor_id', null)
+            ->assertJsonPath('data.events.0.context.notes', 'Entregada por el paciente')->json();
+        $this->postJson($url, $input)->assertCreated()->assertExactJson($first);
+        $this->assertDatabaseCount('laboratory_samples', 1);
+        $this->assertDatabaseCount('laboratory_sample_events', 1);
     }
 
     public function test_multiple_adequate_samples_do_not_make_unused_material_a_processing_dependency(): void
@@ -319,7 +370,8 @@ class PhysicalSampleTest extends TestCase
             $this->postJson("$base/samples/$sample/accept")->assertOk();
             $this->postJson("$base/samples/$sample/associations", ['sample_requirement_ids' => [$line->sampleRequirements->first()->id]])->assertConflict();
         }
-        $this->postJson("$base/exams/$line->id/start")->assertConflict();
+        $this->postJson("$base/exams/$line->id/start")->assertOk();
+        $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 0);
         $this->assertDatabaseCount('laboratory_sample_associations', 0);
         $this->assertDatabaseCount('laboratory_samples', 2);
     }
@@ -472,21 +524,21 @@ class PhysicalSampleTest extends TestCase
     {
         [$lab, $actor, $branch, $type, $order] = $this->scenario();
         $base = "/api/v1/laboratory-orders/$order->id/samples";
-        $sample = $this->postJson("$base/collect", $this->collection($branch, $type))->assertCreated()->json('data.id');
         $input = ['received_at' => now()->subMinute()->setMicrosecond(123456)->toISOString(), 'receiving_branch_id' => $branch->id];
+        $sample = $this->postJson("$base/receive", $this->externalInput($branch, $type, $input))->assertCreated()->json('data.id');
         $first = $this->postJson("$base/$sample/receive", $input)->assertOk()->json();
         $this->postJson("$base/$sample/receive", $input)->assertOk()->assertExactJson($first);
         $this->assertDatabaseCount('laboratory_sample_events', 2);
     }
 
-    public function test_incomplete_materialization_is_blocked_in_both_operational_read_and_start(): void
+    public function test_historical_requirement_materialization_is_not_required_for_processing(): void
     {
         [$lab, $actor, $branch, $type, $order, $line] = $this->scenario();
         DB::table('laboratory_order_sample_requirements')->where('laboratory_order_exam_id', $line->id)->delete();
         $base = "/api/v1/laboratory-orders/$order->id";
-        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.can_start', false)
-            ->assertJsonPath('data.exams.0.blocking_reasons', ['materialized_requirements_incomplete']);
-        $this->postJson("$base/exams/$line->id/start")->assertConflict()->assertJsonPath('code', 'order_exam_requirements_incomplete');
+        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.can_start', true)
+            ->assertJsonPath('data.exams.0.blocking_reasons', []);
+        $this->postJson("$base/exams/$line->id/start")->assertOk();
     }
 
     public function test_sql_constraints_protect_physical_identity_history_dependencies_and_derived_state(): void
