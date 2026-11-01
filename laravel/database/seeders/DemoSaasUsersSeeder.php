@@ -3,7 +3,9 @@
 namespace Database\Seeders;
 
 use App\Authorization\SaasAccessAuthority;
+use App\ClinicalExams\GlobalClinicalReasonImpactManager as Impact;
 use App\ClinicalExams\GlobalClinicalReasonManager as Catalog;
+use App\Models\SaasCapability;
 use App\Models\SaasCapabilityAssignment;
 use App\Models\User;
 use App\UserAdministration\SaasAccessManager;
@@ -14,7 +16,7 @@ use RuntimeException;
 
 final class DemoSaasUsersSeeder extends Seeder
 {
-    /** Explicit capabilities: no wildcard, inheritance, access administration or impact classification. */
+    /** Reviewed explicit capabilities; no wildcard or inheritance. */
     public static function profiles(): array
     {
         $full = [Catalog::VIEW, Catalog::CREATE, Catalog::PUBLISH, Catalog::MANAGE];
@@ -28,6 +30,8 @@ final class DemoSaasUsersSeeder extends Seeder
             'demo-saas-full' => $full,
             'demo-saas-mixed' => $full,
             'demo-no-access' => [],
+            'demo-saas-impact' => [Impact::CAPABILITY, Catalog::VIEW],
+            'demo-superadmin' => [SaasAccessAuthority::MANAGE, ...$full, Impact::CAPABILITY],
         ];
     }
 
@@ -40,6 +44,11 @@ final class DemoSaasUsersSeeder extends Seeder
         }
         DB::transaction(function () use ($password): void {
             app(SaasAccessAuthority::class)->lock();
+            $reviewed = self::profiles()['demo-superadmin'];
+            sort($reviewed);
+            if (SaasCapability::orderBy('code')->pluck('code')->all() !== $reviewed) {
+                throw new RuntimeException('SaaS catalog changed; review the DEMO superadmin capability list before provisioning.');
+            }
             DemoDataset::run(function () use ($password): void {
                 $actor = DemoDataset::owned(User::class, ['email' => 'exc-demo-a@donqerlab.test']);
                 foreach (self::profiles() as $profile => $capabilities) {

@@ -3,6 +3,7 @@
 namespace Tests\Feature\ClinicalReasons;
 
 use App\Authorization\ClinicalReasonTenantAuthority as Authority;
+use App\Authorization\RbacCatalog;
 use App\ClinicalExams\ClinicalReasonAdoptionManager;
 use App\ClinicalExams\ClinicalReasonVersionStore;
 use App\ClinicalExams\GlobalClinicalReasonImpactManager;
@@ -34,7 +35,7 @@ class ClinicalReasonReadTest extends TestCase
 
     private function definition(array $changes = []): array
     {
-        return array_replace(['name' => 'FICTICIO local 100%_', 'description' => 'FICTICIO: local', 'classification' => 'terminal_candidate', 'evidence_requirements' => ['schema_version' => 1, 'requirements' => ['synthetic_evaluation']], 'is_active' => true, 'change_reason' => 'FICTICIO'], $changes);
+        return array_replace(['name' => 'FICTICIO local 100%_', 'description' => 'FICTICIO: local', 'classification' => 'terminal_candidate', 'evidence_requirements' => ['schema_version' => 1, 'requirements' => ['medical_instruction']], 'is_active' => true, 'change_reason' => 'FICTICIO'], $changes);
     }
 
     private function prepared(): array
@@ -68,7 +69,7 @@ class ClinicalReasonReadTest extends TestCase
         $this->assertSame($global, $items['global']['reason_reference']);
         $this->assertFalse($items['global']['actions']['can_update_adoption']);
         $this->assertSame(['source' => 'local', 'reason_id' => $local['reason']->id, 'version_id' => $local['version']->id], $items['local']['reason_reference']);
-        $this->assertSame(['synthetic_evaluation'], $items['local']['version']['evidence_requirements']['requirements']);
+        $this->assertSame(['medical_instruction'], $items['local']['version']['evidence_requirements']['requirements']);
         $this->assertTrue($items['local']['actions']['can_select_for_request']);
         foreach ($items as $item) {
             $this->assertSame('published', $item['publication_status']);
@@ -127,7 +128,7 @@ class ClinicalReasonReadTest extends TestCase
         $this->assignDirectLaboratoryPermissions($reader, $lab, [Authority::LOCAL_VIEW]);
         $this->actingAs($reader)->getJson(self::URL)->assertOk()->assertJsonPath('meta.visible_sources', ['local'])->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.actions.can_select_for_request', false);
         $this->getJson(self::URL.'?source=global')->assertForbidden();
-        $this->assertDatabaseCount('model_has_permissions', 96);
+        $this->assertDatabaseCount('model_has_permissions', count(RbacCatalog::PERMISSIONS) + 1);
         $this->assertDatabaseCount('clinical_exception_requests', 0);
     }
 

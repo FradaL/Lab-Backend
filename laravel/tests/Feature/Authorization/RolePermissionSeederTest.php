@@ -27,7 +27,7 @@ class RolePermissionSeederTest extends TestCase
     {
         RbacCatalog::assertValid();
 
-        $this->assertCount(95, RbacCatalog::PERMISSIONS);
+        $this->assertCount(99, RbacCatalog::PERMISSIONS);
         $this->assertSame([
             'owner', 'administrator', 'receptionist', 'cashier', 'laboratory_technician', 'viewer',
         ], RbacCatalog::ROLES);
@@ -45,7 +45,7 @@ class RolePermissionSeederTest extends TestCase
             ->get()->map(fn (object $mapping): array => (array) $mapping)->all();
         $this->seed(RolePermissionSeeder::class);
 
-        $this->assertDatabaseCount('permissions', 95);
+        $this->assertDatabaseCount('permissions', count(RbacCatalog::PERMISSIONS));
         $this->assertDatabaseCount('roles', 12);
         $this->assertSame($firstMappings, DB::table('role_has_permissions')
             ->orderBy('role_id')->orderBy('permission_id')
@@ -85,14 +85,14 @@ class RolePermissionSeederTest extends TestCase
         $technician = Role::findByName('laboratory_technician', 'web');
         $viewer = Role::findByName('viewer', 'web');
 
-        $this->assertCount(75, $owner->permissions);
-        $this->assertCount(65, $administrator->permissions);
-        $this->assertFalse($owner->hasPermissionTo('clinical_reasons.review_impact'));
+        $this->assertCount(count(RbacCatalog::PERMISSIONS), $owner->permissions);
+        $this->assertCount(66, $administrator->permissions);
+        $this->assertTrue($owner->hasPermissionTo('clinical_reasons.review_impact'));
         $this->assertFalse($administrator->hasPermissionTo('clinical_reasons.review_impact'));
         foreach (['orders.clinical_finalize', 'orders.exams.clinical_finalize', 'orders.clinical_exceptions.request', 'orders.clinical_exceptions.approve',
             'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'reports.delivery.evaluate', 'reports.delivery_history.view',
             'reports.delivery.prepare', 'reports.delivery.confirm', 'reports.delivery_exceptions.authorize', 'reports.delivery_exceptions.view'] as $permission) {
-            $this->assertFalse($owner->hasPermissionTo($permission));
+            $this->assertTrue($owner->hasPermissionTo($permission));
             $this->assertFalse($administrator->hasPermissionTo($permission));
         }
 

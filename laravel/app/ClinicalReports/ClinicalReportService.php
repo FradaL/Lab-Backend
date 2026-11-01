@@ -29,7 +29,7 @@ final class ClinicalReportService
     private function metadataQuery(Laboratory $lab)
     {
         return LaboratoryReportIssuance::forLaboratory($lab)->select(self::METADATA_COLUMNS)
-            ->selectRaw("jsonb_array_length(clinical_snapshot) AS line_count, identity_snapshot->>'source' AS identity_source");
+            ->selectRaw("jsonb_array_length(clinical_snapshot) AS line_count, identity_snapshot->>'source' AS identity_source, jsonb_array_length(pending_snapshot) AS pending_line_count");
     }
 
     public function __construct(private ReportAuthority $authority, private ReportSettingsService $settings,
@@ -75,12 +75,15 @@ final class ClinicalReportService
                     $identity = ReportIdentity::snapshot($patient, $branch, 'confirmed_at_issuance', $actor->id);
                 }
                 [$settingsRevision,$presentation] = $this->settings->snapshot($lab->fresh());
-                if (strlen(json_encode($lines, JSON_THROW_ON_ERROR)) > 8388608) {
+                $pendingLines = $this->pendingEvidence($order, $input, $lines);
+                if (strlen(json_encode([$lines, $pendingLines], JSON_THROW_ON_ERROR)) > 8388608) {
                     throw new ClinicalConflict('report_content_limit', 'The report exceeds the technical snapshot size limit.');
                 }
 
                 return ['number' => 'REP-'.Str::ulid(), 'type' => $input['type'], 'issued_at' => now()->toISOString(),
                     'order_code' => $order->code, 'ordered_at' => $order->ordered_at->toISOString(), 'identity' => $identity,
+                    'format_version' => ($lines[0]['snapshot_version'] ?? 1) === 2 ? 'donqer-clinical-2' : 'donqer-clinical-1',
+                    'pending_lines' => $pendingLines,
                     'presentation' => $presentation, 'settings_revision' => $settingsRevision, 'lines' => $lines,
                     'finalization_id' => $order->clinicalFinalization?->id, 'clinical_revision' => $order->clinical_revision];
             });
@@ -114,7 +117,7 @@ final class ClinicalReportService
                 }
                 // Never attach bytes prepared for an earlier clinical composition to a later state.
                 $lines = $this->evidence($order, $input);
-                if ($lines !== $prepared['lines']) {
+                if ($lines !== $prepared['lines'] || $this->pendingEvidence($order, $input, $lines) !== $prepared['pending_lines']) {
                     throw new ClinicalConflict('report_evidence_conflict', 'Historical evidence changed during rendering.');
                 }
                 $sequence = LaboratoryReportIssuance::forLaboratory($lab)->where('laboratory_order_id', $orderId)->count() + 1;
@@ -125,7 +128,7 @@ final class ClinicalReportService
                     'request_hash' => $fingerprint, 'verification_hash' => hash('sha256', $secret),
                     'identity_snapshot' => $prepared['identity'] + ['order_code' => $prepared['order_code'], 'ordered_at' => $prepared['ordered_at']],
                     'clinical_snapshot' => $prepared['lines'], 'presentation_snapshot' => ['revision' => $prepared['settings_revision']] + $prepared['presentation'],
-                    'private_path' => $path, 'pdf_hash' => $hash, 'pdf_size' => strlen($pdf), 'format_version' => 'donqer-clinical-1']);
+                    'private_path' => $path, 'pdf_hash' => $hash, 'pdf_size' => strlen($pdf), 'format_version' => $prepared['format_version']] + ($prepared['format_version'] === 'donqer-clinical-2' ? ['pending_snapshot' => $prepared['pending_lines']] : []));
                 foreach ($lines as $line) {
                     DB::table('laboratory_report_issuance_lines')->insert(['laboratory_id' => $lab->id, 'laboratory_order_id' => $orderId,
                         'report_id' => $report->id, 'laboratory_order_exam_id' => $line['line_id'], 'resolution_id' => $line['resolution']['id'],
@@ -197,6 +200,7 @@ final class ClinicalReportService
         return ['id' => $r->id, 'laboratory_order_id' => $r->laboratory_order_id, 'number' => $r->number, 'sequence' => $r->sequence,
             'type' => $r->type, 'issued_by' => $r->issued_by, 'issued_at' => $r->issued_at->toISOString(),
             'clinical_revision' => $r->clinical_revision, 'finalization_id' => $r->finalization_id, 'line_count' => $r->getAttribute('line_count') ?? count($r->clinical_snapshot),
+            'pending_line_count' => $r->getAttribute('pending_line_count') ?? ($r->pending_snapshot === null ? null : count($r->pending_snapshot)),
             'pdf_hash' => $r->pdf_hash, 'pdf_size' => $r->pdf_size, 'format_version' => $r->format_version, 'identity_source' => $r->getAttribute('identity_source') ?? $r->identity_snapshot['source']];
     }
 
@@ -239,6 +243,15 @@ final class ClinicalReportService
         }
 
         return $snapshots;
+    }
+
+    private function pendingEvidence(LaboratoryOrder $order, array $input, array $lines): array
+    {
+        if (($lines[0]['snapshot_version'] ?? 1) !== 2 || $input['type'] !== 'partial') {
+            return [];
+        }
+
+        return json_decode(DB::scalar('SELECT report_pending_snapshot(?)', [$order->id]), true, flags: JSON_THROW_ON_ERROR);
     }
 
     private function input(array $input, string $key): void

@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\ClinicalExamController;
 use App\Http\Controllers\Api\V1\ClinicalFinalizationController;
 use App\Http\Controllers\Api\V1\ClinicalReasonAdoptionController;
 use App\Http\Controllers\Api\V1\ClinicalReasonReadController;
+use App\Http\Controllers\Api\V1\ClinicalReplacementController;
 use App\Http\Controllers\Api\V1\ClinicalReportController;
 use App\Http\Controllers\Api\V1\CommercialClientController;
 use App\Http\Controllers\Api\V1\CommercialClientPriceListController;
@@ -30,6 +31,7 @@ use App\Http\Controllers\Api\V1\PriceListExamController;
 use App\Http\Controllers\Api\V1\PricingResolutionController;
 use App\Http\Controllers\Api\V1\ReportDeliveryController;
 use App\Http\Controllers\Api\V1\ResultValidationController;
+use App\Http\Controllers\Api\V1\RolePermissionController;
 use App\Http\Controllers\Api\V1\SaasAccessController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\HealthCheckController;
@@ -105,6 +107,9 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('/laboratory/users/{user}/role', [LaboratoryUserController::class, 'updateRole'])->middleware('can:users.assign_role')->whereNumber('user');
         Route::patch('/laboratory/users/{user}/status', [LaboratoryUserController::class, 'updateStatus'])->middleware('can:users.change_status')->whereNumber('user');
         Route::get('/laboratory/roles', LaboratoryRoleController::class)->middleware('can:roles.view');
+        Route::get('/laboratory/permissions', [RolePermissionController::class, 'index'])->middleware('can:roles.permissions.manage');
+        Route::get('/laboratory/roles/{role}/permissions', [RolePermissionController::class, 'show'])->middleware('can:roles.permissions.manage');
+        Route::put('/laboratory/roles/{role}/permissions', [RolePermissionController::class, 'update'])->middleware('can:roles.permissions.manage');
         Route::get('/laboratory/report-settings', [ClinicalReportController::class, 'settings'])->middleware('can:reports.settings.view');
         Route::put('/laboratory/report-settings', [ClinicalReportController::class, 'updateSettings'])->middleware('can:reports.settings.edit');
         Route::post('/laboratory/report-settings/logo', [ClinicalReportController::class, 'logo'])->middleware('can:reports.settings.edit');
@@ -245,9 +250,19 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('/laboratory-exams/{laboratoryExam}/status', [LaboratoryExamController::class, 'updateStatus'])
             ->middleware('can:laboratory_exams.change_status')
             ->whereNumber('laboratoryExam');
+        Route::prefix('/laboratory-orders/{order}/exams/{line}/clinical-replacements')->whereNumber(['order', 'line'])->group(function (): void {
+            Route::get('/', [ClinicalReplacementController::class, 'index'])->middleware('can:orders.clinical_replacements.view');
+            Route::post('/intentions', [ClinicalReplacementController::class, 'intention'])->middleware('can:orders.clinical_replacements.record');
+            Route::post('/evidence', [ClinicalReplacementController::class, 'evidence'])->middleware('can:orders.clinical_replacements.record');
+            Route::post('/assessments', [ClinicalReplacementController::class, 'assess'])->middleware('can:orders.clinical_replacements.evaluate');
+            Route::post('/intentions/{intention}/samples', [ClinicalReplacementController::class, 'link'])->whereNumber('intention')->middleware('can:orders.clinical_replacements.record')->middleware('can:samples.associate');
+            Route::post('/intentions/{intention}/fulfill', [ClinicalReplacementController::class, 'fulfill'])->whereNumber('intention')->middleware('can:orders.clinical_replacements.record');
+        });
+
         Route::post('/laboratory-orders/{order}/exams/{line}/exceptions', [ClinicalFinalizationController::class, 'requestException'])->middleware('can:orders.clinical_exceptions.request')->whereNumber(['order', 'line']);
         Route::get('/laboratory-orders/{order}/exams/{line}/exceptions', [ClinicalFinalizationController::class, 'exceptions'])->middleware('can:orders.clinical_exceptions.view')->whereNumber(['order', 'line']);
         Route::post('/laboratory-orders/{order}/exams/{line}/exceptions/{exception}/approve', [ClinicalFinalizationController::class, 'approve'])->middleware('can:orders.clinical_exceptions.approve')->whereNumber(['order', 'line', 'exception']);
+        Route::post('/laboratory-orders/{order}/exams/{line}/exceptions/{exception}/review', [ClinicalFinalizationController::class, 'review'])->middleware('can:orders.clinical_replacements.evaluate')->whereNumber(['order', 'line', 'exception']);
         Route::post('/laboratory-orders/{order}/exams/{line}/exceptions/{exception}/reject', [ClinicalFinalizationController::class, 'reject'])->middleware('can:orders.clinical_exceptions.approve')->whereNumber(['order', 'line', 'exception']);
         Route::post('/laboratory-orders/{order}/exams/{line}/finalize', [ClinicalFinalizationController::class, 'finalizeLine'])->middleware('can:orders.exams.clinical_finalize')->whereNumber(['order', 'line']);
         Route::post('/laboratory-orders/{order}/finalize', [ClinicalFinalizationController::class, 'finalizeOrder'])->middleware('can:orders.clinical_finalize')->whereNumber(['order']);

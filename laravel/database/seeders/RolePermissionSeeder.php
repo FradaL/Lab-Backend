@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Authorization\LaboratoryRoleProvisioner;
 use App\Authorization\RbacCatalog;
 use App\Models\Laboratory;
 use App\Models\User;
@@ -30,12 +31,7 @@ class RolePermissionSeeder extends Seeder
 
         try {
             Laboratory::query()->orderBy('id')->each(function (Laboratory $laboratory): void {
-                setPermissionsTeamId($laboratory->getKey());
-
-                foreach (RbacCatalog::rolePermissions() as $roleName => $permissions) {
-                    Role::findOrCreate($roleName, RbacCatalog::GUARD)
-                        ->syncPermissions($permissions);
-                }
+                app(LaboratoryRoleProvisioner::class)->provision($laboratory);
             });
 
             $this->assignDemoRoles();

@@ -47,9 +47,9 @@ final class ProtectedDomainAuthorizationTest extends TestCase
         ksort($expected);
 
         $this->assertSame($expected, $actual);
-        $this->assertCount(150, $actual);
+        $this->assertCount(160, $actual);
         $this->assertEmpty(array_diff(array_values($actual), RbacCatalog::PERMISSIONS));
-        $this->assertSame(47, collect(Route::getRoutes()->getRoutes())
+        $this->assertSame(54, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
             ->filter(fn (IlluminateRoute $route): bool => collect($route->gatherMiddleware())
                 ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')))
@@ -460,6 +460,16 @@ final class ProtectedDomainAuthorizationTest extends TestCase
             'PATCH api/v1/laboratory/users/{user}/role' => 'users.assign_role',
             'PATCH api/v1/laboratory/users/{user}/status' => 'users.change_status',
             'GET api/v1/laboratory/roles' => 'roles.view',
+            'GET api/v1/laboratory/permissions' => 'roles.permissions.manage',
+            'GET api/v1/laboratory/roles/{role}/permissions' => 'roles.permissions.manage',
+            'PUT api/v1/laboratory/roles/{role}/permissions' => 'roles.permissions.manage',
+            'GET api/v1/laboratory-orders/{order}/exams/{line}/clinical-replacements' => 'orders.clinical_replacements.view',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/clinical-replacements/assessments' => 'orders.clinical_replacements.evaluate',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/clinical-replacements/evidence' => 'orders.clinical_replacements.record',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/clinical-replacements/intentions' => 'orders.clinical_replacements.record',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/clinical-replacements/intentions/{intention}/fulfill' => 'orders.clinical_replacements.record',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/clinical-replacements/intentions/{intention}/samples' => 'samples.associate',
+            'POST api/v1/laboratory-orders/{order}/exams/{line}/exceptions/{exception}/review' => 'orders.clinical_replacements.evaluate',
             'POST api/v1/laboratory-orders/{order}/exams/{line}/results/validate' => 'results.validate',
             'POST api/v1/laboratory-orders/{order}/exams/{line}/results/rectify' => 'results.rectify',
             'GET api/v1/laboratory-orders/{order}/exams/{line}/results/validations' => 'results.validation_history',

@@ -21,6 +21,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\ClinicalResults\ClinicalResultScenario;
+use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
 class ClinicalReasonIntegralAuditTest extends TestCase
@@ -29,13 +30,14 @@ class ClinicalReasonIntegralAuditTest extends TestCase
 
     private function definition(): array
     {
-        return ['name' => 'FICTICIO: auditoría integral', 'description' => 'FICTICIO', 'classification' => 'terminal_candidate', 'evidence_requirements' => ['schema_version' => 1, 'requirements' => []], 'is_active' => true, 'change_reason' => 'FICTICIO'];
+        return ['name' => 'FICTICIO: auditoría integral', 'description' => 'FICTICIO', 'classification' => 'terminal_candidate', 'evidence_requirements' => ['schema_version' => 1, 'requirements' => ['medical_instruction']], 'is_active' => true, 'change_reason' => 'FICTICIO'];
     }
 
     private function local(Laboratory $lab, User $actor, string $code = 'ficticio'): array
     {
         setPermissionsTeamId($lab->id);
         $this->assignLaboratoryRole($actor, $lab, 'owner');
+        StructuredClinicalReasonFixture::medicalEvidence($lab, $actor);
 
         return app(LocalClinicalReasonManager::class)->create($lab, $actor, ['code' => $code, 'definition' => $this->definition()])['data'];
     }

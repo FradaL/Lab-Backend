@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Tenancy\CurrentLaboratory;
 use Closure;
 use Illuminate\Http\Request;
+use Spatie\Permission\PermissionRegistrar;
 use Symfony\Component\HttpFoundation\Response;
 
 class SetPermissionTeamContext
@@ -22,6 +23,7 @@ class SetPermissionTeamContext
         /** @var User|null $user */
         $user = $request->user();
 
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
         setPermissionsTeamId($this->currentLaboratory->id());
         $user?->unsetRelation('roles')->unsetRelation('permissions');
 

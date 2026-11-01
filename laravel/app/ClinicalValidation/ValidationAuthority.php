@@ -11,6 +11,23 @@ use Spatie\Permission\PermissionRegistrar;
 
 final class ValidationAuthority
 {
+    /** Shared tenant access policy for internally invoked clinical services. */
+    public function access(Laboratory $lab, User $actor, string $permission, bool $lock = true): void
+    {
+        $laboratories = Laboratory::whereKey($lab->id);
+        if ($lock) {
+            $laboratories->sharedLock();
+        }
+        $current = $laboratories->firstOrFail();
+        abort_unless($current->is_active, 403, 'Active laboratory required.');
+        $this->permission($lab, $actor, $permission, $lock);
+        $subscriptions = $current->subscriptions()->active();
+        if ($lock) {
+            $subscriptions->sharedLock();
+        }
+        abort_unless($subscriptions->get()->contains(fn ($s) => $s->allowsAccess()), 403, 'Active subscription required.');
+    }
+
     public function permission(Laboratory $lab, User $actor, string $permission, bool $lock = false): void
     {
         $users = User::whereKey($actor->id)->where('is_active', true);
