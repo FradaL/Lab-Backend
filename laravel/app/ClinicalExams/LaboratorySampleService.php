@@ -340,7 +340,7 @@ final class LaboratorySampleService
         return $this->transaction(function () use ($lab, $orderId): array {
             $order = LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->sharedLock()->firstOrFail();
             $order->load('clinicalFinalization');
-            $lines = $order->orderExams()->with(['clinicalVersion', 'sampleRequirements', 'resultCapture:id,laboratory_order_exam_id,revision,status', 'clinicalResolution:id,laboratory_order_exam_id,resolution_type,resolved_by,resolved_at', 'clinicalExceptions:id,laboratory_order_exam_id,status', 'results:id,laboratory_order_exam_id,parameter_code'])->orderBy('id')->get();
+            $lines = $order->orderExams()->with(['processingStartedBy:id,name', 'clinicalVersion', 'sampleRequirements', 'resultCapture:id,laboratory_order_exam_id,revision,status', 'clinicalResolution:id,laboratory_order_exam_id,resolution_type,resolved_by,resolved_at', 'clinicalExceptions:id,laboratory_order_exam_id,status', 'results:id,laboratory_order_exam_id,parameter_code'])->orderBy('id')->get();
             $samples = LaboratorySample::forLaboratory($lab)->where('laboratory_order_id', $orderId)->with(LaboratorySample::DETAIL_RELATIONS)->orderBy('id')->get();
             $assessments = $this->compatibility->assessments($lab, $orderId);
             $qualified = $assessments->filter(fn ($row) => $row->released_at === null && in_array($row->sample_status, ['received', 'accepted'], true) && $row->errors === '[]')->groupBy('sample_requirement_id');
@@ -370,6 +370,7 @@ final class LaboratorySampleService
                         'processing_dependencies' => $dependencies->get($line->id)?->map(fn ($dependency) => ['association_id' => $dependency->association_id, 'decision' => $dependency->decision])->all() ?? [],
                         'blocking_requirement_ids' => [], 'blocking_reasons' => $published ? [] : ['published_clinical_version_required'],
                         'processing_started_at' => $line->processing_started_at?->toISOString(), 'processing_started_by' => $line->processing_started_by,
+                        'processing_started_by_user' => $line->processingStartedBy === null ? null : ['id' => $line->processingStartedBy->id, 'name' => $line->processingStartedBy->name],
                         'result_capture' => LaboratoryResultService::progress($line),
                         'sample_requirements' => $requirements];
                 })->all()];

@@ -209,6 +209,21 @@ class PhysicalSampleTest extends TestCase
         $this->postJson("$base/samples/$sample/reject", ['reason' => 'Corrección de material histórico'])->assertOk();
     }
 
+    public function test_processing_actor_uses_the_user_who_started_the_line_and_only_exposes_identity(): void
+    {
+        [$lab, $actor, $branch, $type, $order, $line] = $this->scenario();
+        $base = "/api/v1/laboratory-orders/$order->id";
+        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.processing_started_by_user', null);
+        $this->postJson("$base/exams/$line->id/start")->assertOk();
+        $actor->update(['is_active' => false]);
+        $viewer = $this->createLaboratoryMember($lab);
+        $this->assignDirectLaboratoryPermissions($viewer, $lab, ['orders.view', 'samples.view']);
+        $this->actingAs($viewer)->withHeader('X-Laboratory-ID', (string) $lab->id);
+        $this->getJson("$base/operational")->assertOk()->assertJsonPath('data.exams.0.processing_started_by', $actor->id)
+            ->assertJsonPath('data.exams.0.processing_started_by_user', ['id' => $actor->id, 'name' => $actor->name])
+            ->assertJsonMissingPath('data.exams.0.processing_started_by_user.email');
+    }
+
     public function test_idempotency_replays_original_response_and_rejects_changed_payload(): void
     {
         [$lab, $actor, $branch, $type, $order] = $this->scenario();
