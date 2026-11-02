@@ -133,7 +133,7 @@ class PhysicalSampleConcurrencyTest extends TestCase
                 $this->assertDatabaseCount('laboratory_sample_associations', $writer === 'register' ? 0 : 1);
             } elseif ($writer === 'start') {
                 $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 1);
-                $this->assertSame('accepted', LaboratorySample::findOrFail($sampleId)->status);
+                $this->assertSame('received', LaboratorySample::findOrFail($sampleId)->status);
                 $this->assertDatabaseHas('laboratory_sample_associations', ['id' => $associationId, 'released_at' => null]);
             } else {
                 $this->assertDatabaseCount('laboratory_sample_processing_dependencies', 0);
@@ -160,9 +160,9 @@ class PhysicalSampleConcurrencyTest extends TestCase
             'accept then reject' => ['accept', 'reject', 'ok'],
             'reject then accept' => ['reject', 'accept', 'sample_state_conflict'],
             'start then reject' => ['start', 'reject', 'sample_has_clinical_activity'],
-            'reject accepted then start' => ['reject_accepted', 'start', 'order_exam_not_ready'],
+            'reject accepted then start' => ['reject_accepted', 'start', 'ok'],
             'start then release' => ['start', 'release', 'association_has_clinical_activity'],
-            'release then start' => ['release', 'start', 'order_exam_not_ready'],
+            'release then start' => ['release', 'start', 'ok'],
             'duplicate associations' => ['associate', 'associate', 'ok'],
             'duplicate creation' => ['register', 'register', 'ok'],
             'distinct concurrent identifiers' => ['register', 'register_new', 'ok'],
