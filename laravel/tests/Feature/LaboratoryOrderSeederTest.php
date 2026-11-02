@@ -142,8 +142,8 @@ final class LaboratoryOrderSeederTest extends TestCase
         $this->assertSame(74, AuditLog::where('event', 'order_exam.added')->count());
         $physicalId = DB::table('demo_dataset_records')->where('entity_kind', 'physical_order_scenario')->where('entity_key', 'samples-v1')->value('entity_id');
         $operational = app(LaboratorySampleService::class)->operational($lab, $physicalId);
-        $this->assertSame(['started', 'ready', 'pending_samples', 'ready'], array_column($operational['exams'], 'operational_status'));
-        $this->assertSame(['accepted', 'collected', 'received', 'rejected'], array_column($operational['samples'], 'status'));
+        $this->assertSame(['started', 'ready', 'ready', 'ready'], array_column($operational['exams'], 'operational_status'));
+        $this->assertSame(['received', 'collected', 'received', 'rejected'], array_column($operational['samples'], 'status'));
         $this->assertSame(['satisfied', 'pending'], array_column($operational['exams'][2]['sample_requirements'], 'status'));
         $this->assertSame('100.00', $operational['order']['total']);
         $this->assertDatabaseCount('laboratory_samples', 4);
@@ -229,6 +229,14 @@ final class LaboratoryOrderSeederTest extends TestCase
         $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
         $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $sampleWorkflowMigrations = array_map(fn ($file) => require database_path('migrations/'.$file.'.php'), [
+            '2026_11_01_000000_decouple_processing_from_sample_requirements',
+            '2026_11_01_000001_preserve_collected_sample_origin',
+            '2026_11_01_000002_keep_received_samples_without_separate_acceptance',
+        ]);
+        foreach (array_reverse($sampleWorkflowMigrations) as $sampleWorkflowMigration) {
+            $sampleWorkflowMigration->down();
+        }
         $reportExceptions->down();
         $exceptionEvidence->down();
         $replacementEvidence->down();
@@ -258,6 +266,9 @@ final class LaboratoryOrderSeederTest extends TestCase
         $replacementEvidence->up();
         $exceptionEvidence->up();
         $reportExceptions->up();
+        foreach ($sampleWorkflowMigrations as $sampleWorkflowMigration) {
+            $sampleWorkflowMigration->up();
+        }
         setPermissionsTeamId($lab->id);
         $role = Role::create(['name' => 'administrator', 'guard_name' => 'web', 'laboratory_id' => $lab->id]);
         $role->givePermissionTo(Permission::findOrCreate('orders.view', 'web'));

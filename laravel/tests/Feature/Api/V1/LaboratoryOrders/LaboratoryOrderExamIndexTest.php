@@ -113,12 +113,25 @@ final class LaboratoryOrderExamIndexTest extends TestCase
 
         foreach ($response->json('data') as $item) {
             $this->assertSame(['id', 'exam', 'price_list', 'unit_price', 'clinical_version_id', 'clinical_configuration_source', 'sample_requirements', 'created_at', 'updated_at'], array_keys($item));
-            $this->assertSame(['id', 'code', 'name'], array_keys($item['exam']));
+            $this->assertSame(['id', 'code', 'name', 'area'], array_keys($item['exam']));
             $this->assertSame(['id', 'name'], array_keys($item['price_list']));
             foreach (['laboratory_id', 'laboratory_order_id', 'quantity', 'subtotal', 'discount', 'currency', 'status', 'current_price', 'price_list_exam_id'] as $field) {
                 $this->assertArrayNotHasKey($field, $item);
             }
         }
+    }
+
+    public function test_exam_area_comes_from_the_line_snapshot_without_inventing_missing_history(): void
+    {
+        [$user, $laboratory, $order, $exam, $priceList] = $this->activeContext();
+        $line = $this->line($laboratory, $order, $exam, $priceList, [
+            'report_area_snapshot' => ['id' => $exam->laboratory_area_id, 'name' => 'Área histórica sintética', 'source' => 'line_creation'],
+        ]);
+        $this->line($laboratory, $order, $exam, $priceList, ['report_area_snapshot' => null]);
+        $exam->laboratoryArea->update(['name' => 'Área actual diferente']);
+        $this->request($user, $laboratory, $order)->assertOk()
+            ->assertJsonPath('data.0.exam.area', ['id' => $exam->laboratory_area_id, 'name' => 'Área histórica sintética'])
+            ->assertJsonPath('data.1.exam.area', null);
     }
 
     public function test_three_identical_exam_requests_remain_three_distinct_items(): void

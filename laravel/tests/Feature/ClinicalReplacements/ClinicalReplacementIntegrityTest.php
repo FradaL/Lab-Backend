@@ -75,7 +75,7 @@ class ClinicalReplacementIntegrityTest extends TestCase
         $i = $service->createIntention($lab, $actor, $order->id, $line->id, $this->intentionBody($requirement, 0, $sample));
         $e = $service->recordEvidence($lab, $actor, $order->id, $line->id, $this->evidenceBody(2));
         $body = $this->assessmentBody(3, $i['intention_id'], $e['evidence_id']);
-        $samples->evaluate($lab, $actor, $order->id, $sample, 'accepted');
+        $samples->evaluate($lab, $actor, $order->id, $sample, 'rejected', ['reason' => 'FICTICIO: material rechazado']);
         $this->postJson($url.'/assessments', $body)->assertConflict()->assertJsonPath('code', 'viability_dependencies_conflict');
         $this->assertDatabaseCount('clinical_viability_assessments', 0);
     }

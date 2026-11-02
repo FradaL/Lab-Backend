@@ -19,6 +19,13 @@ final class AdminDemoPermissionSeeder extends Seeder
         'users.assign_role',
         'users.change_status',
         'roles.view',
+        'results.validate',
+        'orders.clinical_finalization.view',
+        'orders.exams.clinical_finalize',
+        'orders.clinical_finalize',
+        'reports.issue',
+        'reports.view_history',
+        'reports.download',
         'reports.settings.view',
         'reports.settings.edit',
     ];

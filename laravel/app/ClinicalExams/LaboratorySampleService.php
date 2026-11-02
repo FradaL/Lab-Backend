@@ -159,7 +159,7 @@ final class LaboratorySampleService
             if (! $collection) {
                 $this->event($lab, $actor, $sample, 'received', $sample->received_at, ($data['context'] ?? []) + ['observed_facts' => (object) $sample->facts, 'reported_collector_id' => $sample->collected_by, 'collection_branch_id' => $sample->collection_branch_id]);
             }
-            $result = json_encode(['data' => LaboratorySampleResource::make($sample->load(['events', 'associations']))->resolve()], JSON_THROW_ON_ERROR);
+            $result = json_encode(['data' => LaboratorySampleResource::make($sample->load(LaboratorySample::DETAIL_RELATIONS))->resolve()], JSON_THROW_ON_ERROR);
             $keys->where('id', $idempotency->id)->update(['laboratory_sample_id' => $sample->id, 'response' => $result]);
 
             return $this->registrationResponse($result);
@@ -171,7 +171,7 @@ final class LaboratorySampleService
         $this->authorize($lab, $actor, 'samples.receive');
         $data = $this->input('receive', $data);
 
-        return $this->transaction(function () use ($lab, $actor, $orderId, $sampleId, $data): LaboratorySample {
+        return $this->transaction(function () use ($lab, $orderId, $sampleId, $data): LaboratorySample {
             $this->order($lab, $orderId);
             $sample = $this->sample($lab, $orderId, $sampleId, true);
             if ($sample->received_at !== null) {
@@ -181,24 +181,7 @@ final class LaboratorySampleService
                 }
                 throw new ClinicalConflict('sample_reception_conflict', 'The existing reception cannot be replaced.');
             }
-            if ($sample->status !== 'collected') {
-                throw new ClinicalConflict('sample_state_conflict', 'Only a collected sample can be received.');
-            }
-            if (CarbonImmutable::parse($data['received_at'])->lessThan($sample->collected_at)) {
-                throw ValidationException::withMessages(['received_at' => ['Reception cannot precede collection.']]);
-            }
-            $this->localReference(Branch::class, $lab, $data['receiving_branch_id'], 'receiving_branch_id');
-            $facts = $sample->facts;
-            foreach ($data['facts'] ?? [] as $key => $value) {
-                if (array_key_exists($key, $facts) && ! $this->equivalent($facts[$key], $value)) {
-                    throw new ClinicalConflict('sample_observation_conflict', 'Reception may complete unknown facts but cannot overwrite a collection observation.', ['facts.'.$key => ['The original observation is immutable.']]);
-                }
-                $facts[$key] = $value;
-            }
-            $sample->update(['status' => 'received', 'received_at' => $data['received_at'], 'receiving_branch_id' => $data['receiving_branch_id'], 'received_by' => $actor->id, 'facts' => (object) $facts]);
-            $this->event($lab, $actor, $sample, 'received', $sample->received_at, ['observed_facts' => (object) ($data['facts'] ?? [])]);
-
-            return $sample;
+            throw new ClinicalConflict('sample_state_conflict', 'Collected samples cannot be converted into received samples. Register externally provided material as a new received sample.');
         });
     }
 
@@ -210,6 +193,11 @@ final class LaboratorySampleService
         return $this->transaction(function () use ($lab, $actor, $orderId, $sampleId, $target, $data): LaboratorySample {
             $this->order($lab, $orderId);
             $sample = $this->sample($lab, $orderId, $sampleId, true);
+            // Reception already records acceptance for the current workflow.
+            // Keep the old endpoint idempotent without creating another state/event.
+            if ($target === 'accepted' && $sample->status === 'received') {
+                return $sample;
+            }
             if ($sample->status === $target) {
                 if ($target === 'rejected' && $sample->events()->where('event', 'rejected')->latest('id')->first()?->context['reason'] !== $data['reason']) {
                     throw new ClinicalConflict('sample_rejection_conflict', 'A rejection already exists with another reason.');
@@ -315,17 +303,11 @@ final class LaboratorySampleService
             if ($line->clinicalVersion?->status !== 'published') {
                 throw new ClinicalConflict('clinical_exam_unavailable', 'A historical or legacy line cannot start clinical processing.');
             }
-            if ($line->sampleRequirements->count() !== count($line->clinicalVersion->configuration['sample_requirements'] ?? [])) {
-                throw new ClinicalConflict('order_exam_requirements_incomplete', 'The materialized requirements are incomplete.');
-            }
+            // Existing adequate associations remain part of the historical trace.
+            // New processing starts do not require a sample or a manual association.
             LaboratorySample::forLaboratory($lab)->where('laboratory_order_id', $orderId)->orderBy('id')->lockForUpdate()->get();
             LaboratorySampleAssociation::forLaboratory($lab)->where('laboratory_order_id', $orderId)->orderBy('id')->lockForUpdate()->get();
             $qualified = $this->compatibility->qualifyingAssociations($lab, $orderId)->groupBy('sample_requirement_id');
-            foreach ($line->sampleRequirements as $requirement) {
-                if (($requirement->configuration['mandatory'] ?? true) && ! $qualified->has($requirement->id)) {
-                    throw new ClinicalConflict('order_exam_not_ready', 'At least one mandatory requirement has no adequate accepted sample.', ['sample_requirement_ids' => [$requirement->id]]);
-                }
-            }
             $startedAt = now();
             foreach ($line->sampleRequirements as $requirement) {
                 $association = $qualified->get($requirement->id)?->first();
@@ -358,10 +340,10 @@ final class LaboratorySampleService
         return $this->transaction(function () use ($lab, $orderId): array {
             $order = LaboratoryOrder::forLaboratory($lab)->whereKey($orderId)->sharedLock()->firstOrFail();
             $order->load('clinicalFinalization');
-            $lines = $order->orderExams()->with(['clinicalVersion', 'sampleRequirements', 'resultCapture:id,laboratory_order_exam_id,revision,status', 'clinicalResolution:id,laboratory_order_exam_id,resolution_type,resolved_by,resolved_at', 'clinicalExceptions:id,laboratory_order_exam_id,status', 'results:id,laboratory_order_exam_id,parameter_code'])->orderBy('id')->get();
-            $samples = LaboratorySample::forLaboratory($lab)->where('laboratory_order_id', $orderId)->with(['events', 'associations'])->orderBy('id')->get();
+            $lines = $order->orderExams()->with(['processingStartedBy:id,name', 'clinicalVersion', 'sampleRequirements', 'resultCapture:id,laboratory_order_exam_id,revision,status', 'clinicalResolution:id,laboratory_order_exam_id,resolution_type,resolved_by,resolved_at', 'clinicalExceptions:id,laboratory_order_exam_id,status', 'results:id,laboratory_order_exam_id,parameter_code'])->orderBy('id')->get();
+            $samples = LaboratorySample::forLaboratory($lab)->where('laboratory_order_id', $orderId)->with(LaboratorySample::DETAIL_RELATIONS)->orderBy('id')->get();
             $assessments = $this->compatibility->assessments($lab, $orderId);
-            $qualified = $assessments->filter(fn ($row) => $row->released_at === null && $row->sample_status === 'accepted' && $row->errors === '[]')->groupBy('sample_requirement_id');
+            $qualified = $assessments->filter(fn ($row) => $row->released_at === null && in_array($row->sample_status, ['received', 'accepted'], true) && $row->errors === '[]')->groupBy('sample_requirement_id');
             $assessments = $assessments->groupBy('sample_requirement_id');
             $dependencies = LaboratorySampleProcessingDependency::forLaboratory($lab)->where('laboratory_order_id', $orderId)->orderBy('id')->get()->groupBy('laboratory_order_exam_id');
 
@@ -369,13 +351,9 @@ final class LaboratorySampleService
                 'order' => LaboratoryOrderResource::make($order->load(['patient', 'doctor', 'branch', 'createdBy']))->resolve(),
                 'samples' => LaboratorySampleResource::collection($samples)->resolve(),
                 'exams' => $lines->map(function ($line) use ($qualified, $assessments, $dependencies, $order): array {
-                    $blockers = [];
-                    $requirements = $line->sampleRequirements->map(function ($requirement) use ($qualified, $assessments, &$blockers): array {
+                    $requirements = $line->sampleRequirements->map(function ($requirement) use ($qualified, $assessments): array {
                         $satisfied = $qualified->has($requirement->id);
                         $mandatory = $requirement->configuration['mandatory'] ?? true;
-                        if ($mandatory && ! $satisfied) {
-                            $blockers[] = $requirement->id;
-                        }
 
                         return ['id' => $requirement->id, 'requirement_key' => $requirement->requirement_key, 'mandatory' => $mandatory,
                             'status' => $satisfied ? 'satisfied' : 'pending', 'configuration' => $requirement->configuration,
@@ -383,16 +361,16 @@ final class LaboratorySampleService
                             'association_evaluations' => $assessments->get($requirement->id)?->map(fn ($row) => ['association_id' => $row->id, 'sample_id' => $row->laboratory_sample_id, 'active' => $row->released_at === null, 'sample_status' => $row->sample_status, 'compatibility_errors' => json_decode($row->errors, true, flags: JSON_THROW_ON_ERROR)])->all() ?? []];
                     })->all();
                     $published = $line->clinicalVersion?->status === 'published';
-                    $complete = $published && count($requirements) === count($line->clinicalVersion->configuration['sample_requirements'] ?? []);
 
                     return ['id' => $line->id, 'clinical_version_id' => $line->clinical_version_id,
                         'clinical_configuration_source' => $line->clinical_configuration_source ?? 'historical',
-                        'operational_status' => $line->processing_started_at !== null ? 'started' : ($complete && $blockers === [] ? 'ready' : 'pending_samples'),
+                        'operational_status' => $line->processing_started_at !== null ? 'started' : ($published ? 'ready' : 'unavailable'),
                         'clinical_resolution' => $line->clinicalResolution === null ? null : ['id' => $line->clinicalResolution->id, 'resolution_type' => $line->clinicalResolution->resolution_type, 'resolved_by' => $line->clinicalResolution->resolved_by, 'resolved_at' => $line->clinicalResolution->resolved_at->toISOString()],
-                        'can_start' => $line->clinicalResolution === null && $line->processing_started_at === null && $complete && $blockers === [] && in_array($order->status, ['pending', 'in_process'], true),
+                        'can_start' => $line->clinicalResolution === null && $line->processing_started_at === null && $published && in_array($order->status, ['pending', 'in_process'], true),
                         'processing_dependencies' => $dependencies->get($line->id)?->map(fn ($dependency) => ['association_id' => $dependency->association_id, 'decision' => $dependency->decision])->all() ?? [],
-                        'blocking_requirement_ids' => $blockers, 'blocking_reasons' => $published ? (! $complete ? ['materialized_requirements_incomplete'] : ($blockers === [] ? [] : ['no_adequate_accepted_sample'])) : ['published_clinical_version_required'],
+                        'blocking_requirement_ids' => [], 'blocking_reasons' => $published ? [] : ['published_clinical_version_required'],
                         'processing_started_at' => $line->processing_started_at?->toISOString(), 'processing_started_by' => $line->processing_started_by,
+                        'processing_started_by_user' => $line->processingStartedBy === null ? null : ['id' => $line->processingStartedBy->id, 'name' => $line->processingStartedBy->name],
                         'result_capture' => LaboratoryResultService::progress($line),
                         'sample_requirements' => $requirements];
                 })->all()];

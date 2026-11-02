@@ -114,7 +114,7 @@ class ClinicalExceptionEligibilityTest extends TestCase
         $this->approve($s, $id)->assertOk();
     }
 
-    public function test_received_replacement_without_acceptance_cannot_allow_terminal_approval(): void
+    public function test_received_replacement_without_fulfillment_cannot_allow_terminal_approval(): void
     {
         $s = $this->prepared();
         $this->evidence($s, 'patient_refusal');

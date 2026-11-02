@@ -28,10 +28,10 @@ final class SampleCompatibility
             ]);
     }
 
-    /** One individually adequate accepted sample per requirement; no pooling or summing. */
+    /** One individually adequate received or historically accepted sample per requirement; no pooling or summing. */
     public function qualifyingAssociations(Laboratory $laboratory, int $orderId): Collection
     {
-        return $this->assessments($laboratory, $orderId)->filter(fn ($row) => $row->released_at === null && $row->sample_status === 'accepted' && $row->errors === '[]')->values();
+        return $this->assessments($laboratory, $orderId)->filter(fn ($row) => $row->released_at === null && in_array($row->sample_status, ['received', 'accepted'], true) && $row->errors === '[]')->values();
     }
 
     public function assessments(Laboratory $laboratory, int $orderId): Collection

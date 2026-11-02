@@ -19,11 +19,12 @@ use OpenApi\Attributes as OA;
 )]
 #[OA\Schema(
     schema: 'LaboratoryOrderExamSnapshot',
-    required: ['id', 'code', 'name'],
+    required: ['id', 'code', 'name', 'area'],
     properties: [
         new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 15),
         new OA\Property(property: 'code', description: 'Código capturado al agregar la línea.', type: 'string', example: 'GLU'),
         new OA\Property(property: 'name', description: 'Nombre capturado al agregar la línea.', type: 'string', example: 'Glucosa'),
+        new OA\Property(property: 'area', description: 'Área histórica fijada al crear la línea; null si no se registró. No se infiere del catálogo actual.', type: ['object', 'null'], properties: [new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'name', type: 'string')]),
     ],
     type: 'object',
     additionalProperties: false,
