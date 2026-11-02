@@ -17,7 +17,7 @@ use OpenApi\Attributes as OA;
     new OA\Property(property: 'collector_description', type: 'string', maxLength: 200),
     new OA\Property(property: 'notes', type: 'string', maxLength: 1000),
 ])]
-#[OA\Schema(schema: 'SampleCollectionInput', type: 'object', additionalProperties: false,
+#[OA\Schema(schema: 'SampleCollectionInput', description: 'Register a sample for the order with type, collection time, branch and optional context.notes. Facts and manual exam associations are not required for processing.', type: 'object', additionalProperties: false,
     required: ['idempotency_key', 'sample_type_id', 'collected_at', 'collection_branch_id'], properties: [
         new OA\Property(property: 'idempotency_key', type: 'string', maxLength: 100, description: 'Persistent tenant-wide key; changed order/operation/input conflicts.'),
         new OA\Property(property: 'sample_type_id', type: 'integer', minimum: 1),
@@ -27,7 +27,7 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'facts', ref: '#/components/schemas/SampleFacts'),
         new OA\Property(property: 'context', ref: '#/components/schemas/SampleContext'),
     ])]
-#[OA\Schema(schema: 'SampleExternalReceptionInput', type: 'object', additionalProperties: false,
+#[OA\Schema(schema: 'SampleExternalReceptionInput', description: 'New received material: sample type, provenance, reception time, branch and optional context.notes. Collection metadata and collector descriptions are legacy optional fields.', type: 'object', additionalProperties: false,
     required: ['idempotency_key', 'sample_type_id', 'provenance', 'received_at', 'receiving_branch_id'], properties: [
         new OA\Property(property: 'idempotency_key', type: 'string', maxLength: 100),
         new OA\Property(property: 'sample_type_id', type: 'integer', minimum: 1),
@@ -40,8 +40,8 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'facts', ref: '#/components/schemas/SampleFacts'),
         new OA\Property(property: 'context', ref: '#/components/schemas/SampleContext'),
     ])]
-#[OA\Schema(schema: 'SampleReceptionInput', type: 'object', additionalProperties: false, required: ['received_at', 'receiving_branch_id'], properties: [
-    new OA\Property(property: 'facts', ref: '#/components/schemas/SampleFacts', description: 'May complete unknown collection observations; previously recorded values cannot change.'),
+#[OA\Schema(schema: 'SampleReceptionInput', description: 'Legacy replay of an existing reception only. A collected sample cannot be converted to received.', type: 'object', additionalProperties: false, required: ['received_at', 'receiving_branch_id'], properties: [
+    new OA\Property(property: 'facts', ref: '#/components/schemas/SampleFacts', description: 'Legacy replay must match previously recorded observations; no new observations are added.'),
     new OA\Property(property: 'received_at', type: 'string', format: 'date-time'),
     new OA\Property(property: 'receiving_branch_id', type: 'integer', minimum: 1),
 ])]
@@ -50,11 +50,12 @@ use OpenApi\Attributes as OA;
 ])]
 #[OA\Schema(schema: 'SampleReasonInput', type: 'object', additionalProperties: false, required: ['reason'], properties: [new OA\Property(property: 'reason', type: 'string', minLength: 1, maxLength: 1000)])]
 #[OA\Schema(schema: 'SampleEmptyInput', type: 'object', additionalProperties: false)]
-#[OA\Schema(schema: 'PhysicalSample', type: 'object', required: ['id', 'identifier', 'laboratory_order_id', 'sample_type_id', 'status', 'provenance', 'facts', 'collection', 'reception', 'events', 'associations'], properties: [
+#[OA\Schema(schema: 'PhysicalSample', description: 'Receipt already records acceptance. New samples stay received or collected; accepted is retained only for historical records.', type: 'object', required: ['id', 'identifier', 'laboratory_order_id', 'sample_type_id', 'status', 'provenance', 'facts', 'collection', 'reception', 'events', 'associations'], properties: [
     new OA\Property(property: 'id', type: 'integer'),
     new OA\Property(property: 'identifier', type: 'string', minLength: 26, maxLength: 26, description: 'Immutable backend ULID, globally unique and barcode-compatible.'),
     new OA\Property(property: 'laboratory_order_id', type: 'integer'),
     new OA\Property(property: 'sample_type_id', type: 'integer'),
+    new OA\Property(property: 'sample_type', type: 'object', properties: [new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'name', type: 'string')]),
     new OA\Property(property: 'status', type: 'string', enum: ['collected', 'received', 'accepted', 'rejected']),
     new OA\Property(property: 'provenance', type: 'string', enum: ['internal', 'patient_provided', 'external_center']),
     new OA\Property(property: 'facts', ref: '#/components/schemas/SampleFacts'),
@@ -63,17 +64,25 @@ use OpenApi\Attributes as OA;
     new OA\Property(property: 'events', type: 'array', items: new OA\Items(ref: '#/components/schemas/SampleHistoryEvent')),
     new OA\Property(property: 'associations', type: 'array', items: new OA\Items(ref: '#/components/schemas/SampleAssociation')),
 ])]
+#[OA\Schema(schema: 'SampleActor', type: ['object', 'null'], properties: [
+    new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'name', type: 'string'),
+])]
 #[OA\Schema(schema: 'SampleEventContext', type: 'object', properties: [
     new OA\Property(property: 'occurred_at', type: ['string', 'null'], format: 'date-time'),
     new OA\Property(property: 'branch_id', type: ['integer', 'null']),
+    new OA\Property(property: 'branch_name', type: ['string', 'null']),
     new OA\Property(property: 'actor_id', type: ['integer', 'null'], description: 'Actual internal collector or receiver; external collector remains null.'),
+    new OA\Property(property: 'actor', ref: '#/components/schemas/SampleActor'),
 ])]
 #[OA\Schema(schema: 'SampleHistoryEvent', type: 'object', properties: [
     new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'event', type: 'string', enum: ['collected', 'received', 'accepted', 'rejected', 'associated', 'released']),
     new OA\Property(property: 'actor_id', type: 'integer', description: 'User who recorded the event; not an inferred external collector.'),
+    new OA\Property(property: 'actor', ref: '#/components/schemas/SampleActor'),
     new OA\Property(property: 'occurred_at', type: 'string', format: 'date-time'), new OA\Property(property: 'recorded_at', type: 'string', format: 'date-time'), new OA\Property(property: 'context', type: 'object'),
 ])]
 #[OA\Schema(schema: 'SampleAssociation', type: 'object', properties: [
+    new OA\Property(property: 'associated_by_user', ref: '#/components/schemas/SampleActor'),
+    new OA\Property(property: 'released_by_user', ref: '#/components/schemas/SampleActor'),
     new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'sample_requirement_id', type: 'integer'),
     new OA\Property(property: 'associated_by', type: 'integer'), new OA\Property(property: 'associated_at', type: 'string', format: 'date-time'),
     new OA\Property(property: 'released_by', type: ['integer', 'null']), new OA\Property(property: 'released_at', type: ['string', 'null'], format: 'date-time'), new OA\Property(property: 'release_reason', type: ['string', 'null']),
@@ -98,7 +107,8 @@ use OpenApi\Attributes as OA;
     new OA\Property(property: 'result_capture', ref: '#/components/schemas/ClinicalResultProgress'),
     new OA\Property(property: 'processing_dependencies', type: 'array', items: new OA\Items(type: 'object', properties: [new OA\Property(property: 'association_id', type: 'integer'), new OA\Property(property: 'decision', type: 'object', description: 'Immutable historical configuration, observed facts and evaluation timestamp used at start.')])),
     new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'clinical_version_id', type: ['integer', 'null']), new OA\Property(property: 'clinical_configuration_source', type: 'string'),
-    new OA\Property(property: 'operational_status', type: 'string', enum: ['pending_samples', 'ready', 'started']), new OA\Property(property: 'blocking_requirement_ids', type: 'array', items: new OA\Items(type: 'integer')),
+    new OA\Property(property: 'operational_status', type: 'string', enum: ['unavailable', 'ready', 'started']), new OA\Property(property: 'blocking_requirement_ids', type: 'array', items: new OA\Items(type: 'integer')),
+    new OA\Property(property: 'processing_started_by_user', ref: '#/components/schemas/SampleActor'),
     new OA\Property(property: 'blocking_reasons', type: 'array', items: new OA\Items(type: 'string')), new OA\Property(property: 'processing_started_at', type: ['string', 'null'], format: 'date-time'), new OA\Property(property: 'processing_started_by', type: ['integer', 'null']),
     new OA\Property(property: 'sample_requirements', type: 'array', items: new OA\Items(type: 'object', properties: [new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'requirement_key', type: 'string'), new OA\Property(property: 'mandatory', type: 'boolean'), new OA\Property(property: 'status', type: 'string', enum: ['pending', 'satisfied']), new OA\Property(property: 'configuration', ref: '#/components/schemas/ClinicalExamSampleRequirement'), new OA\Property(property: 'qualifying_association_ids', type: 'array', items: new OA\Items(type: 'integer')), new OA\Property(property: 'association_evaluations', type: 'array', items: new OA\Items(type: 'object', properties: [new OA\Property(property: 'association_id', type: 'integer'), new OA\Property(property: 'sample_id', type: 'integer'), new OA\Property(property: 'active', type: 'boolean'), new OA\Property(property: 'sample_status', type: 'string'), new OA\Property(property: 'compatibility_errors', type: 'array', items: new OA\Items(type: 'string'))]))])),
 ])]

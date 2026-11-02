@@ -18,6 +18,7 @@ final class LaboratoryOrderExamResource extends JsonResource
                 'id' => $this->laboratory_exam_id,
                 'code' => $this->exam_code,
                 'name' => $this->exam_name,
+                'area' => $this->report_area_snapshot === null ? null : array_intersect_key($this->report_area_snapshot, array_flip(['id', 'name'])),
             ],
             'price_list' => [
                 'id' => $this->price_list_id,

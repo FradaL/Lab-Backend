@@ -63,6 +63,11 @@ class LaboratoryOrderExam extends Model
         return $this->hasMany(LaboratoryOrderSampleRequirement::class)->orderBy('position')->orderBy('id');
     }
 
+    public function processingStartedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'processing_started_by');
+    }
+
     public function resultCapture(): HasOne
     {
         return $this->hasOne(LaboratoryOrderResultCapture::class);

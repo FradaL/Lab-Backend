@@ -54,12 +54,13 @@ final class LaboratoryOrderExamStoreTest extends TestCase
             ['id', 'exam', 'price_list', 'unit_price', 'clinical_version_id', 'clinical_configuration_source', 'sample_requirements', 'created_at', 'updated_at'],
             array_keys($response->json('data')),
         );
-        $this->assertSame(['id', 'code', 'name'], array_keys($response->json('data.exam')));
+        $this->assertSame(['id', 'code', 'name', 'area'], array_keys($response->json('data.exam')));
         $this->assertSame(['id', 'name'], array_keys($response->json('data.price_list')));
         $response
             ->assertJsonPath('data.exam.id', $exam->id)
             ->assertJsonPath('data.exam.code', 'GLU')
             ->assertJsonPath('data.exam.name', 'Glucosa')
+            ->assertJsonPath('data.exam.area', ['id' => $exam->laboratory_area_id, 'name' => $exam->laboratoryArea->name])
             ->assertJsonPath('data.price_list.id', $priceList->id)
             ->assertJsonPath('data.price_list.name', 'Precio particular')
             ->assertJsonPath('data.unit_price', '35.00')
