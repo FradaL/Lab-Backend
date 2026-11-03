@@ -21,6 +21,16 @@ class LaboratorySampleAssociation extends Model
         return ['associated_at' => 'immutable_datetime', 'released_at' => 'immutable_datetime'];
     }
 
+    public function associatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'associated_by');
+    }
+
+    public function releasedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'released_by');
+    }
+
     public function sample(): BelongsTo
     {
         return $this->belongsTo(LaboratorySample::class, 'laboratory_sample_id');

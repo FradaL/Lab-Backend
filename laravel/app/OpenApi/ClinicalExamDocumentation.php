@@ -42,6 +42,8 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'conditions', description: 'Named conditions matched by exact strings using AND.', type: 'object', additionalProperties: new OA\AdditionalProperties(type: 'string')),
         new OA\Property(property: 'min', type: ['number', 'null']),
         new OA\Property(property: 'max', type: ['number', 'null']),
+        new OA\Property(property: 'critical_min', description: 'Inclusive critical low threshold. Exact decimal string; never inferred from presentation.', type: ['string', 'null'], pattern: '^-?[0-9]+(?:\.[0-9]+)?$'),
+        new OA\Property(property: 'critical_max', description: 'Inclusive critical high threshold. Exact decimal string.', type: ['string', 'null'], pattern: '^-?[0-9]+(?:\.[0-9]+)?$'),
         new OA\Property(property: 'text', type: 'string', maxLength: 2000),
         new OA\Property(property: 'allowed_options', type: 'array', items: new OA\Items(type: 'string')),
     ],

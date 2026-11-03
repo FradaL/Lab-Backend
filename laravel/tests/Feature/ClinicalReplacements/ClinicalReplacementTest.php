@@ -39,7 +39,7 @@ class ClinicalReplacementTest extends TestCase
         $this->getJson($url.'?page=0')->assertUnprocessable();
     }
 
-    public function test_rejected_sample_and_later_replacement_reuse_be05_without_automatic_acceptance(): void
+    public function test_received_replacement_is_usable_without_a_separate_acceptance_step(): void
     {
         [$lab, $actor, $order, $line, $requirement, $branch, $type, $url] = $this->replacementScenario();
         $samples = app(LaboratorySampleService::class);
@@ -59,9 +59,6 @@ class ClinicalReplacementTest extends TestCase
         $this->assertDatabaseHas('laboratory_sample_events', ['laboratory_sample_id' => $new, 'event' => 'associated']);
         $this->getJson($url)->assertOk()->assertJsonPath('data.latest_assessments.0.requires_review', true)->assertJsonPath('data.intention_states.0.current_outcome', null);
         $body = ['expected_revision' => 6, 'occurred_at' => now()->toISOString(), 'link_id' => $link, 'justification' => 'FICTICIO: material disponible'];
-        $this->postJson($url.'/intentions/'.$intention.'/fulfill', $body)->assertConflict()->assertJsonPath('code', 'replacement_material_not_adequate');
-        setPermissionsTeamId($lab->id);
-        $samples->evaluate($lab, $actor, $order->id, $new, 'accepted');
         $this->postJson($url.'/intentions/'.$intention.'/fulfill', $body)->assertCreated();
         $this->getJson($url)->assertOk()->assertJsonPath('data.intention_states.0.status', 'fulfilled');
         setPermissionsTeamId($lab->id);

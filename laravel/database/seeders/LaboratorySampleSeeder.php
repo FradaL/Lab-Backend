@@ -74,12 +74,10 @@ final class LaboratorySampleSeeder extends Seeder
                     $base = ['sample_type_id' => $blood->id, 'collected_at' => now()->subMinutes(5)->toISOString(),
                         'facts' => ['container' => 'DEMO-A', 'additives' => ['DEMO-ADDITIVE'], 'volume' => 2, 'volume_unit' => 'DEMO-U', 'storage_conditions' => ['demo_handling' => 'demo-only']],
                         'context' => ['notes' => DemoDataset::DISCLAIMER]];
-                    $accepted = $this->registeredSample($lab, 'accepted-shared', fn () => $service->register($lab, $actor, $order->id, 'collect',
-                        $base + ['idempotency_key' => 'demo05-accepted', 'collection_branch_id' => $branch->id]));
-                    $service->receive($lab, $actor, $order->id, $accepted->id, ['received_at' => now()->subMinute()->toISOString(), 'receiving_branch_id' => $branch->id]);
+                    $receivedShared = $this->registeredSample($lab, 'accepted-shared', fn () => $service->register($lab, $actor, $order->id, 'receiveNew',
+                        $base + ['idempotency_key' => 'demo05-accepted', 'provenance' => 'internal', 'collection_branch_id' => $branch->id, 'received_at' => now()->subMinute()->toISOString(), 'receiving_branch_id' => $branch->id]));
                     $requirements = $order->orderExams()->with('sampleRequirements')->orderBy('id')->get()->flatMap->sampleRequirements->where('requirement_key', 'main')->pluck('id')->all();
-                    $service->associate($lab, $actor, $order->id, $accepted->id, ['sample_requirement_ids' => $requirements]);
-                    $service->evaluate($lab, $actor, $order->id, $accepted->id, 'accepted');
+                    $service->associate($lab, $actor, $order->id, $receivedShared->id, ['sample_requirement_ids' => $requirements]);
                     $this->registeredSample($lab, 'collected', fn () => $service->register($lab, $actor, $order->id, 'collect',
                         $base + ['idempotency_key' => 'demo05-collected', 'collection_branch_id' => $branch->id]));
                     $this->registeredSample($lab, 'received-external', fn () => $service->register($lab, $actor, $order->id, 'receiveNew', [

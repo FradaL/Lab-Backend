@@ -88,7 +88,7 @@ class ClinicalReportTest extends TestCase
         $this->assertStringNotContainsString($secret, DB::table('laboratory_report_issuances')->get()->toJson());
         $this->assertStringNotContainsString($secret, DB::table('audit_logs')->get()->toJson());
         $this->app['auth']->forgetGuards();
-        $this->getJson('/api/v1/report-verifications/'.$secret)->assertOk()->assertExactJson(['data' => ['authentic' => true, 'number' => $report->number, 'issued_at' => $report->issued_at->toISOString(), 'laboratory' => $report->presentation_snapshot['trade_name']]]);
+        $this->getJson('/api/v1/report-verifications/'.$secret)->assertOk()->assertExactJson(['data' => ['authentic' => true, 'validity' => 'confirm_with_issuing_laboratory', 'number' => $report->number, 'issued_at' => $report->issued_at->toISOString(), 'laboratory' => $report->presentation_snapshot['trade_name']]]);
         for ($i = 0; $i < 29; $i++) {
             $this->getJson('/api/v1/report-verifications/invalid')->assertNotFound();
         }
@@ -249,7 +249,9 @@ class ClinicalReportTest extends TestCase
         $this->post('/api/v1/laboratory/report-settings/logo', ['revision' => '0', 'logo' => $file])->assertUnprocessable();
         $image = UploadedFile::fake()->image('safe.png', 30, 20);
         $this->post('/api/v1/laboratory/report-settings/logo', ['revision' => '0', 'logo' => $image])->assertOk()->assertJsonPath('data.revision', 1)->assertJsonMissingPath('data.presentation.logo');
-        [$rev,$config] = app(ReportSettingsService::class)->snapshot($lab);
+        [$rev,$config] = app(ReportSettingsService::class)->snapshot($lab, true);
+        $this->assertNull(app(ReportSettingsService::class)->snapshot($lab)[1]['logo']);
+        $this->postJson('/api/v1/laboratory/report-settings/publish', ['revision' => $rev])->assertOk();
         $this->assertSame(hash('sha256', base64_decode($config['logo'], true)), $config['logo_hash']);
         setPermissionsTeamId($lab->id);
         $report = app(ClinicalReportService::class)->issue($lab, $actor, $order->id, $this->body($order, $line), 'report-logo-render-key-1');
@@ -423,7 +425,12 @@ class ClinicalReportTest extends TestCase
     public function test_unsupported_glyph_blocks_instead_of_misrepresenting_report_text(): void
     {
         [$lab,$actor,$order,$line] = $this->resolved();
-        app(ReportSettingsService::class)->update($lab, $actor, ['revision' => 0, 'header' => '🧪']);
+        $this->putJson('/api/v1/laboratory/report-settings', ['revision' => 0, 'header' => '🧪'])->assertConflict()->assertJsonPath('code', 'report_unsupported_character');
+        $this->assertDatabaseCount('laboratory_report_settings', 0);
+        // A legacy invalid row must still be rejected at issuance.
+        [, $presentation] = app(ReportSettingsService::class)->snapshot($lab);
+        $presentation['header'] = '🧪';
+        DB::table('laboratory_report_settings')->insert(['laboratory_id' => $lab->id, 'revision' => 1, 'presentation' => json_encode($presentation)]);
         $this->withHeader('Idempotency-Key', 'unsupported-glyph-report-key')->postJson("/api/v1/laboratory-orders/$order->id/reports", $this->body($order, $line))->assertConflict()->assertJsonPath('code', 'report_unsupported_character');
         $this->assertDatabaseCount('laboratory_report_issuances', 0);
         $this->assertCount(0, Storage::disk('clinical_reports')->allFiles());

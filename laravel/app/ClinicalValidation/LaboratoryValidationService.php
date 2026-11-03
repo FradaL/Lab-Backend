@@ -30,6 +30,7 @@ final class LaboratoryValidationService
         return DB::transaction(function () use ($lab, $actor, $orderId, $lineId, $input) {
             [$order,$line] = $this->locked($lab, $orderId, $lineId);
             $identity = $this->authority->clinical($lab, $actor, 'results.validate');
+            $actorName = User::whereKey($actor->id)->value('name');
             $this->available($order, $line, $input['revision']);
             ClinicalFinalizationGuard::line($order, $line, true);
             if ($line->resultCapture->status !== 'preliminary') {
@@ -59,6 +60,29 @@ final class LaboratoryValidationService
                     },
                     'unit' => $r->unit, 'option_label' => $r->option_label, 'captured_by' => $r->captured_by, 'captured_at' => $r->captured_at->utc()->format('Y-m-d\TH:i:s.u\Z')];
             }, $line->clinicalVersion->configuration['parameters']);
+            $classifications = app(ResultClassification::class)->classify($snapshot, $resolution['references']);
+            $critical = array_values(array_column(array_filter($classifications, fn ($item) => $item['status'] === 'critical'), 'parameter_code'));
+            if ($critical !== [] && ($input['critical_confirmation'] ?? false) !== true) {
+                throw new ClinicalConflict('result_critical_confirmation_required', 'Critical values require explicit confirmation by the authorized validator.', ['critical_parameters' => $critical]);
+            }
+            $observations = array_map(function ($observation) use ($snapshot, $line, $actor, $actorName): array {
+                if ($observation['scope'] === 'parameter' && ! in_array($observation['parameter_code'] ?? null, array_column($snapshot, 'parameter_code'), true)) {
+                    throw ValidationException::withMessages(['observations' => ['The observation parameter must belong to this exam.']]);
+                }
+                if ($observation['scope'] === 'area' && $line->report_area_snapshot === null) {
+                    throw ValidationException::withMessages(['observations' => ['An area observation requires a historical area.']]);
+                }
+
+                return ['scope' => $observation['scope'], 'parameter_code' => $observation['scope'] === 'parameter' ? $observation['parameter_code'] : null,
+                    'text' => trim($observation['text']), 'author_id' => $actor->id, 'author_name' => $actorName, 'authorized_at' => now()->toISOString(),
+                    'line_id' => $line->id, 'area' => $observation['scope'] === 'area' ? $line->report_area_snapshot : null];
+            }, $input['observations'] ?? []);
+            $resolution['context']['report_evidence_version'] = 1;
+            $resolution['context']['classifications'] = $classifications;
+            $resolution['context']['validator_identity'] = ['id' => $actor->id, 'name' => $actorName];
+            $resolution['context']['critical_confirmation'] = $critical === [] ? null : ['confirmed_by' => $actor->id, 'confirmed_at' => now()->toISOString(), 'parameter_codes' => $critical];
+            $resolution['context']['observations'] = $observations;
+            $resolution['context']['signature_snapshot'] = ($input['signature_confirmation'] ?? false) === true ? app(ValidationSignatureService::class)->snapshot($lab, $actor) : null;
             $evidence = LaboratoryResultValidation::create($identity + [
                 'laboratory_id' => $lab->id, 'laboratory_order_id' => $orderId, 'laboratory_order_exam_id' => $lineId, 'laboratory_exam_id' => $line->laboratory_exam_id, 'clinical_version_id' => $line->clinical_version_id,
                 'approved_revision' => $input['revision'], 'transition_revision' => $input['revision'] + 1, 'results_snapshot' => $snapshot,
@@ -105,7 +129,12 @@ final class LaboratoryValidationService
         $page = LaboratoryResultValidation::forLaboratory($lab)->where('laboratory_order_exam_id', $lineId)->orderByDesc('id')->paginate(50);
         $rectifications = LaboratoryResultRectification::forLaboratory($lab)->whereIn('validation_id', $page->pluck('id'))->get()->groupBy('validation_id');
 
-        return ['data' => $page->map(fn ($v) => $v->toArray() + ['rectifications' => ($rectifications->get($v->id) ?? collect())->toArray()])->all(),
+        return ['data' => $page->map(function ($v) use ($rectifications) {
+            $data = $v->toArray();
+            unset($data['context_snapshot']['signature_snapshot']['image']);
+
+            return $data + ['rectifications' => ($rectifications->get($v->id) ?? collect())->toArray()];
+        })->all(),
             'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'per_page' => 50, 'total' => $page->total()]];
     }
 
@@ -135,6 +164,13 @@ final class LaboratoryValidationService
             $rules['reason'] = ['required', 'string', 'max:2000'];
         } else {
             $rules += ['comment' => ['sometimes', 'nullable', 'string', 'max:1000'],
+                'critical_confirmation' => ['sometimes', 'boolean'],
+                'signature_confirmation' => ['sometimes', 'boolean'],
+                'observations' => ['sometimes', 'array', 'list', 'max:30'],
+                'observations.*' => ['array:scope,parameter_code,text'],
+                'observations.*.scope' => ['required', 'in:parameter,exam,area,report'],
+                'observations.*.parameter_code' => ['sometimes', 'nullable', 'string', 'max:60'],
+                'observations.*.text' => ['required', 'string', 'max:2000', 'regex:/\S/u'],
                 'reference_context' => ['required', 'array:reference_date,sex,conditions,confirm_birth_date'],
                 'reference_context.reference_date' => ['required', 'date_format:Y-m-d'],
                 'reference_context.sex' => ['sometimes', 'nullable', 'string', 'max:60'],
@@ -143,6 +179,11 @@ final class LaboratoryValidationService
                 'reference_context.conditions.*' => ['nullable', 'string', 'max:150']];
         }
         Validator::make($input, $rules)->validate();
+        foreach (['critical_confirmation', 'signature_confirmation'] as $confirmation) {
+            if (array_key_exists($confirmation, $input) && ! is_bool($input[$confirmation])) {
+                throw ValidationException::withMessages([$confirmation => ['Send an explicit JSON boolean.']]);
+            }
+        }
         if (! is_int($input['revision']) || array_diff(array_keys($input), array_keys($rules)) !== [] || ($rectify && trim($input['reason']) === '')) {
             throw ValidationException::withMessages(['revision' => 'Use an integer revision and only documented fields, with a nonblank reason for rectification.']);
         }
