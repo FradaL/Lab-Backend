@@ -4,6 +4,7 @@ namespace App\ClinicalExams;
 
 use App\Models\Laboratory;
 use App\Models\SampleType;
+use Brick\Math\BigDecimal;
 use Illuminate\Support\Facades\Validator;
 
 /** Validates configuration, never interprets patient results. Ages are inclusive completed days. */
@@ -41,7 +42,9 @@ final class ClinicalConfigurationValidator
             'parameters.*.options.*.code' => ['required', 'string', 'max:60'],
             'parameters.*.options.*.label' => ['required', 'string', 'max:150'],
             'parameters.*.references' => ['sometimes', 'array', 'list', 'max:100'],
-            'parameters.*.references.*' => ['array:key,priority,age_min_days,age_max_days,sex,conditions,min,max,text,allowed_options'],
+            'parameters.*.references.*' => ['array:key,priority,age_min_days,age_max_days,sex,conditions,min,max,text,allowed_options,critical_min,critical_max'],
+            'parameters.*.references.*.critical_min' => ['sometimes', 'nullable', 'string', 'max:100', 'regex:/\A-?\d+(?:\.\d+)?\z/'],
+            'parameters.*.references.*.critical_max' => ['sometimes', 'nullable', 'string', 'max:100', 'regex:/\A-?\d+(?:\.\d+)?\z/'],
             'parameters.*.references.*.key' => ['required', 'string', 'max:60'],
             'parameters.*.references.*.priority' => ['required', 'integer', 'min:0', 'max:1000000'],
             'parameters.*.references.*.age_min_days' => ['sometimes', 'nullable', 'integer', 'min:0'],
@@ -144,6 +147,20 @@ final class ClinicalConfigurationValidator
             }
             foreach ($references as $j => $reference) {
                 $refPath = "$path.references.$j";
+                if (isset($reference['critical_min']) || isset($reference['critical_max'])) {
+                    if ($type !== 'numeric') {
+                        $add($refPath, 'Critical numeric limits apply only to numeric parameters.');
+                    }
+                    if (isset($reference['critical_min'], $reference['min']) && BigDecimal::of($reference['critical_min'])->isGreaterThan(BigDecimal::of((string) $reference['min']))) {
+                        $add($refPath, 'The critical low threshold must not exceed the reference minimum.');
+                    }
+                    if (isset($reference['critical_max'], $reference['max']) && BigDecimal::of($reference['critical_max'])->isLessThan(BigDecimal::of((string) $reference['max']))) {
+                        $add($refPath, 'The critical high threshold must not precede the reference maximum.');
+                    }
+                    if (isset($reference['critical_min'], $reference['critical_max']) && BigDecimal::of($reference['critical_min'])->isGreaterThanOrEqualTo(BigDecimal::of($reference['critical_max']))) {
+                        $add($refPath, 'Critical thresholds must be strictly ordered.');
+                    }
+                }
                 if (($reference['age_min_days'] ?? 0) > ($reference['age_max_days'] ?? PHP_INT_MAX)) {
                     $add($refPath, 'Age bounds are inverted.');
                 }

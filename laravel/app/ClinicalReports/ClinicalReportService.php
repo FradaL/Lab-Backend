@@ -37,6 +37,11 @@ final class ClinicalReportService
 
     public function issue(Laboratory $lab, User $actor, int $orderId, array $input, string $key): LaboratoryReportIssuance
     {
+        return $this->issueAttempt($lab, $actor, $orderId, $input, $key, 0);
+    }
+
+    private function issueAttempt(Laboratory $lab, User $actor, int $orderId, array $input, string $key, int $sequenceRetries): LaboratoryReportIssuance
+    {
         $this->input($input, $key);
         if (DB::transactionLevel() !== 0 || DB::getDriverName() !== 'pgsql') {
             throw new LogicException('Report issuance requires PostgreSQL and owns its transaction boundary.');
@@ -80,10 +85,11 @@ final class ClinicalReportService
                     throw new ClinicalConflict('report_content_limit', 'The report exceeds the technical snapshot size limit.');
                 }
 
-                return ['number' => 'REP-'.Str::ulid(), 'type' => $input['type'], 'issued_at' => now()->toISOString(),
+                return ['number' => 'REP-'.Str::ulid(), 'sequence' => LaboratoryReportIssuance::forLaboratory($lab)->where('laboratory_order_id', $orderId)->count() + 1, 'type' => $input['type'], 'issued_at' => now()->toISOString(),
                     'order_code' => $order->code, 'ordered_at' => $order->ordered_at->toISOString(), 'identity' => $identity,
                     'format_version' => ($lines[0]['snapshot_version'] ?? 1) === 2 ? 'donqer-clinical-2' : 'donqer-clinical-1',
                     'pending_lines' => $pendingLines,
+                    'exam_id_by_line' => LaboratoryOrderExam::forLaboratory($lab)->where('laboratory_order_id', $orderId)->pluck('laboratory_exam_id', 'id')->all(),
                     'presentation' => $presentation, 'settings_revision' => $settingsRevision, 'lines' => $lines,
                     'finalization_id' => $order->clinicalFinalization?->id, 'clinical_revision' => $order->clinical_revision];
             });
@@ -121,6 +127,9 @@ final class ClinicalReportService
                     throw new ClinicalConflict('report_evidence_conflict', 'Historical evidence changed during rendering.');
                 }
                 $sequence = LaboratoryReportIssuance::forLaboratory($lab)->where('laboratory_order_id', $orderId)->count() + 1;
+                if ($sequence !== $prepared['sequence']) {
+                    throw new ClinicalConflict('report_sequence_conflict', 'Another emission advanced the sequence during rendering.');
+                }
                 $report = LaboratoryReportIssuance::create(['laboratory_id' => $lab->id, 'laboratory_order_id' => $orderId,
                     'number' => $prepared['number'], 'sequence' => $sequence, 'type' => $prepared['type'],
                     'clinical_revision' => $order->clinical_revision, 'finalization_id' => $prepared['finalization_id'],
@@ -147,6 +156,11 @@ final class ClinicalReportService
                 } catch (\Throwable) {
                     Log::error('Private report cleanup requires operational reconciliation.');
                 }
+            }
+            if ($e instanceof ClinicalConflict && $e->errorCode === 'report_sequence_conflict' && $sequenceRetries < 3) {
+                // Regenerate outside row transactions so the printed version and
+                // archived sequence agree, without serializing unrelated keys.
+                return $this->issueAttempt($lab, $actor, $orderId, $input, $key, $sequenceRetries + 1);
             }
             if ($e instanceof ClinicalConflict || $e instanceof ValidationException || $e instanceof AuthorizationException || $e instanceof HttpExceptionInterface || $e instanceof ModelNotFoundException) {
                 throw $e;

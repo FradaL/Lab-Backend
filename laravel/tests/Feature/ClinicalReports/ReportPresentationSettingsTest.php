@@ -27,7 +27,7 @@ class ReportPresentationSettingsTest extends TestCase
         $this->get($url)->assertNotFound()->assertHeader('X-Content-Type-Options', 'nosniff');
         $this->post($url, ['revision' => '0', 'logo' => UploadedFile::fake()->image('logo.jpg', 60, 30)])
             ->assertOk()->assertJsonMissingPath('data.presentation.logo');
-        [, $presentation] = app(ReportSettingsService::class)->snapshot($lab);
+        [, $presentation] = app(ReportSettingsService::class)->snapshot($lab, true);
         $response = $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/png')
             ->assertHeader('X-Content-Type-Options', 'nosniff');
         $this->assertStringContainsString('private', $response->headers->get('Cache-Control'));
@@ -138,9 +138,12 @@ class ReportPresentationSettingsTest extends TestCase
             $settings->update($lab, $actor, ['revision' => $index, 'trade_name' => 'LAB', 'styles' => $styles, 'address' => 'Address', 'phone' => 'Contact', 'header' => 'Header', 'footer' => 'Footer'], UploadedFile::fake()->image('wide.png', 200, 100));
             [, $presentation] = $settings->snapshot($lab);
             $layout = $layoutMethod->invoke($renderer, $pdfMethod->invoke($renderer), $presentation, 'INFORME COMPLETO');
+            $this->assertSame(142.0, $layout['header_width']);
+            $this->assertLessThanOrEqual(157, $layout['logo']['x'] + $layout['logo']['width']);
+            $this->assertGreaterThanOrEqual(46, $layout['body_y']);
             $this->assertSame(35.0, $layout['logo']['width']);
             $this->assertSame(17.5, $layout['logo']['height']);
-            $this->assertEqualsWithDelta(15 + [0, 72.5, 145][$index], $layout['logo']['x'], 0.001);
+            $this->assertEqualsWithDelta(15 + [0, 53.5, 107][$index], $layout['logo']['x'], 0.001);
             foreach ($layout['header'] as $block) {
                 $this->assertSame(['align' => $align, 'font_size_pt' => 18], $block['style']);
                 $this->assertEqualsWithDelta(count($block['rows']) * 18 * 25.4 / 72 * 1.5, $block['height'], 0.001);

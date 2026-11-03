@@ -7,6 +7,8 @@ use Com\Tecnick\Pdf\Tcpdf;
 
 class ClinicalReportRenderer
 {
+    private const PAGE_HEIGHT = 279.4;
+
     /** Render only immutable server snapshots. No HTML, remote assets or signatures. */
     public function render(array $document, string $verificationUrl): string
     {
@@ -14,37 +16,84 @@ class ClinicalReportRenderer
         $pdf->setTitle($document['number']);
         $pdf->setAuthor($document['presentation']['trade_name']);
         $title = ($document['type'] === 'partial' ? 'INFORME PARCIAL' : 'INFORME COMPLETO').' | '.$document['number'];
+        if ($document['preview'] ?? false) {
+            $title = 'VISTA PREVIA — DATOS FICTICIOS';
+        }
         $layout = $this->layout($pdf, $document['presentation'], $title);
         $bodyFont = $this->font($pdf, 9);
         $wrap = fn (string $value, float $width) => $this->wrap($pdf, $value, $width);
         $bodyEnd = $layout['footer_y'] - 8;
+        $accent = match ($document['presentation']['color_theme'] ?? 'neutral') {
+            'neutral' => '#111111', 'teal' => '#006666', 'blue' => '#163A70', 'burgundy' => '#702038',
+            default => throw new ClinicalConflict('report_presentation_invalid', 'Unsupported institutional color theme.'),
+        };
         $pageNumber = 0;
         $y = 0.0;
-        $newPage = function () use ($pdf, $bodyFont, $layout, &$pageNumber, &$y): void {
-            $pdf->addPage();
+        $areaContext = null;
+        $examContext = null;
+        $parameterContext = null;
+        $tableActive = false;
+        $tableText = null;
+        $resumeTable = null;
+        $identity = $document['identity'];
+        $pageIdentity = [
+            'Paciente: '.$identity['patient']['first_names'].' '.$identity['patient']['last_names'],
+            'Orden: '.$document['order_code'].' | Emisión: '.$this->displayDate($document['issued_at']),
+        ];
+        $newPage = function () use ($pdf, $bodyFont, $layout, $wrap, $pageIdentity, $bodyEnd, $accent, $verificationUrl, &$areaContext, &$examContext, &$parameterContext, &$pageNumber, &$y, &$tableActive, &$resumeTable): void {
+            $pdf->addPage(['format' => 'LETTER']);
             $pageNumber++;
             $position = 10.0;
             if ($layout['logo'] !== null) {
                 $logo = $layout['logo'];
                 $iid = $pdf->image->add('@'.$logo['bytes']);
-                $pdf->page->addContent($pdf->image->getSetImage($iid, $logo['x'], $position, $logo['width'], $logo['height'], 297));
+                $pdf->page->addContent($pdf->image->getSetImage($iid, $logo['x'], $position, $logo['width'], $logo['height'], self::PAGE_HEIGHT));
                 $position += $logo['height'] + 3;
             }
+            $pdf->page->addContent($pdf->color->getPdfFillColor($accent));
             foreach ($layout['header'] as $block) {
-                $this->drawBlock($pdf, $block, $position);
+                $this->drawBlock($pdf, $block, $position, $layout['header_width']);
                 $position += $block['height'] + 2;
             }
+            $pdf->page->addContent("q\n".$pdf->getBarcode('QRCODE,M', $verificationUrl, 163, 10, 32, 32, [4, 4, 4, 4], ['fillColor' => 'black', 'lineWidth' => 0])."\nQ\n");
+            $pdf->page->addContent($pdf->color->getPdfFillColor('black'));
             $pdf->page->addContent($bodyFont['out']);
-            $pdf->addTextCell('Página '.$pageNumber, posx: 15, posy: $layout['footer_y'], width: 180, height: 5, drawcell: false);
             $this->drawBlock($pdf, $layout['footer'], $layout['footer_y'] + 5);
             $pdf->page->addContent($this->font($pdf, 9)['out']);
             $y = $layout['body_y'];
+            foreach (array_filter($tableActive ? $pageIdentity : [...$pageIdentity, $areaContext, $examContext, $parameterContext]) as $value) {
+                foreach ($wrap($value, 175) as $row) {
+                    if ($y + 24 > $bodyEnd) {
+                        throw new ClinicalConflict('report_presentation_invalid', 'The repeated identity and clinical context leave insufficient space for results.');
+                    }
+                    $pdf->addTextCell($row, posx: 15, posy: $y, width: 180, height: 6, drawcell: false);
+                    $y += 6;
+                }
+            }
+            $y += 3;
+            if ($tableActive) {
+                $resumeTable();
+            }
         };
-        $text = function (?string $value) use ($pdf, $newPage, $wrap, $bodyEnd, &$y): void {
+        $text = function (?string $value) use ($pdf, $newPage, $wrap, $bodyEnd, $layout, $pageIdentity, &$areaContext, &$examContext, &$parameterContext, &$y, &$tableActive, &$tableText): void {
+            if ($tableActive) {
+                $tableText((string) $value);
+
+                return;
+            }
             if (trim((string) $value) === '' && $y + 6 > $bodyEnd) {
                 return;
             }
-            foreach ($wrap((string) $value, 175) as $row) {
+            $rows = $wrap((string) $value, 175);
+            // Keep a clinical item together when it can fit on one page. Long
+            // observations still flow, with their area/exam repeated on each page.
+            $height = count($rows) * 6;
+            $contextRows = array_sum(array_map(fn ($context) => count($wrap($context, 175)), array_filter([...$pageIdentity, $areaContext, $examContext, $parameterContext])));
+            $pageCapacity = $bodyEnd - $layout['body_y'] - $contextRows * 6 - 3;
+            if ($height <= $pageCapacity && $y + $height > $bodyEnd) {
+                $newPage();
+            }
+            foreach ($rows as $row) {
                 if ($y + 6 > $bodyEnd) {
                     $newPage();
                 }
@@ -52,45 +101,205 @@ class ClinicalReportRenderer
                 $y += 6;
             }
         };
+        // A table is drawn as vector cells and measured text, never as an image.
+        // Only a row larger than a fresh page is split, at shared text baselines.
+        $tablePage = null;
+        $widths = [53.0, 49.0, 23.0, 55.0];
+        $lineHeight = 5.0;
+        $padding = 2.0;
+        $drawCells = function (array $cells, int $offset, int $count, float $height, bool $header = false) use ($pdf, $widths, $lineHeight, $padding, &$y): void {
+            $x = 15.0;
+            foreach ($cells as $index => $rows) {
+                $pdf->page->addContent("q\n".$pdf->graph->getRect($x, $y, $widths[$index], $height, $header ? 'B' : 'S', ['all' => ['lineWidth' => 0.15, 'lineColor' => '#777777', 'fillColor' => '#EEEEEE']])."\nQ\n");
+                foreach (array_slice($rows, $offset, $count) as $rowIndex => $row) {
+                    $pdf->addTextCell($row, posx: $x + $padding, posy: $y + $padding + $rowIndex * $lineHeight,
+                        width: $widths[$index] - 2 * $padding, height: $lineHeight, drawcell: false);
+                }
+                $x += $widths[$index];
+            }
+            $y += $height;
+        };
+        $cellWrap = fn (string $value, float $width) => $this->wrap($pdf, $value, $width, true);
+        $tableHeader = function () use ($cellWrap, $widths, $padding, $lineHeight, $drawCells, &$tablePage, &$pageNumber): void {
+            $cells = [];
+            foreach (['Parámetro', 'Resultado', 'Unidad', 'Valores de referencia'] as $index => $heading) {
+                $cells[] = $cellWrap($heading, $widths[$index] - 2 * $padding);
+            }
+            $count = max(array_map('count', $cells));
+            $drawCells($cells, 0, $count, $count * $lineHeight + 2 * $padding, true);
+            $tablePage = $pageNumber;
+        };
+        // Full-width rows share the same outer edges as parameter cells. This
+        // includes observations and evidence, so they never interrupt the table.
+        $drawBand = function (array $rows, string $kind = 'detail') use ($pdf, $accent, $padding, $lineHeight, &$y): void {
+            $height = count($rows) * $lineHeight + 2 * $padding;
+            $pdf->page->addContent("q\n".$pdf->graph->getRect(15, $y, 180, $height, $kind === 'area' ? 'B' : 'S',
+                ['all' => ['lineWidth' => 0.15, 'lineColor' => '#777777', 'fillColor' => '#EEEEEE']])."\nQ\n");
+            $pdf->page->addContent($pdf->color->getPdfFillColor(in_array($kind, ['area', 'exam']) ? $accent : 'black'));
+            $pdf->page->addContent($pdf->color->getPdfStrokeColor(in_array($kind, ['area', 'exam']) ? $accent : 'black'));
+            foreach ($rows as $index => $row) {
+                $pdf->addTextCell($row, posx: 17, posy: $y + $padding + $index * $lineHeight, width: 176, height: $lineHeight, strokewidth: 0.12, stroke: in_array($kind, ['area', 'exam']), drawcell: false);
+            }
+            $pdf->page->addContent($this->font($pdf, 9)['out']);
+            $pdf->page->addContent($pdf->color->getPdfFillColor('black'));
+            $y += $height;
+        };
+        $bandRows = fn (string $value) => $cellWrap($value, 176);
+        $resumeTable = function () use ($tableHeader, $drawBand, $bandRows, $bodyEnd, &$y, &$areaContext, &$examContext, &$parameterContext): void {
+            $contexts = array_filter([$areaContext, $examContext, $parameterContext]);
+            $height = 9 + array_sum(array_map(fn ($value) => count($bandRows($value)) * 5 + 4, $contexts));
+            if ($y + $height + 9 > $bodyEnd) {
+                throw new ClinicalConflict('report_presentation_invalid', 'The repeated table context leaves insufficient space for results.');
+            }
+            $tableHeader();
+            foreach (['area' => $areaContext, 'exam' => $examContext, 'detail' => $parameterContext] as $kind => $value) {
+                if ($value !== null) {
+                    $drawBand($bandRows($value), $kind);
+                }
+            }
+        };
+        $tableText = function (string $value, string $kind = 'detail') use ($bandRows, $drawBand, $newPage, $bodyEnd, $lineHeight, $padding, &$y): void {
+            if (trim($value) === '') {
+                return;
+            }
+            $rows = $bandRows($value);
+            // Keep ordinary evidence blocks together; extreme text flows by line.
+            $height = count($rows) * $lineHeight + 2 * $padding;
+            if ($y + $height > $bodyEnd && $height < 60) {
+                $newPage();
+            }
+            while ($rows !== []) {
+                $available = (int) floor(($bodyEnd - $y - 2 * $padding) / $lineHeight);
+                if ($available < 1) {
+                    $newPage();
+                    $available = (int) floor(($bodyEnd - $y - 2 * $padding) / $lineHeight);
+                }
+                if ($available < 1) {
+                    throw new ClinicalConflict('report_presentation_invalid', 'The repeated table context leaves insufficient space for evidence.');
+                }
+                $drawBand(array_splice($rows, 0, $available), $kind);
+                if ($rows !== []) {
+                    $newPage();
+                }
+            }
+        };
+        $tableRow = function (array $values) use ($wrap, $cellWrap, $widths, $padding, $lineHeight, $drawCells, $tableHeader, $newPage, $bodyEnd, $layout, $pageIdentity,
+            &$areaContext, &$examContext, &$parameterContext, &$tablePage, &$pageNumber, &$y): void {
+            $cells = [];
+            foreach ($values as $index => $value) {
+                $cells[] = $cellWrap($value, $widths[$index] - 2 * $padding);
+            }
+            $count = max(array_map('count', $cells));
+            $height = $count * $lineHeight + 2 * $padding;
+            $headerHeight = $lineHeight + 2 * $padding;
+            $contextHeight = array_sum(array_map(fn ($context) => count($cellWrap($context, 176)) * $lineHeight + 2 * $padding, array_filter([$areaContext, $examContext, $parameterContext])));
+            $identityHeight = array_sum(array_map(fn ($value) => count($wrap($value, 175)), $pageIdentity)) * 6 + 3;
+            $freshCapacity = $bodyEnd - $layout['body_y'] - $identityHeight - $contextHeight - $headerHeight;
+            $requiredHeader = $tablePage === $pageNumber ? 0 : $headerHeight;
+            if (($height <= $freshCapacity && $y + $requiredHeader + $height > $bodyEnd)
+                || $y + $requiredHeader + $lineHeight + 2 * $padding > $bodyEnd) {
+                $newPage();
+            }
+            if ($tablePage !== $pageNumber) {
+                $tableHeader();
+            }
+            $offset = 0;
+            while ($offset < $count) {
+                $available = (int) floor(($bodyEnd - $y - 2 * $padding) / $lineHeight);
+                if ($available < 1) {
+                    throw new ClinicalConflict('report_presentation_invalid', 'The repeated context and table header leave insufficient space for a result row.');
+                }
+                $take = min($available, $count - $offset);
+                $drawCells($cells, $offset, $take, $take * $lineHeight + 2 * $padding);
+                $offset += $take;
+                if ($offset < $count) {
+                    $newPage();
+                }
+            }
+        };
         $newPage();
-        $text('Emisión: '.$document['issued_at'].' | Orden: '.$document['order_code']);
-        $identity = $document['identity'];
-        $text('Paciente: '.$identity['patient']['first_names'].' '.$identity['patient']['last_names']);
-        $text('Afiliación: '.($identity['patient']['affiliation_number'] ?? 'No registrada'));
+        if (isset($document['sequence'])) {
+            $text('Versión de emisión: '.$document['sequence']);
+        }
         $text('Sucursal: '.$identity['branch']['name'].' | '.$identity['branch']['code']);
-        $text($identity['source'] === 'order_creation' ? 'Identidad conservada al crear la orden.' : 'Identidad actual confirmada en la emisión; no representa identidad histórica de la orden.');
         if ($document['type'] === 'partial') {
             $text('Informe parcial: incluye únicamente las líneas resueltas seleccionadas. La orden no está finalizada.');
         }
         $text('Verificación de autenticidad mediante QR. No equivale a firma electrónica certificada.');
-        if ($y + 38 > $bodyEnd) {
-            $newPage();
-        }
-        $pdf->page->addContent($pdf->getBarcode('QRCODE,M', $verificationUrl, 15, $y, 32, 32, [4, 4, 4, 4], ['fillColor' => 'black', 'lineWidth' => 0]));
-        $y += 38;
         $groups = [];
+        $generalObservations = [];
+        $responsibles = [];
         foreach ($document['lines'] as $line) {
             $key = json_encode($line['area'], JSON_THROW_ON_ERROR);
             $groups[$key]['name'] = $line['area']['name'] ?? 'Área histórica no disponible';
+            $groups[$key]['id'] = $line['area']['id'] ?? null;
             $groups[$key]['lines'][] = $line;
         }
+        $areaRank = array_flip($document['presentation']['area_order'] ?? []);
+        $examRank = array_flip($document['presentation']['exam_order'] ?? []);
+        uasort($groups, fn ($a, $b) => ($areaRank[$a['id']] ?? PHP_INT_MAX) <=> ($areaRank[$b['id']] ?? PHP_INT_MAX));
         foreach ($groups as $group) {
-            $text('ÁREA: '.$group['name']);
+            $areaObservations = [];
+            usort($group['lines'], function ($a, $b) use ($document, $examRank) {
+                $aId = $document['exam_id_by_line'][$a['line_id']] ?? $a['validation']['laboratory_exam_id'] ?? null;
+                $bId = $document['exam_id_by_line'][$b['line_id']] ?? $b['validation']['laboratory_exam_id'] ?? null;
+
+                return ($examRank[$aId] ?? PHP_INT_MAX) <=> ($examRank[$bId] ?? PHP_INT_MAX);
+            });
+            $newArea = 'ÁREA: '.$group['name'];
             foreach ($group['lines'] as $line) {
-                $text('Examen: '.$line['exam_code'].' — '.$line['exam_name'].' | Línea '.$line['line_id']);
+                $newExam = 'Examen: '.$line['exam_code'].' — '.$line['exam_name'].' | Línea '.$line['line_id'];
+                $parameterContext = null;
+                // Reserve headings, validation evidence and the first result.
+                // Clear previous context before starting a new group on a page.
+                $first = $line['validation']['results_snapshot'][0] ?? null;
+                $firstHeight = 9.0;
+                if ($first !== null) {
+                    $reference = collect($line['validation']['reference_snapshot'])->firstWhere('parameter_code', $first['parameter_code']);
+                    $values = $this->resultCells($first, $reference, $line['validation']);
+                    $firstHeight = max(array_map(fn ($value, $width) => count($cellWrap($value, $width - 4)), $values, $widths)) * 5 + 4;
+                }
+                $headingHeight = count($bandRows($newExam)) * 5 + 4
+                    + ($areaContext !== $newArea ? count($bandRows($newArea)) * 5 + 4 : 0)
+                    + ($line['validation'] !== null ? count($bandRows('Validación '.$line['validation']['id'].' | Revisión aprobada '.$line['validation']['approved_revision'].' | '.$this->displayDate($line['validation']['validated_at']))) * 5 + 4 : 0);
+                $firstContext = $first === null ? null : 'Parámetro: '.$first['parameter_snapshot']['name'].' ['.$first['parameter_code'].']';
+                $identityHeight = array_sum(array_map(fn ($value) => count($wrap($value, 175)), $pageIdentity)) * 6 + 3;
+                $contextHeight = array_sum(array_map(fn ($value) => count($bandRows($value)) * 5 + 4, array_filter([$newArea, $newExam, $firstContext])));
+                $freshHeight = $bodyEnd - $layout['body_y'] - $identityHeight - 9 - $contextHeight;
+                if ($y + ($tablePage === $pageNumber ? 0 : 9) + $headingHeight + ($firstHeight > $freshHeight ? 9 : $firstHeight) > $bodyEnd) {
+                    $areaContext = null;
+                    $examContext = null;
+                    $newPage();
+                }
+                if (! $tableActive) {
+                    $tableActive = true;
+                    $tableHeader();
+                }
+                if ($areaContext !== $newArea) {
+                    $tableText($newArea, 'area');
+                    $areaContext = $newArea;
+                }
+                $tableText($newExam, 'exam');
+                $examContext = $newExam;
                 if ($line['validation'] !== null) {
                     $v = $line['validation'];
-                    $text('Validación '.$v['id'].' | Revisión aprobada '.$v['approved_revision'].' | '.$v['validated_at']);
+                    $text('Validación '.$v['id'].' | Revisión aprobada '.$v['approved_revision'].' | '.$this->displayDate($v['validated_at']));
                     foreach ($v['results_snapshot'] as $result) {
-                        $text($result['parameter_snapshot']['name'].' ['.$result['parameter_code'].']: '.$result['value'].($result['option_label'] === null ? '' : ' — '.$result['option_label']).' '.($result['unit'] ?? ''));
+                        $parameterContext = 'Parámetro: '.$result['parameter_snapshot']['name'].' ['.$result['parameter_code'].']';
+                        $reference = collect($v['reference_snapshot'])->firstWhere('parameter_code', $result['parameter_code']);
+                        if ($reference === null) {
+                            throw new ClinicalConflict('report_reference_missing', 'The validated parameter has no historical reference evidence.');
+                        }
+                        $tableRow($this->resultCells($result, $reference, $v));
+                        foreach ($v['context_snapshot']['observations'] ?? [] as $observation) {
+                            if ($observation['scope'] === 'parameter' && $observation['parameter_code'] === $result['parameter_code']) {
+                                $text('Observación de '.$result['parameter_code'].': '.$this->observationText($observation));
+                            }
+                        }
                     }
-                    foreach ($v['reference_snapshot'] as $reference) {
-                        $rule = $reference['reference'];
-                        $description = $reference['status'] === 'not_configured' ? 'No configurada' : ($rule === null ? 'Sin referencia aplicable en la evidencia aprobada' : $this->referenceText($rule));
-                        $text('Referencia '.$reference['parameter_code'].': '.$description.($reference['reference_key'] === null ? '' : ' [clave '.$reference['reference_key'].']'));
-                    }
+                    $parameterContext = null;
                     $context = $v['context_snapshot'];
-                    $text('Fecha de referencia: '.$context['reference_date']);
+                    $text('Fecha de referencia: '.$this->displayDate($context['reference_date']));
                     if ($context['age_days'] !== null) {
                         $text('Edad utilizada: '.$context['age_days'].' días cumplidos');
                     }
@@ -100,12 +309,22 @@ class ClinicalReportRenderer
                     foreach ($context['conditions'] as $condition => $value) {
                         $text('Condición utilizada: '.$condition.' = '.$value);
                     }
-                    if ($v['comment'] !== null) {
-                        $text('Observación autorizada: '.$v['comment']);
+                    foreach ($context['observations'] ?? [] as $observation) {
+                        if ($observation['scope'] === 'exam') {
+                            $text('Observación del examen: '.$this->observationText($observation));
+                        } elseif ($observation['scope'] === 'area') {
+                            $areaObservations[] = $observation;
+                        } elseif ($observation['scope'] === 'report') {
+                            $generalObservations[] = $observation;
+                        }
                     }
-                    $professional = $v['professional_snapshot'];
-                    $text($professional === null ? 'Validación autorizada. Identificador del validador: '.$v['validated_by'].'. Sin identidad profesional registrada en esta evidencia.'
-                        : 'Profesional: '.$professional['professional_name'].' | '.$professional['profession'].' | Registro: '.($professional['registration_number'] ?? 'No registrado'));
+                    if (($context['critical_confirmation'] ?? null) !== null) {
+                        $text('Valores críticos verificados explícitamente por el validador responsable: '.implode(', ', $context['critical_confirmation']['parameter_codes']).'.');
+                    }
+                    $key = json_encode([$v['validated_by'], $v['professional_snapshot'] ?? null,
+                        $context['validator_identity'] ?? null, $context['signature_snapshot'] ?? null], JSON_THROW_ON_ERROR);
+                    $responsibles[$key]['validation'] = $v;
+                    $responsibles[$key]['exams'][] = $line['exam_code'].' — '.$line['exam_name'].' [Línea '.$line['line_id'].'; validación '.$v['id'].']';
                 } elseif (($document['format_version'] ?? 'donqer-clinical-1') === 'donqer-clinical-2') {
                     $text($line['clinical_display']['label'].'. No constituye un resultado clínico.');
                     $text('Motivo clínico: '.$line['clinical_display']['reason']);
@@ -113,16 +332,30 @@ class ClinicalReportRenderer
                     $text('EXCEPCIÓN CLÍNICA AUTORIZADA. No constituye un resultado clínico.');
                     $text('Motivo documentado: '.$line['exception']['request']['reason']);
                     $d = $line['exception']['decision'];
-                    $text('Decisión '.$d['id'].' | Actor '.$d['decided_by'].' | '.$d['decided_at']);
+                    $text('Decisión '.$d['id'].' | Actor '.$d['decided_by'].' | '.$this->displayDate($d['decided_at']));
                     if ($d['reason'] !== null) {
                         $text('Motivo de aprobación: '.$d['reason']);
                     }
                 }
                 $text(' ');
             }
+            $examContext = null;
+            foreach ($areaObservations as $observation) {
+                $text('Observación de área '.$group['name'].': '.$this->observationText($observation));
+            }
+        }
+
+        $areaContext = null;
+        $examContext = null;
+        foreach ($generalObservations as $observation) {
+            $heading = $observation['scope'] === 'area' ? 'Observación de área '.$observation['area']['name'] : 'Observación general del informe';
+            $areaContext = $heading;
+            $text($heading.': '.$this->observationText($observation));
         }
 
         if (($document['pending_lines'] ?? []) !== []) {
+            $areaContext = null;
+            $examContext = null;
             $text('EXÁMENES PENDIENTES — sin resultados clínicos publicados');
             foreach ($document['pending_lines'] as $pending) {
                 $text($pending['exam_code'].' — '.$pending['exam_name'].' | Línea '.$pending['line_id']);
@@ -131,7 +364,88 @@ class ClinicalReportRenderer
             }
         }
 
+        // Close the logical table before showing its responsible validators.
+        $tableActive = false;
+        $areaContext = null;
+        $examContext = null;
+        $parameterContext = null;
+        $firstResponsible = true;
+        if ($responsibles !== []) {
+            $y += 6;
+        }
+        foreach ($responsibles as $responsible) {
+            $v = $responsible['validation'];
+            $context = $v['context_snapshot'];
+            $professional = $v['professional_snapshot'] ?? $context['signature_snapshot']['professional'] ?? null;
+            $professionalText = $professional === null ? (isset($context['validator_identity']['name']) ? 'Responsable de validación: '.$context['validator_identity']['name'] : 'Validación autorizada. Identificador del validador: '.$v['validated_by'].'. Sin identidad profesional registrada en esta evidencia.')
+                : 'Profesional: '.$professional['professional_name'].' | '.$professional['profession'].' | Registro: '.($professional['registration_number'] ?? 'No registrado');
+            $heading = ($firstResponsible ? "RESPONSABLES, FIRMAS Y SELLOS\n" : '').'Exámenes validados: '.implode('; ', $responsible['exams']);
+            $signatureNotice = ($context['signature_snapshot'] ?? null) !== null
+                ? 'Firma digitalizada autorizada de '.$professional['professional_name'].'. No equivale a una firma electrónica certificada.'
+                : "Firma y sello: ______________________________\nEspacio para firma manuscrita. La generación del PDF no acredita su firma.";
+            $blockHeight = (count($wrap($heading, 175)) + count($wrap($professionalText, 175)) + count($wrap($signatureNotice, 175))) * 6
+                + (($context['signature_snapshot'] ?? null) !== null ? 20 : 0);
+            $freshCapacity = $bodyEnd - $layout['body_y'] - array_sum(array_map(fn ($value) => count($wrap($value, 175)), $pageIdentity)) * 6 - 3;
+            if ($blockHeight <= $freshCapacity && $y + $blockHeight > $bodyEnd) {
+                $newPage();
+            }
+            $text($heading);
+            $firstResponsible = false;
+            if (($context['signature_snapshot'] ?? null) !== null) {
+                $bytes = base64_decode($context['signature_snapshot']['image'], true);
+                $dimensions = $bytes === false ? false : @getimagesizefromstring($bytes);
+                if (! $dimensions || ! hash_equals($context['signature_snapshot']['image_hash'], hash('sha256', $bytes))) {
+                    throw new ClinicalConflict('report_signature_invalid', 'The authorized signature failed its integrity check.');
+                }
+                $width = 45.0;
+                $height = $width * $dimensions[1] / $dimensions[0];
+                if ($height > 18) {
+                    $width *= 18 / $height;
+                    $height = 18.0;
+                }
+                $signatureTextHeight = (count($wrap($professionalText, 175)) + count($wrap('Firma digitalizada autorizada de '.$professional['professional_name'].'. No equivale a una firma electrónica certificada.', 175))) * 6 + 2;
+                if ($y + $height + $signatureTextHeight > $bodyEnd) {
+                    $newPage();
+                }
+                if ($y + $height + $signatureTextHeight > $bodyEnd) {
+                    throw new ClinicalConflict('report_presentation_invalid', 'The reserved signature block does not fit in the configured layout.');
+                }
+                $text($professionalText);
+                $image = $pdf->image->add('@'.$bytes);
+                $pdf->page->addContent($pdf->image->getSetImage($image, 15, $y, $width, $height, self::PAGE_HEIGHT));
+                $y += $height + 2;
+                $text('Firma digitalizada autorizada de '.$professional['professional_name'].'. No equivale a una firma electrónica certificada.');
+            } else {
+                $text($professionalText."\nFirma y sello: ______________________________\nEspacio para firma manuscrita. La generación del PDF no acredita su firma.");
+            }
+            $text(' ');
+        }
+
+        foreach (array_keys($pdf->page->getPages()) as $index => $pageId) {
+            $pdf->setCurrentPage($pageId);
+            $pdf->page->addContent($bodyFont['out']);
+            $pdf->addTextCell('Página '.($index + 1).' de '.$pageNumber, posx: 15, posy: $layout['footer_y'], width: 180, height: 5, drawcell: false);
+        }
+
         return $pdf->getOutPDFString();
+    }
+
+    /** Move immutable clinical evidence into cells without reclassification. */
+    private function resultCells(array $result, ?array $reference, array $validation): array
+    {
+        if ($reference === null) {
+            throw new ClinicalConflict('report_reference_missing', 'The validated parameter has no historical reference evidence.');
+        }
+        $rule = $reference['reference'];
+        $description = $reference['status'] === 'not_configured' ? 'No configurada' : ($rule === null ? 'Sin referencia aplicable en la evidencia aprobada' : $this->referenceText($rule));
+
+        return [
+            $result['parameter_snapshot']['name'].' ['.$result['parameter_code'].']',
+            $result['value'].($result['option_label'] === null ? '' : ' — '.$result['option_label'])."\n"
+                .$this->classificationLabel(collect($validation['context_snapshot']['classifications'] ?? [])->firstWhere('parameter_code', $result['parameter_code'])['status'] ?? null),
+            $result['unit'] ?? '—',
+            $description.($reference['reference_key'] === null ? '' : ' [clave '.$reference['reference_key'].']'),
+        ];
     }
 
     public function validatePresentation(array $presentation): void
@@ -152,7 +466,7 @@ class ClinicalReportRenderer
         return $pdf->font->insert($pdf->pon, 'dejavusans', '', $size, ifile: resource_path('report-fonts/dejavusans.json'));
     }
 
-    private function wrap(Tcpdf $pdf, string $value, float $width): array
+    private function wrap(Tcpdf $pdf, string $value, float $width, bool $wordBoundaries = false): array
     {
         $rows = [];
         foreach (explode("\n", $value) as $paragraph) {
@@ -165,9 +479,11 @@ class ClinicalReportRenderer
                 }
                 $charWidth = $pdf->toUnit($pdf->font->getCharWidth($code));
                 if ($row !== '' && $used + $charWidth > $width - 2) {
-                    $rows[] = $row;
-                    $row = '';
-                    $used = 0;
+                    $space = $wordBoundaries ? mb_strrpos($row, ' ') : false;
+                    $break = $space === false ? mb_strlen($row) : $space + 1;
+                    $rows[] = mb_substr($row, 0, $break);
+                    $row = mb_substr($row, $break);
+                    $used = array_sum(array_map(fn ($letter) => $pdf->toUnit($pdf->font->getCharWidth(mb_ord($letter))), mb_str_split($row)));
                 }
                 $row .= $char;
                 $used += $charWidth;
@@ -178,10 +494,10 @@ class ClinicalReportRenderer
         return $rows;
     }
 
-    private function block(Tcpdf $pdf, string $value, array $style): array
+    private function block(Tcpdf $pdf, string $value, array $style, float $width = 180): array
     {
         $this->font($pdf, $style['font_size_pt']);
-        $rows = $value === '' ? [] : $this->wrap($pdf, $value, 180);
+        $rows = $value === '' ? [] : $this->wrap($pdf, $value, $width);
         $lineHeight = $style['font_size_pt'] * 25.4 / 72 * 1.5;
 
         return ['rows' => $rows, 'style' => $style, 'line_height' => $lineHeight, 'height' => count($rows) * $lineHeight];
@@ -193,6 +509,7 @@ class ClinicalReportRenderer
         $styles = $presentation['styles'] ?? ReportPresentationStyles::defaults();
         ReportPresentationStyles::validate($styles);
         $header = [];
+        $headerWidth = 142.0; // Reserve 32 mm for the QR and a 6 mm gap.
         $height = 10.0;
         $logo = null;
         if (($presentation['logo'] ?? null) !== null) {
@@ -209,12 +526,12 @@ class ClinicalReportRenderer
             }
             $logo = ['bytes' => $bytes, 'width' => $width, 'height' => $logoHeight,
                 'x' => 15 + match ($styles['logo']['align']) {
-                    'center' => (180 - $width) / 2, 'right' => 180 - $width, default => 0
+                    'center' => ($headerWidth - $width) / 2, 'right' => $headerWidth - $width, default => 0
                 }];
             $height += $logoHeight + 3;
         }
         foreach (['trade_name', 'address', 'phone', 'header', 'title'] as $name) {
-            $block = $this->block($pdf, $name === 'title' ? $title : ($presentation[$name] ?? ''), $styles[$name]);
+            $block = $this->block($pdf, $name === 'title' ? $title : ($presentation[$name] ?? ''), $styles[$name], $headerWidth);
             if ($name === 'trade_name' && count($block['rows']) > 8) {
                 throw new ClinicalConflict('report_presentation_invalid', 'The laboratory name exceeds the reserved area.');
             }
@@ -226,10 +543,10 @@ class ClinicalReportRenderer
             throw new ClinicalConflict('report_presentation_invalid', 'The presentation exceeds the reserved header or footer area. Shorten the text or reduce its size.');
         }
 
-        return ['header' => $header, 'logo' => $logo, 'footer' => $footer, 'body_y' => $height + 4, 'footer_y' => 287 - $footer['height'] - 5];
+        return ['header' => $header, 'logo' => $logo, 'footer' => $footer, 'header_width' => $headerWidth, 'body_y' => max($height, 42) + 4, 'footer_y' => self::PAGE_HEIGHT - 10 - $footer['height'] - 5];
     }
 
-    private function drawBlock(Tcpdf $pdf, array $block, float $y): void
+    private function drawBlock(Tcpdf $pdf, array $block, float $y, float $width = 180): void
     {
         $pdf->page->addContent($this->font($pdf, $block['style']['font_size_pt'])['out']);
         foreach ($block['rows'] as $row) {
@@ -238,7 +555,7 @@ class ClinicalReportRenderer
             };
             // Let TCPDF align inside a full-width cell. Shrinking the cell to
             // the measured glyph width would trigger a second wrap for padding.
-            $pdf->addTextCell($row, posx: 15, posy: $y, width: 180, height: $block['line_height'], halign: $align, drawcell: false);
+            $pdf->addTextCell($row, posx: 15, posy: $y, width: $width, height: $block['line_height'], halign: $align, drawcell: false);
             $y += $block['line_height'];
         }
     }
@@ -260,5 +577,24 @@ class ClinicalReportRenderer
         }
 
         return implode(' | ', $limits);
+    }
+
+    private function classificationLabel(?string $status): string
+    {
+        return match ($status) {
+            'normal' => 'DENTRO DE REFERENCIA', 'high' => 'ALTO', 'low' => 'BAJO', 'critical' => 'CRÍTICO',
+            'outside_reference' => 'FUERA DE REFERENCIA', 'not_classified' => 'SIN CLASIFICACIÓN APLICABLE',
+            default => 'SIN CLASIFICACIÓN HISTÓRICA',
+        };
+    }
+
+    private function displayDate(string $value): string
+    {
+        return (new \DateTimeImmutable($value))->format('d/m/Y');
+    }
+
+    private function observationText(array $observation): string
+    {
+        return $observation['text'].' | Autor: '.$observation['author_name'].' | Autorizada: '.$this->displayDate($observation['authorized_at']).' | Examen/línea: '.$observation['line_id'];
     }
 }
