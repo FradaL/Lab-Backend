@@ -138,12 +138,12 @@ class ReportPresentationSettingsTest extends TestCase
             $settings->update($lab, $actor, ['revision' => $index, 'trade_name' => 'LAB', 'styles' => $styles, 'address' => 'Address', 'phone' => 'Contact', 'header' => 'Header', 'footer' => 'Footer'], UploadedFile::fake()->image('wide.png', 200, 100));
             [, $presentation] = $settings->snapshot($lab);
             $layout = $layoutMethod->invoke($renderer, $pdfMethod->invoke($renderer), $presentation, 'INFORME COMPLETO');
-            $this->assertSame(142.0, $layout['header_width']);
-            $this->assertLessThanOrEqual(157, $layout['logo']['x'] + $layout['logo']['width']);
+            $this->assertSame(109.0, $layout['header_width']);
+            $this->assertLessThanOrEqual(164, $layout['logo']['x'] + $layout['logo']['width'] + 4 + $layout['header_width']);
             $this->assertGreaterThanOrEqual(46, $layout['body_y']);
             $this->assertSame(35.0, $layout['logo']['width']);
             $this->assertSame(17.5, $layout['logo']['height']);
-            $this->assertEqualsWithDelta(15 + [0, 53.5, 107][$index], $layout['logo']['x'], 0.001);
+            $this->assertSame(15.0, $layout['logo']['x']);
             foreach ($layout['header'] as $block) {
                 $this->assertSame(['align' => $align, 'font_size_pt' => 18], $block['style']);
                 $this->assertEqualsWithDelta(count($block['rows']) * 18 * 25.4 / 72 * 1.5, $block['height'], 0.001);
@@ -158,6 +158,13 @@ class ReportPresentationSettingsTest extends TestCase
                 file_put_contents('/tmp/report-style-artifacts/'.$align.'.pdf', $bytes);
             }
         }
+        $styles = ReportPresentationStyles::defaults();
+        $settings->update($lab, $actor, ['revision' => 3, 'styles' => $styles, 'remove_logo' => true]);
+        [, $presentation] = $settings->snapshot($lab);
+        $layout = $layoutMethod->invoke($renderer, $pdfMethod->invoke($renderer), $presentation, 'INFORME COMPLETO');
+        $this->assertNull($layout['logo']);
+        $this->assertSame(148.0, $layout['header_width']);
+        $this->assertSame(15.0, $layout['header'][0]['x']);
         $this->assertSame($oldBytes, Storage::disk('clinical_reports')->get($old->private_path));
         $this->assertSame($oldSnapshot, $old->fresh()->presentation_snapshot);
     }
