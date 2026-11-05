@@ -284,7 +284,7 @@ class ClinicalReportRenderer
             });
             $newArea = 'ÁREA: '.$group['name'];
             foreach ($group['lines'] as $line) {
-                $newExam = 'Examen: '.$line['exam_name']."\n".'Código: '.$line['exam_code'].' | Examen: '.$line['line_id'];
+                $newExam = 'Examen: '.$line['exam_name']."\n".'Código: '.$line['exam_code'];
                 $parameterContext = null;
                 // Reserve headings, validation evidence and the first result.
                 // Clear previous context before starting a new group on a page.
@@ -364,7 +364,7 @@ class ClinicalReportRenderer
                     $key = json_encode([$v['validated_by'], $v['professional_snapshot'] ?? null,
                         $context['validator_identity'] ?? null, $context['signature_snapshot'] ?? null], JSON_THROW_ON_ERROR);
                     $responsibles[$key]['validation'] = $v;
-                    $responsibles[$key]['exams'][] = $line['exam_code'].' — '.$line['exam_name'].' [Examen '.$line['line_id'].'; validación '.$v['id'].']';
+                    $responsibles[$key]['exams'][] = $line['exam_code'].' — '.$line['exam_name'].' [validación '.$v['id'].']';
                 } elseif (($document['format_version'] ?? 'donqer-clinical-1') === 'donqer-clinical-2') {
                     $text($line['clinical_display']['label'].'. No constituye un resultado clínico.');
                     $text('Motivo clínico: '.$line['clinical_display']['reason']);
@@ -398,7 +398,7 @@ class ClinicalReportRenderer
             $examContext = null;
             $text('EXÁMENES PENDIENTES — sin resultados clínicos publicados');
             foreach ($document['pending_lines'] as $pending) {
-                $text($pending['exam_code'].' — '.$pending['exam_name'].' | Examen '.$pending['line_id']);
+                $text($pending['exam_code'].' — '.$pending['exam_name']);
                 $text($pending['clinical_status'] === 'incomplete' ? 'Incompleto — situación clínica pendiente.' : 'Pendiente de resolución clínica.');
                 $text($pending['processing_started'] ? 'Procesamiento iniciado; sin resolución definitiva.' : 'El procesamiento no ha comenzado.');
             }
@@ -661,6 +661,6 @@ class ClinicalReportRenderer
 
     private function observationText(array $observation): string
     {
-        return $observation['text']."\nAutor: ".$observation['author_name']."\nAutorizada: ".$this->displayDate($observation['authorized_at'])."\nExamen: ".$observation['line_id'];
+        return $observation['text']."\nAutor: ".$observation['author_name']."\nAutorizada: ".$this->displayDate($observation['authorized_at']);
     }
 }
