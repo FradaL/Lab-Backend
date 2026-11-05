@@ -68,7 +68,7 @@ final class RolePermissionDocumentation
     #[OA\Put(
         path: '/api/v1/laboratory/roles/{role}/permissions', operationId: 'rolePermissionsReplace', tags: ['Role permissions'],
         summary: 'Reemplazar por completo los permisos de un rol configurable',
-        description: 'Requiere solo roles.permissions.manage, sin restricción por rol del actor. Puede delegar o revocar ese mismo permiso. owner y administrator protegidos. Lista vacía retira todos los permisos del rol, conservando permisos efectivos por otros roles o asignación directa. Cada escritura aceptada incrementa revisión, incluso sin diferencias. Auditoría y pivotes participan en una transacción.',
+        description: 'Requiere solo roles.permissions.manage, sin restricción por rol del actor. Puede delegar o revocar ese mismo permiso. owner y administrator protegidos. payments.credit.authorize se puede asignar a cualquier rol configurable y autoriza crédito sin restricción adicional por nombre de rol. Lista vacía retira todos los permisos del rol, conservando permisos efectivos por otros roles o asignación directa. Cada escritura aceptada incrementa revisión, incluso sin diferencias. Auditoría y pivotes participan en una transacción.',
         security: [['sanctumCookie' => []]],
         parameters: [new OA\Parameter(ref: '#/components/parameters/LaboratoryContextHeader'), new OA\Parameter(name: 'role', in: 'path', required: true, schema: new OA\Schema(type: 'string'), example: 'viewer')],
         requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/ReplaceRolePermissions')),

@@ -48,7 +48,7 @@ class RolePermissionAdministrationTest extends TestCase
         }
         $owner = $this->getJson('/api/v1/laboratory/roles/owner/permissions')->assertOk()
             ->assertJsonPath('data.protected', true)->assertJsonPath('data.editable', false)->assertJsonPath('data.revision', 1);
-        $this->assertEqualsCanonicalizing(RbacCatalog::PERMISSIONS, $owner->json('data.permissions'));
+        $this->assertEqualsCanonicalizing(RbacCatalog::rolePermissions()['owner'], $owner->json('data.permissions'));
         $this->assertDatabaseCount('roles', 6);
         $this->getJson('/api/v1/laboratory/roles/viewer/permissions')->assertOk()->assertJsonPath('data.editable', true);
         $id = DB::table('roles')->where('laboratory_id', $lab->id)->where('name', 'viewer')->value('id');
@@ -221,7 +221,7 @@ class RolePermissionAdministrationTest extends TestCase
         app(LaboratoryRoleProvisioner::class)->provision($new);
         $owner = DB::table('roles')->where('laboratory_id', $new->id)->where('name', 'owner')->value('id');
         $codes = DB::table('role_has_permissions')->join('permissions', 'permissions.id', '=', 'permission_id')->where('role_id', $owner)->pluck('name')->all();
-        $this->assertEqualsCanonicalizing(RbacCatalog::PERMISSIONS, $codes);
+        $this->assertEqualsCanonicalizing(RbacCatalog::rolePermissions()['owner'], $codes);
         $this->assertSame(6, DB::table('roles')->where('laboratory_id', $new->id)->count());
         $this->getJson('/api/v1/laboratory/roles/viewer/permissions')->assertOk()->assertJsonPath('data.permissions', [])->assertJsonPath('data.revision', 2);
     }
