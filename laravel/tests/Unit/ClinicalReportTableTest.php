@@ -31,6 +31,26 @@ class ClinicalReportTableTest extends TestCase
         }
     }
 
+    public function test_parameter_cell_uses_only_the_snapshot_name_without_mutating_its_technical_code(): void
+    {
+        $result = [
+            'parameter_snapshot' => ['name' => 'Hemoglobina'],
+            'parameter_code' => 'P_e8472ff34dfa4fa18974d944b0442058',
+            'value' => '14.2',
+            'option_label' => null,
+            'unit' => 'g/dL',
+        ];
+        $reference = ['status' => 'not_configured', 'reference' => null, 'reference_key' => null];
+        $validation = ['context_snapshot' => ['classifications' => []]];
+        $before = serialize($result);
+        $method = new \ReflectionMethod(ClinicalReportRenderer::class, 'resultCells');
+
+        $cells = $method->invoke(app(ClinicalReportRenderer::class), $result, $reference, $validation);
+
+        $this->assertSame('Hemoglobina', $cells[0]);
+        $this->assertSame($before, serialize($result));
+    }
+
     private function example(string $example): array
     {
         $document = ReportPreviewDocument::make(['trade_name' => 'LABORATORIO SINTÉTICO', 'address' => 'Dirección ficticia', 'phone' => '0000', 'header' => '', 'footer' => 'DATOS FICTICIOS', 'logo' => null]);
