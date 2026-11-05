@@ -138,51 +138,6 @@ class ClinicalReportRenderer
                 $y += 6;
             }
         };
-        $drawTraceability = function (array $rows) use ($pdf, $newPage, $wrap, $bodyEnd, $layout, $identityHeight, $accent, &$y): void {
-            $preparedRows = [];
-            $height = 7.0;
-            foreach ($rows as $fields) {
-                $prepared = [];
-                $lineCount = 1;
-                foreach ($fields as [$label, $value, $x, $width]) {
-                    $valueRows = $wrap((string) $value, $width - 4);
-                    $prepared[] = [$label, $valueRows, $x, $width];
-                    $lineCount = max($lineCount, count($valueRows));
-                }
-                $rowHeight = 7 + $lineCount * 5;
-                $preparedRows[] = [$prepared, $rowHeight];
-                $height += $rowHeight;
-            }
-            $height += 2;
-
-            // Keep the title and its two compact metadata rows together whenever
-            // they fit on a fresh page; no divider is emitted without its values.
-            $pageCapacity = $bodyEnd - $layout['body_y'] - $identityHeight();
-            if ($height <= $pageCapacity && $y + $height > $bodyEnd) {
-                $newPage();
-            }
-
-            $pdf->page->addContent($this->font($pdf, 8)['out']);
-            $pdf->page->addContent($pdf->color->getPdfFillColor($accent));
-            $pdf->addTextCell('TRAZABILIDAD DEL EXAMEN', posx: 15, posy: $y, width: 180, height: 5, drawcell: false);
-            $y += 7;
-            foreach ($preparedRows as [$fields, $rowHeight]) {
-                foreach ($fields as [$label, $valueRows, $x, $width]) {
-                    $pdf->page->addContent($this->font($pdf, 8)['out']);
-                    $pdf->page->addContent($pdf->color->getPdfFillColor($accent));
-                    $pdf->addTextCell($label, posx: $x + 2, posy: $y, width: $width - 4, height: 4, drawcell: false);
-                    $pdf->page->addContent($this->font($pdf, 9)['out']);
-                    $pdf->page->addContent($pdf->color->getPdfFillColor('black'));
-                    foreach ($valueRows as $index => $valueRow) {
-                        $pdf->addTextCell($valueRow, posx: $x + 2, posy: $y + 5 + $index * 5, width: $width - 4, height: 5, drawcell: false);
-                    }
-                }
-                $pdf->page->addContent("q\n".$pdf->graph->getRect(15, $y + $rowHeight - 0.10, 180, 0.10, 'F',
-                    ['all' => ['fillColor' => '#DDDDDD']])."\nQ\n");
-                $y += $rowHeight;
-            }
-            $y += 2;
-        };
         // A table is drawn as vector cells and measured text, never as an image.
         // Only a row larger than a fresh page is split, at shared text baselines.
         $tablePage = null;
@@ -382,17 +337,6 @@ class ClinicalReportRenderer
                     $tableActive = false;
                     $tablePage = null;
                     $context = $v['context_snapshot'];
-                    $drawTraceability([
-                        [
-                            ['Línea', $line['line_id'], 15.0, 60.0],
-                            ['Validación', $v['id'], 75.0, 60.0],
-                            ['Revisión aprobada', $v['approved_revision'], 135.0, 60.0],
-                        ],
-                        [
-                            ['Fecha de validación', $this->displayDate($v['validated_at']), 15.0, 90.0],
-                            ['Fecha de referencia', $this->displayDate($context['reference_date']), 105.0, 90.0],
-                        ],
-                    ]);
                     if ($context['age_days'] !== null) {
                         $text('Edad utilizada: '.$context['age_days'].' días cumplidos');
                     }
