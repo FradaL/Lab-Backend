@@ -12,10 +12,10 @@ class ActivePriceListRequest extends FormRequest
         return true;
     }
 
-    /** @return array<string, never> */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
-        return [];
+        return ['context' => ['sometimes', 'required', 'string', 'in:particular']];
     }
 
     /** @return array<int, callable(Validator): void> */
@@ -24,6 +24,9 @@ class ActivePriceListRequest extends FormRequest
         return [
             function (Validator $validator): void {
                 foreach ($this->query->keys() as $field) {
+                    if ($field === 'context') {
+                        continue;
+                    }
                     $validator->errors()->add(
                         $field,
                         'Este parámetro no está permitido.',

@@ -13,7 +13,7 @@ class ClinicalReportTableTest extends TestCase
 {
     public static function examples(): array
     {
-        return array_map(fn ($name) => [$name], ['short', 'mixed', 'long-text', 'long-table', 'areas', 'same-area', 'observations', 'partial', 'styled', 'blue', 'burgundy', 'responsibles', 'no-professional', 'legacy-exception']);
+        return array_map(fn ($name) => [$name], ['short', 'mixed', 'long-text', 'long-identity', 'long-table', 'areas', 'same-area', 'observations', 'partial', 'styled', 'blue', 'burgundy', 'responsibles', 'no-professional', 'legacy-exception']);
     }
 
     #[DataProvider('examples')]
@@ -87,6 +87,14 @@ class ClinicalReportTableTest extends TestCase
             if ($classification !== null) {
                 $line['validation']['context_snapshot']['classifications'][] = ['parameter_code' => $code, 'status' => $classification];
             }
+        }
+        if ($example === 'long-identity') {
+            $document['identity']['patient']['first_names'] = str_repeat('Paciente compuesto ', 8);
+            $document['identity']['patient']['last_names'] = str_repeat('Apellido clínico ', 8);
+            $document['identity']['branch']['name'] = str_repeat('Sucursal institucional ', 7);
+            $document['identity']['branch']['code'] = 'SUCURSAL-CODIGO-INSTITUCIONAL-EXTENSO-001';
+            $document['order_code'] = 'ORDEN-IDENTIFICADOR-CLINICO-MUY-EXTENSO-000000000000000001';
+            $document['sequence'] = 123456789;
         }
         unset($line);
         if (in_array($example, ['areas', 'same-area', 'responsibles'])) {
