@@ -148,6 +148,7 @@ class ReportPresentationSettingsTest extends TestCase
                 $this->assertSame(['align' => $align, 'font_size_pt' => 18], $block['style']);
                 $this->assertEqualsWithDelta(count($block['rows']) * 18 * 25.4 / 72 * 1.5, $block['height'], 0.001);
             }
+            $this->assertEqualsWithDelta(1.5, $layout['header'][1]['y'] - $layout['header'][0]['height'], 0.001);
             $this->assertGreaterThan($layout['body_y'] + 100, $layout['footer_y']);
             $this->assertLessThanOrEqual(287, $layout['footer_y'] + 5 + $layout['footer']['height']);
             $report = $service->issue($lab, $actor, $order->id, $this->body($order, $line), 'styles-new-report-000'.$index);

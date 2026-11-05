@@ -8,6 +8,8 @@ use Com\Tecnick\Pdf\Tcpdf;
 class ClinicalReportRenderer
 {
     private const PAGE_HEIGHT = 279.4;
+    // 25% tighter than the former 2 mm gap, without changing line-height or wrapping.
+    private const INSTITUTIONAL_BLOCK_GAP = 1.5;
 
     /** Render only immutable server snapshots. No HTML, remote assets or signatures. */
     public function render(array $document, string $verificationUrl): string
@@ -624,7 +626,7 @@ class ClinicalReportRenderer
             $headerX += $width + 4;
             $headerWidth -= $width + 4;
         }
-        $institutionalHeight = 0.0;
+        $institutionalBlocks = [];
         foreach (['trade_name', 'address', 'phone', 'header'] as $name) {
             $blockStyle = $styles[$name];
             if ($name === 'trade_name') {
@@ -634,8 +636,17 @@ class ClinicalReportRenderer
             if ($name === 'trade_name' && count($block['rows']) > 8) {
                 throw new ClinicalConflict('report_presentation_invalid', 'The laboratory name exceeds the reserved area.');
             }
+            if ($block['rows'] !== []) {
+                $institutionalBlocks[] = $block;
+            }
+        }
+        $institutionalHeight = 0.0;
+        foreach ($institutionalBlocks as $index => $block) {
             $header[] = $block + ['x' => $headerX, 'width' => $headerWidth, 'y' => $institutionalHeight];
-            $institutionalHeight += $block['height'] + 2;
+            $institutionalHeight += $block['height'];
+            if ($index < count($institutionalBlocks) - 1) {
+                $institutionalHeight += self::INSTITUTIONAL_BLOCK_GAP;
+            }
         }
         $titleY = max($institutionalHeight, $logo['height'] ?? 0) + 3;
         $titleStyle = $styles['title'];
