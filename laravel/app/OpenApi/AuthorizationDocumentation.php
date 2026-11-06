@@ -25,6 +25,7 @@ use OpenApi\Attributes as OA;
         ),
         new OA\Property(
             property: 'permissions',
+            description: 'Permisos efectivos del laboratorio activo. Caja separa payments.view/create/void/refund/credit.authorize; crédito depende exclusivamente del permiso efectivo, sin exigir un nombre de rol. No hay concesiones financieras automáticas.',
             type: 'array',
             items: new OA\Items(type: 'string', example: 'orders.view'),
         ),
