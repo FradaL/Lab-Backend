@@ -22,7 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
         $resultInput = fn (Request $request) => ($request->isMethod('PUT') && $request->is('api/v1/laboratory-orders/*/exams/*/results'))
             || ($request->isMethod('POST') && $request->is('api/v1/laboratory-orders/*/exams/*/results/validate'));
-        $cashInput = fn (Request $request) => $request->isMethod('POST') && $request->is('api/v1/laboratory-orders/*/payments');
+        $cashInput = fn (Request $request) => $request->isMethod('POST') && ($request->is('api/v1/laboratory-orders/*/payments') || $request->is('api/v1/laboratory-orders/*/payments/*/void'));
         $middleware->trimStrings(except: [$resultInput, $cashInput]);
         $middleware->convertEmptyStringsToNull(except: [$resultInput, $cashInput]);
         $middleware->alias([

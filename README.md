@@ -1,5 +1,9 @@
 # Donqer Lab Backend
 
+## Anulaciones BE-D02-11 — 2026-11-06
+
+[Implementación local, migración, pruebas y límites](docs/sprint-2/BE-D02-11-anulaciones-trazables.md), sobre `105d1f1` más cambios sin commit. Anulación completa e idempotente con `payments.void`, cobro original inmutable, motivo y auditoría/revisión atómicas; bloqueo del neto negativo. No genera devoluciones ni integra entrega. Requiere migración adicional en el entorno que adopte el cambio; sin aplicación a la base habitual, Trello ni despliegue. Los cortes anteriores se conservan.
+
 ## Versionado de Caja — 2026-11-06
 
 Por solicitud expresa de Daniel Lara («haz commit porfavor»), se versionan conjuntamente BE-D02-05 y BE-D02-06 con su documentación y pruebas. Las menciones a cambios «sin commit» de los informes inferiores conservan el corte previo al versionado. No se realiza push, despliegue ni aplicación de migraciones a la base habitual. Evidencia: BE05, 699 pruebas satisfactorias y 1 omisión previa; BE06, 625 satisfactorias y 1 omisión previa, sin sumar casos repetidos entre baterías.

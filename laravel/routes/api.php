@@ -129,6 +129,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/laboratory-orders/{order}/reports/{report}/download', [ClinicalReportController::class, 'download'])->middleware('can:reports.download')->whereNumber(['order', 'report']);
         Route::get('/laboratory-orders/{order}/cash-summary', [OrderCashController::class, 'summary'])->whereNumber('order')->middleware('can:payments.view');
         Route::get('/laboratory-orders/{order}/cash-movements', [OrderCashController::class, 'movements'])->whereNumber('order')->middleware('can:payments.view');
+        Route::post('/laboratory-orders/{order}/payments/{payment}/void', [OrderPaymentController::class, 'void'])->whereNumber('order')->whereNumber('payment')->middleware('can:payments.void');
         Route::post('/laboratory-orders/{order}/payments', [OrderPaymentController::class, 'store'])->whereNumber('order')->middleware('can:payments.create');
 
         Route::get('/laboratory/report-delivery-policy', [ReportDeliveryController::class, 'policy'])->middleware('can:reports.delivery_policy.view');
