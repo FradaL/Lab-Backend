@@ -85,7 +85,7 @@ final class RemoveExamFromLaboratoryOrder
             $orderExam->sampleRequirements()->delete();
             $orderExam->delete();
 
-            $this->recalculateEconomics->execute($laboratory, $order);
+            $this->recalculateEconomics->execute($laboratory, $order, $actor);
 
             $this->auditWriter->record($laboratory, $actor, new AuditEvent(
                 OrderAuditEvents::EXAM_REMOVED,

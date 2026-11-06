@@ -14,6 +14,7 @@ use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
 use App\Models\User;
+use App\Services\LaboratoryOrders\RecalculateLaboratoryOrderEconomics;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
@@ -131,7 +132,11 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
         [$laboratory, $order, $exam] = $this->context();
         $deleted = $this->line($laboratory, $order, $exam, '100.00');
         $remaining = $this->line($laboratory, $order, $exam, '100.00');
-        $order->update(['subtotal' => '200.00', 'total' => '200.00']);
+        DB::transaction(function () use ($laboratory, $order): void {
+            $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+        });
+        $order->refresh();
 
         $results = $this->runConcurrently($laboratory, $order, $exam, [
             'discount' => ['action' => 'set', 'type' => 'percentage', 'value' => '10.00'],
@@ -148,7 +153,11 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
         $this->requirePostgreSqlConcurrencySupport();
         [$laboratory, $order, $exam] = $this->context();
         $this->line($laboratory, $order, $exam, '200.00');
-        $order->update(['subtotal' => '200.00', 'total' => '200.00']);
+        DB::transaction(function () use ($laboratory, $order): void {
+            $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+        });
+        $order->refresh();
 
         $results = $this->runConcurrently($laboratory, $order, $exam, [
             'percentage' => ['action' => 'set', 'type' => 'percentage', 'value' => '10.00'],
@@ -171,7 +180,11 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
         $this->requirePostgreSqlConcurrencySupport();
         [$laboratory, $order, $exam] = $this->context();
         $this->line($laboratory, $order, $exam, '200.00');
-        $order->update(['subtotal' => '200.00', 'total' => '200.00']);
+        DB::transaction(function () use ($laboratory, $order): void {
+            $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+        });
+        $order->refresh();
 
         $results = $this->runConcurrently($laboratory, $order, $exam, [
             'set' => ['action' => 'set', 'type' => 'percentage', 'value' => '10.00'],
@@ -195,7 +208,11 @@ final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
         $line = $this->line($laboratory, $order, $exam, '200.00');
         $actor = $this->createLaboratoryMember($laboratory);
         $this->assignDirectLaboratoryPermission($actor, $laboratory, 'orders.start_exam');
-        $order->update(['subtotal' => '200.00', 'total' => '200.00']);
+        DB::transaction(function () use ($laboratory, $order): void {
+            $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+        });
+        $order->refresh();
 
         $results = $this->runConcurrently($laboratory, $order, $exam, [
             'discount' => ['action' => 'set', 'type' => 'percentage', 'value' => '10.00'],

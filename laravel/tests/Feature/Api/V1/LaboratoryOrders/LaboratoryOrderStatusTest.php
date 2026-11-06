@@ -291,7 +291,7 @@ final class LaboratoryOrderStatusTest extends TestCase
             );
         }
         $this->assertSame([
-            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'delivery_policy', 'notes', 'patient', 'doctor',
+            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'delivery_policy', 'financial_revision', 'notes', 'patient', 'doctor',
             'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type',
             'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by',
             'created_at', 'updated_at',
@@ -362,8 +362,8 @@ final class LaboratoryOrderStatusTest extends TestCase
             array_flip(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'trace']),
         )));
 
-        $this->assertSame(193, $operationCount);
-        $this->assertCount(201, Route::getRoutes()->getRoutes());
+        $this->assertSame(196, $operationCount);
+        $this->assertCount(204, Route::getRoutes()->getRoutes());
         $this->assertSame(['status'], $schema['required']);
         $this->assertSame(['status'], array_keys($schema['properties']));
         $this->assertFalse($schema['additionalProperties']);

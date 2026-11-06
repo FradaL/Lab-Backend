@@ -36,6 +36,6 @@ final class CashAuthority
             $this->authority->access($lab, $actor, $permission);
 
             return $operation();
-        });
+        }, 3);
     }
 }

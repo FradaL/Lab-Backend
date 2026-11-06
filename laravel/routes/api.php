@@ -25,6 +25,8 @@ use App\Http\Controllers\Api\V1\LaboratorySampleController;
 use App\Http\Controllers\Api\V1\LaboratoryUserController;
 use App\Http\Controllers\Api\V1\LaboratoryUserInvitationController;
 use App\Http\Controllers\Api\V1\LocalClinicalReasonController;
+use App\Http\Controllers\Api\V1\OrderCashController;
+use App\Http\Controllers\Api\V1\OrderPaymentController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PriceListController;
 use App\Http\Controllers\Api\V1\PriceListExamController;
@@ -125,6 +127,10 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/laboratory-orders/{order}/reports', [ClinicalReportController::class, 'history'])->middleware('can:reports.view_history')->whereNumber('order');
         Route::get('/laboratory-orders/{order}/reports/{report}', [ClinicalReportController::class, 'show'])->middleware('can:reports.view_history')->whereNumber(['order', 'report']);
         Route::get('/laboratory-orders/{order}/reports/{report}/download', [ClinicalReportController::class, 'download'])->middleware('can:reports.download')->whereNumber(['order', 'report']);
+        Route::get('/laboratory-orders/{order}/cash-summary', [OrderCashController::class, 'summary'])->whereNumber('order')->middleware('can:payments.view');
+        Route::get('/laboratory-orders/{order}/cash-movements', [OrderCashController::class, 'movements'])->whereNumber('order')->middleware('can:payments.view');
+        Route::post('/laboratory-orders/{order}/payments', [OrderPaymentController::class, 'store'])->whereNumber('order')->middleware('can:payments.create');
+
         Route::get('/laboratory/report-delivery-policy', [ReportDeliveryController::class, 'policy'])->middleware('can:reports.delivery_policy.view');
         Route::put('/laboratory/report-delivery-policy', [ReportDeliveryController::class, 'updatePolicy'])->middleware('can:reports.delivery_policy.manage');
         Route::get('/laboratory-orders/{order}/reports/{report}/delivery-eligibility', [ReportDeliveryController::class, 'eligibility'])->middleware('can:reports.delivery.evaluate')->whereNumber(['order', 'report']);

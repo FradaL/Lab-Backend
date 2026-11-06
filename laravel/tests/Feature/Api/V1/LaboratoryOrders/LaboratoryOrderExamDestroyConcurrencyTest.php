@@ -9,6 +9,7 @@ use App\Models\LaboratoryExam;
 use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
+use App\Services\LaboratoryOrders\RecalculateLaboratoryOrderEconomics;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
@@ -103,7 +104,11 @@ final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
         $line = LaboratoryOrderExam::factory()->for($laboratory)->create($attributes);
 
         if (! $withDuplicate) {
-            $order->update(['subtotal' => '35.00', 'total' => '35.00']);
+            DB::transaction(function () use ($laboratory, $order): void {
+                $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+                app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+            });
+            $order->refresh();
 
             return [$laboratory, $order, $line];
         }
@@ -112,7 +117,11 @@ final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
             $attributes,
             ['unit_price' => '40.00', 'exam_name' => 'Independent snapshot'],
         ));
-        $order->update(['subtotal' => '75.00', 'total' => '75.00']);
+        DB::transaction(function () use ($laboratory, $order): void {
+            $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+        });
+        $order->refresh();
 
         return [$laboratory, $order, $line, $duplicate];
     }

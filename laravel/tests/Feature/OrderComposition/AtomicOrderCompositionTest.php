@@ -420,6 +420,8 @@ class AtomicOrderCompositionTest extends TestCase
         $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
         $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $cashLedger = require database_path('migrations/2026_11_06_000002_create_order_cash_ledger.php');
+        $cashLedger->down();
         $orderPolicy = require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php');
         $orderPolicy->down();
         $signatures = require database_path('migrations/2026_11_02_000003_add_authorized_validation_signatures.php');
@@ -453,6 +455,7 @@ class AtomicOrderCompositionTest extends TestCase
         $reportExceptions->up();
         $signatures->up();
         $orderPolicy->up();
+        $cashLedger->up();
         $this->assertDatabaseHas('laboratory_order_legacy_exams', ['laboratory_exam_id' => $legacy->id]);
         $this->assertDatabaseMissing('laboratory_order_legacy_exams', ['laboratory_exam_id' => $enrolled->id]);
         PriceListExam::factory()->for($this->lab)->create(['price_list_id' => $this->prices->id, 'laboratory_exam_id' => $legacy->id, 'status' => 'active']);
@@ -489,6 +492,8 @@ class AtomicOrderCompositionTest extends TestCase
         $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
         $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $cashLedger = require database_path('migrations/2026_11_06_000002_create_order_cash_ledger.php');
+        $cashLedger->down();
         $orderPolicy = require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php');
         $orderPolicy->down();
         $signatures = require database_path('migrations/2026_11_02_000003_add_authorized_validation_signatures.php');
@@ -530,6 +535,7 @@ class AtomicOrderCompositionTest extends TestCase
         $reportExceptions->up();
         $signatures->up();
         $orderPolicy->up();
+        $cashLedger->up();
 
         $this->assertSame($beforeOrder, array_intersect_key($order->refresh()->getRawOriginal(), $beforeOrder));
         $this->assertSame($beforeExam, $exam->refresh()->getRawOriginal());
@@ -554,6 +560,8 @@ class AtomicOrderCompositionTest extends TestCase
         $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
         $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $cashLedger = require database_path('migrations/2026_11_06_000002_create_order_cash_ledger.php');
+        $cashLedger->down();
         $orderPolicy = require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php');
         $orderPolicy->down();
         $signatures = require database_path('migrations/2026_11_02_000003_add_authorized_validation_signatures.php');
@@ -585,6 +593,7 @@ class AtomicOrderCompositionTest extends TestCase
         $reportExceptions->up();
         $signatures->up();
         $orderPolicy->up();
+        $cashLedger->up();
         PriceListExam::factory()->for($this->lab)->create(['price_list_id' => $this->prices->id, 'laboratory_exam_id' => $legacy->id, 'status' => 'active']);
         $orderId = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($legacy)])->assertCreated()->json('data.id');
         $old = LaboratoryOrderExam::sole()->getRawOriginal();

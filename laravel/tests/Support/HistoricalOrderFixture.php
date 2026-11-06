@@ -14,12 +14,16 @@ final class HistoricalOrderFixture
         TestDatabaseGuard::verify(app());
 
         return DB::transaction(function () use ($create): LaboratoryOrder {
+            DB::statement('SET CONSTRAINTS ALL IMMEDIATE');
+            DB::statement('SET CONSTRAINTS ALL DEFERRED');
             DB::statement('LOCK TABLE laboratory_orders IN ACCESS EXCLUSIVE MODE');
             DB::statement('ALTER TABLE laboratory_orders DISABLE TRIGGER preserve_order_delivery_policy');
+            DB::statement('ALTER TABLE laboratory_orders DISABLE TRIGGER cash_order_initialized');
             try {
                 return $create();
             } finally {
                 DB::statement('ALTER TABLE laboratory_orders ENABLE TRIGGER preserve_order_delivery_policy');
+                DB::statement('ALTER TABLE laboratory_orders ENABLE TRIGGER cash_order_initialized');
             }
         });
     }

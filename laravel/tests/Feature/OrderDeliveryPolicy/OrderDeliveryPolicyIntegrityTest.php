@@ -24,7 +24,20 @@ class OrderDeliveryPolicyIntegrityTest extends TestCase
 
     private function migration(): object
     {
-        return require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php');
+        return new class
+        {
+            public function up(): void
+            {
+                (require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php'))->up();
+                (require database_path('migrations/2026_11_06_000002_create_order_cash_ledger.php'))->up();
+            }
+
+            public function down(): void
+            {
+                (require database_path('migrations/2026_11_06_000002_create_order_cash_ledger.php'))->down();
+                (require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php'))->down();
+            }
+        };
     }
 
     public function test_migration_preserves_old_order_with_null_and_does_not_assign_current_policy(): void

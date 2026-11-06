@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\Laboratory;
 use App\Models\Patient;
 use App\Models\PriceList;
+use App\Models\ReportDeliveryPolicy;
 use App\Models\Subscription;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
@@ -246,6 +247,7 @@ final class CurrentAuthorizationTest extends TestCase
         $this->assertNotContains('orders.manage_discount', $permissions);
         $this->assertNotContains('orders.change_status', $permissions);
 
+        ReportDeliveryPolicy::factory()->for($laboratory)->create();
         $orderId = $this->requestJson($user, $laboratory, 'POST', '/api/v1/laboratory-orders', [
             'branch_id' => $branch->id,
             'patient_id' => $patient->id,
@@ -394,7 +396,7 @@ final class CurrentAuthorizationTest extends TestCase
         $this->assertContains('saas', $route->gatherMiddleware());
         $this->assertFalse(collect($route->gatherMiddleware())
             ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')));
-        $this->assertSame(167, collect(Route::getRoutes()->getRoutes())
+        $this->assertSame(170, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/'))
             ->filter(fn (IlluminateRoute $route): bool => collect($route->gatherMiddleware())
                 ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')))

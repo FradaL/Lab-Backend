@@ -125,6 +125,11 @@ class LaboratoryOrder extends Model
         return $this->hasOne(ClinicalOrderFinalization::class);
     }
 
+    public function financialState(): HasOne
+    {
+        return $this->hasOne(LaboratoryOrderFinancialState::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {

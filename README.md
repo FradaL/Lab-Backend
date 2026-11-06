@@ -1,5 +1,17 @@
 # Donqer Lab Backend
 
+## Versionado de Caja — 2026-11-06
+
+Por solicitud expresa de Daniel Lara («haz commit porfavor»), se versionan conjuntamente BE-D02-05 y BE-D02-06 con su documentación y pruebas. Las menciones a cambios «sin commit» de los informes inferiores conservan el corte previo al versionado. No se realiza push, despliegue ni aplicación de migraciones a la base habitual. Evidencia: BE05, 699 pruebas satisfactorias y 1 omisión previa; BE06, 625 satisfactorias y 1 omisión previa, sin sumar casos repetidos entre baterías.
+
+## Resumen y movimientos de Caja — BE-D02-06, 2026-11-06
+
+Implementación local sobre BE05 sin commit: resumen de total/cobros/devoluciones/neto/saldo/excedente y movimientos paginados, con `payments.view`, importes exactos y lectura coherente bajo bloqueo compartido de orden. Las lecturas no generan revisión ni movimientos. [Contrato, pruebas y límites](docs/sprint-2/BE-D02-06-resumen-movimientos.md). Validación: 626 casos / 4.078 aserciones, 625 satisfactorios y 1 omisión previa en PostgreSQL aislado. Sin migraciones nuevas ni despliegue. Crédito y escritores de anulación/devolución siguen en sus tareas.
+
+## Cobros idempotentes — BE-D02-05, 2026-11-06
+
+Implementación local sobre `941acf3`, sin commit: endpoint de cobro con `payments.create`, importes exactos, idempotencia persistida, auditoría atómica y restricciones PostgreSQL. Inicializa revisión financiera al terminar la creación de órdenes nuevas e integra cambios reales de total. Preserva órdenes anteriores sin inventar estado financiero. [Contrato aplicado, activación, pruebas y límites](docs/sprint-2/BE-D02-05-cobros-idempotentes.md). Resumen, anulaciones, devoluciones, crédito e integración de entrega continúan en sus tareas. Validación: 700 casos / 5.301 aserciones, 699 satisfactorios y 1 omisión previa, en PostgreSQL aislado. Sin despliegue.
+
 ## Política de pago conservada por orden — BE-D02-03, 2026-11-06
 
 La creación guarda la política explícita del laboratorio y su procedencia en un snapshot inmutable, dentro de la transacción de cabecera, líneas y descuento. Creación, detalle y listado devuelven `delivery_policy`; las órdenes anteriores permanecen con null. Sin selección explícita se devuelve 409; una procedencia inconsistente devuelve 503, sin crear una orden parcial. [Migración, evidencia, pruebas y límites de integración financiera/entrega](docs/sprint-2/BE-D02-03-politica-conservada-orden.md). La migración se verifica únicamente en PostgreSQL aislado en esta entrega; su aplicación en otros entornos requiere preflight.

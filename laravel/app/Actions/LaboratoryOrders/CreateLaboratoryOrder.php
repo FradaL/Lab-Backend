@@ -5,6 +5,7 @@ namespace App\Actions\LaboratoryOrders;
 use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\Audit\OrderAuditEvents;
+use App\Cash\OrderFinancialState;
 use App\ClinicalReports\ReportIdentity;
 use App\Models\Branch;
 use App\Models\CommercialClient;
@@ -29,6 +30,7 @@ final class CreateLaboratoryOrder
     public function __construct(
         private readonly AuditWriter $auditWriter,
         private readonly OrderDeliveryPolicy $deliveryPolicy,
+        private readonly OrderFinancialState $financial,
         private readonly AddExamToLaboratoryOrder $addExam,
         private readonly SetLaboratoryOrderDiscount $setDiscount,
     ) {}
@@ -175,6 +177,7 @@ final class CreateLaboratoryOrder
             }
 
             $order->refresh();
+            $this->financial->initialize($order);
             $order->setRelation('orderExams', collect($lines));
 
             $order->setRelation('branch', $branch);

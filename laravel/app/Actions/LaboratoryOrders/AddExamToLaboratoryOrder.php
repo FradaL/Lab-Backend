@@ -131,7 +131,7 @@ final class AddExamToLaboratoryOrder
                 ]);
             }
 
-            $this->recalculateEconomics->execute($laboratory, $order);
+            $this->recalculateEconomics->execute($laboratory, $order, $actor);
 
             $this->auditWriter->record($laboratory, $actor, new AuditEvent(
                 OrderAuditEvents::EXAM_ADDED,
