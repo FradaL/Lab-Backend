@@ -339,8 +339,8 @@ final class LaboratoryOrderShowTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(197, $operationCount);
-        $this->assertCount(205, Route::getRoutes()->getRoutes());
+        $this->assertSame(198, $operationCount);
+        $this->assertCount(206, Route::getRoutes()->getRoutes());
         $this->assertSame(['get'], array_keys($path));
         $parameter = collect($operation['parameters'])->firstWhere('name', 'laboratoryOrder');
         $this->assertSame('path', $parameter['in']);

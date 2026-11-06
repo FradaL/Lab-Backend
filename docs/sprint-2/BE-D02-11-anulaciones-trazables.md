@@ -35,3 +35,7 @@ Para devoluciones previas se utiliza exclusivamente una tabla temporal de sesió
 ## Límites
 
 Sin frontend, devoluciones manuales/automáticas, crédito, procedimientos especiales de corrección ni proveedor/integración de entrega BE08/09/10. No se acredita cumplimiento integral de D02/D12, protección de consumidores aún no integrados ni despliegue. Sin cambios en Trello, commits o push. La imposibilidad inicial de Docker se resolvió al habilitar acceso al socket; todas las migraciones de pruebas corresponden a PostgreSQL temporal aislado. Contenedor PostgreSQL y red de testing retirados al finalizar.
+
+## Integración posterior BE11/BE12 — 2026-11-06
+
+[Resolución de conflictos, compatibilidad SQL y pruebas conjuntas](BE-D02-11-12-integracion-migraciones.md), entre `f75c844` y `0890873`, más cambios locales. Conserva ambas operaciones y evidencia; añade migración correctiva para instalaciones previas. No aplica cambios a la base habitual ni acredita entrega de resultados. Las referencias anteriores a la otra tarea pendiente conservan su corte histórico.
