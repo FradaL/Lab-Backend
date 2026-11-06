@@ -65,7 +65,7 @@ final class ReportDeliveryPolicyService
             }
             ReportDeliveryPolicy::updateOrCreate(['laboratory_id' => $lab->id], ['revision' => $revision, 'mode' => $input['mode'], 'updated_by' => $actor->id, 'updated_at' => $changedAt]);
             DB::table('report_delivery_policy_changes')->insert(['laboratory_id' => $lab->id, 'revision' => $revision, 'previous_revision' => $old['revision'],
-                'previous_mode' => $old['mode'], 'new_mode' => $input['mode'], 'reason' => trim($input['reason']), 'changed_by' => $actor->id, 'changed_at' => $changedAt]);
+                'previous_mode' => $old['mode'], 'new_mode' => $input['mode'], 'reason' => trim($input['reason']), 'changed_by' => $actor->id, 'changed_at' => $changedAt->format('Y-m-d H:i:s.uP')]);
             $this->audit->record($lab, $actor, new AuditEvent('order_report.delivery_policy_changed', 'laboratory', $lab->id,
                 oldValues: ['revision' => $old['revision'], 'mode' => $old['mode']], newValues: ['revision' => $revision, 'mode' => $input['mode']], metadata: ['reason' => trim($input['reason'])]));
 

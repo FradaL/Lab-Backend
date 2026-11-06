@@ -9,8 +9,12 @@ use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\Patient;
 use App\Models\PriceList;
+use App\Models\ReportDeliveryPolicy;
 use App\Models\User;
+use App\ReportDelivery\OrderDeliveryPolicy;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * @extends Factory<LaboratoryOrder>
@@ -60,6 +64,16 @@ class LaboratoryOrderFactory extends Factory
                 ->findOrFail($attributes['price_list_id'])
                 ->currency,
             'created_by' => User::factory(),
+            ...(Schema::hasColumn('laboratory_orders', 'delivery_policy_snapshot') ? [
+                'delivery_policy_snapshot' => function (array $attributes): array {
+                    $lab = Laboratory::findOrFail($attributes['laboratory_id']);
+                    if (! ReportDeliveryPolicy::forLaboratory($lab)->exists()) {
+                        ReportDeliveryPolicy::factory()->for($lab)->create();
+                    }
+
+                    return DB::transaction(fn () => app(OrderDeliveryPolicy::class)->capture($lab));
+                },
+            ] : []),
         ];
     }
 

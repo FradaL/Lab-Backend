@@ -100,6 +100,7 @@ final class LaboratoryOrderController extends Controller
                 'ordered_at',
                 'status',
                 'clinical_revision',
+                'delivery_policy_snapshot',
                 'currency',
                 'total',
                 'created_by',
@@ -625,7 +626,7 @@ final class LaboratoryOrderController extends Controller
         path: '/api/v1/laboratory-orders',
         operationId: 'laboratoryOrdersStore',
         summary: 'Crear orden de laboratorio',
-        description: 'Crea atómicamente cabecera, líneas opcionales (máximo 50), snapshots, requisitos individuales y un descuento opcional. Omitir exams o enviar [] conserva la cabecera vacía; incluir líneas exige orders.create y orders.add_exam. Incluir discount exige además orders.manage_discount y reutiliza exactamente las reglas del PUT de descuento. Devuelve cabecera, totales definitivos y exams; no crea muestras físicas. Crea una orden pendiente en el laboratorio actual. La lista de precios es una selección explícita y el servidor captura el nombre/tipo del cliente comercial, el nombre de la lista y su moneda como contexto histórico. ordered_at se interpreta como fecha y hora local conforme al contrato Y-m-d H:i:s y se persiste sin conversión de zona horaria.',
+        description: 'Requiere política de pago configurada explícitamente y captura su procedencia inmutable en delivery_policy. Crea atómicamente cabecera, líneas opcionales (máximo 50), snapshots, requisitos individuales y un descuento opcional. Omitir exams o enviar [] conserva la cabecera vacía; incluir líneas exige orders.create y orders.add_exam. Incluir discount exige además orders.manage_discount y reutiliza exactamente las reglas del PUT de descuento. Devuelve cabecera, totales definitivos y exams; no crea muestras físicas. Crea una orden pendiente en el laboratorio actual. La lista de precios es una selección explícita y el servidor captura el nombre/tipo del cliente comercial, el nombre de la lista y su moneda como contexto histórico. ordered_at se interpreta como fecha y hora local conforme al contrato Y-m-d H:i:s y se persiste sin conversión de zona horaria.',
         security: [['sanctumCookie' => []]],
         tags: ['Laboratory Orders'],
         parameters: [
@@ -647,7 +648,8 @@ final class LaboratoryOrderController extends Controller
                     new OA\Schema(ref: '#/components/schemas/SubscriptionAccessError'),
                 ]),
             ),
-            new OA\Response(response: 409, description: 'Conflicto de disponibilidad o actividad clínica; code estable, incluido clinical_exam_unavailable.', content: new OA\JsonContent(ref: '#/components/schemas/ClinicalExamConflict')),
+            new OA\Response(response: 409, description: 'Sin configuración explícita: delivery_policy_not_configured. También conflictos clínicos de composición.', content: new OA\JsonContent(ref: '#/components/schemas/ClinicalExamConflict')),
+            new OA\Response(response: 503, description: 'Procedencia de política inconsistente o no disponible: cash_evidence_unavailable; sin crear orden.', content: new OA\JsonContent(ref: '#/components/schemas/ClinicalExamConflict')),
             new OA\Response(response: 422, description: 'El payload, las referencias o sus estados operativos no son válidos.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
         ],
     )]

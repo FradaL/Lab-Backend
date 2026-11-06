@@ -3,11 +3,13 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToLaboratory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 final class ReportDeliveryPolicy extends Model
 {
     use BelongsToLaboratory;
+    use HasFactory;
 
     public $timestamps = false;
 
