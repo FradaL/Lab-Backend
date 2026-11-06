@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\LaboratoryUserController;
 use App\Http\Controllers\Api\V1\LaboratoryUserInvitationController;
 use App\Http\Controllers\Api\V1\LocalClinicalReasonController;
 use App\Http\Controllers\Api\V1\OrderCashController;
+use App\Http\Controllers\Api\V1\OrderCreditAuthorizationController;
 use App\Http\Controllers\Api\V1\OrderPaymentController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PriceListController;
@@ -129,7 +130,10 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/laboratory-orders/{order}/reports/{report}/download', [ClinicalReportController::class, 'download'])->middleware('can:reports.download')->whereNumber(['order', 'report']);
         Route::get('/laboratory-orders/{order}/cash-summary', [OrderCashController::class, 'summary'])->whereNumber('order')->middleware('can:payments.view');
         Route::get('/laboratory-orders/{order}/cash-movements', [OrderCashController::class, 'movements'])->whereNumber('order')->middleware('can:payments.view');
+        Route::get('/laboratory-orders/{order}/credit-authorizations', [OrderCashController::class, 'credits'])->whereNumber('order')->middleware('can:payments.view');
         Route::post('/laboratory-orders/{order}/payments', [OrderPaymentController::class, 'store'])->whereNumber('order')->middleware('can:payments.create');
+        Route::post('/laboratory-orders/{order}/credit-authorizations', [OrderCreditAuthorizationController::class, 'store'])->whereNumber('order')->middleware('can:payments.credit.authorize');
+        Route::post('/laboratory-orders/{order}/credit-authorizations/{authorization}/revoke', [OrderCreditAuthorizationController::class, 'revoke'])->whereNumber(['order', 'authorization'])->middleware('can:payments.credit.authorize');
 
         Route::get('/laboratory/report-delivery-policy', [ReportDeliveryController::class, 'policy'])->middleware('can:reports.delivery_policy.view');
         Route::put('/laboratory/report-delivery-policy', [ReportDeliveryController::class, 'updatePolicy'])->middleware('can:reports.delivery_policy.manage');
