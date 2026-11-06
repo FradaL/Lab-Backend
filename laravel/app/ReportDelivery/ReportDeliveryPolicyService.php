@@ -52,7 +52,10 @@ final class ReportDeliveryPolicyService
             if ($old['revision'] !== $input['revision']) {
                 throw new ClinicalConflict('report_delivery_policy_revision_conflict', 'Reload the current delivery policy.');
             }
-            if ($old['mode'] === $input['mode']) {
+            // The restrictive fallback is not an explicit selection. Persisting
+            // the first choice, even when it matches that fallback, records the
+            // required actor, reason and revision for the laboratory.
+            if ($old['source'] === 'configured' && $old['mode'] === $input['mode']) {
                 return $old;
             }
             $revision = $old['revision'] + 1;
