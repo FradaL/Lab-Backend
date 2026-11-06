@@ -30,10 +30,12 @@ class OrderDeliveryPolicyIntegrityTest extends TestCase
             {
                 (require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php'))->up();
                 (require database_path('migrations/2026_11_06_000002_create_order_cash_ledger.php'))->up();
+                (require database_path('migrations/2026_11_06_000003_enable_order_cash_refunds.php'))->up();
             }
 
             public function down(): void
             {
+                (require database_path('migrations/2026_11_06_000003_enable_order_cash_refunds.php'))->down();
                 (require database_path('migrations/2026_11_06_000002_create_order_cash_ledger.php'))->down();
                 (require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php'))->down();
             }
