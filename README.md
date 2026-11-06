@@ -1,6 +1,44 @@
 # Donqer Lab Backend
 
+## Versionado de Caja — 2026-11-06
+
+Por solicitud expresa de Daniel Lara («haz commit porfavor»), se versionan conjuntamente BE-D02-05 y BE-D02-06 con su documentación y pruebas. Las menciones a cambios «sin commit» de los informes inferiores conservan el corte previo al versionado. No se realiza push, despliegue ni aplicación de migraciones a la base habitual. Evidencia: BE05, 699 pruebas satisfactorias y 1 omisión previa; BE06, 625 satisfactorias y 1 omisión previa, sin sumar casos repetidos entre baterías.
+
+## Resumen y movimientos de Caja — BE-D02-06, 2026-11-06
+
+Implementación local sobre BE05 sin commit: resumen de total/cobros/devoluciones/neto/saldo/excedente y movimientos paginados, con `payments.view`, importes exactos y lectura coherente bajo bloqueo compartido de orden. Las lecturas no generan revisión ni movimientos. [Contrato, pruebas y límites](docs/sprint-2/BE-D02-06-resumen-movimientos.md). Validación: 626 casos / 4.078 aserciones, 625 satisfactorios y 1 omisión previa en PostgreSQL aislado. Sin migraciones nuevas ni despliegue. Crédito y escritores de anulación/devolución siguen en sus tareas.
+
+## Cobros idempotentes — BE-D02-05, 2026-11-06
+
+Implementación local sobre `941acf3`, sin commit: endpoint de cobro con `payments.create`, importes exactos, idempotencia persistida, auditoría atómica y restricciones PostgreSQL. Inicializa revisión financiera al terminar la creación de órdenes nuevas e integra cambios reales de total. Preserva órdenes anteriores sin inventar estado financiero. [Contrato aplicado, activación, pruebas y límites](docs/sprint-2/BE-D02-05-cobros-idempotentes.md). Resumen, anulaciones, devoluciones, crédito e integración de entrega continúan en sus tareas. Validación: 700 casos / 5.301 aserciones, 699 satisfactorios y 1 omisión previa, en PostgreSQL aislado. Sin despliegue.
+
+## Política de pago conservada por orden — BE-D02-03, 2026-11-06
+
+La creación guarda la política explícita del laboratorio y su procedencia en un snapshot inmutable, dentro de la transacción de cabecera, líneas y descuento. Creación, detalle y listado devuelven `delivery_policy`; las órdenes anteriores permanecen con null. Sin selección explícita se devuelve 409; una procedencia inconsistente devuelve 503, sin crear una orden parcial. [Migración, evidencia, pruebas y límites de integración financiera/entrega](docs/sprint-2/BE-D02-03-politica-conservada-orden.md). La migración se verifica únicamente en PostgreSQL aislado en esta entrega; su aplicación en otros entornos requiere preflight.
+
 Backend SaaS para laboratorios clínicos Donqer Lab. Incluye Laravel, PostgreSQL, Laradock, autenticación SPA con Sanctum y módulos tenant-aware de pacientes y médicos. Spatie Laravel Permission está preparado para una etapa posterior.
+
+## BE-D02-04 — Permisos de Caja (implementación local, 2026-11-05)
+
+El catálogo registra `payments.view`, `payments.create`, `payments.void`, `payments.refund` y `payments.credit.authorize`. Ninguno se concede por defecto a los seis roles, incluido `owner`. No se reemplazan matrices existentes al reprovisionar. La respuesta `GET /api/v1/auth/authorization` conserva su estructura y expone los permisos efectivos; crédito se expone cuando existe el permiso efectivo, independientemente del nombre de rol.
+
+Los futuros servicios de Caja deben ejecutar su lectura/escritura dentro de `CashAuthority::run($laboratory, $actor, $permission, $operation)`, con recursos consultados explícitamente por laboratorio. El autorizador abre una transacción, verifica laboratorio/usuario/membresía/suscripción activos, relee permisos sin caché y conserva bloqueos compartidos de las asignaciones durante la operación. Cada operación, incluido crédito, pide exclusivamente su permiso efectivo específico; no exige un nombre de rol. Los futuros endpoints deben conservar el pipeline SaaS/sesión y verificar pertenencia de orden y movimientos. El autorizador no sustituye los controles de sesión HTTP ni los bloqueos financieros definidos en EB-001.
+
+La administración existente de matrices de roles permite asignar explícitamente consulta/cobro/anulación/devolución/crédito con revisión y auditoría; `owner` y `administrator` conservan sus matrices protegidas. Para asignaciones directas se añade un comando que exige actor con `roles.permissions.manage`, destinatario activo del laboratorio y motivo:
+
+```sh
+# Sustituir los tres ID por el laboratorio, actor autorizado y destinatario elegidos.
+php artisan cash:permission LAB_ID ACTOR_ID USER_ID payments.view --reason='Responsabilidad de consulta'
+php artisan cash:permission LAB_ID ACTOR_ID USER_ID payments.view --revoke --reason='Retiro de facultad'
+```
+
+El comando modifica un solo permiso directo y audita `cash.permission_granted`/`cash.permission_revoked` de forma atómica. Repetir el mismo estado no duplica auditorías. Revocar una asignación directa conserva cualquier permiso heredado de roles: esas concesiones se retiran desde su matriz. Crédito puede concederse a cualquier miembro activo por rol o permiso directo. Retirar una concesión de rol bloquea el crédito si no queda otra concesión efectiva; un permiso directo vigente continúa habilitándolo. No se ejecutó este comando sobre usuarios reales.
+
+Para registrar el catálogo en una instalación se utiliza el aprovisionamiento existente (`RolePermissionSeeder`/`LaboratoryRoleProvisioner`), sin concesiones financieras automáticas. No se ejecutaron seeders ni migraciones sobre bases compartidas. Las rutas financieras de EB-001 todavía corresponden a BE-D02-05/06/07/11/12 y deberán integrar este autorizador; no se publica aquí una API de cobros ni se habilita entrega.
+
+Validación anterior a la revisión de crédito por permiso efectivo: 71 pruebas / 792 aserciones satisfactorias de Caja, catálogo, administración, concurrencia, despliegue de matrices y autorización/OpenAPI; después, un caso adicional de concesión/revocación de crédito a administrador pasó con 1 prueba / 2 aserciones. PostgreSQL 17 temporal y PHP 8.4.25, proyecto Compose `donqer-be-d02-04`, sin bases compartidas. Pint y `git diff --check` satisfactorios. Se ajustaron las expectativas del owner al excluir Caja y un contador desactualizado de rutas protegidas (160 → 167, sin añadir rutas). Cambios locales sobre backend `423ae6b`, sin commit ni despliegue.
+
+La revisión funcional de Daniel Lara del 2026-11-05 elimina la restricción de crédito por nombre de rol (D02 1.2 y contrato de Caja 1.1). Validación de esta revisión: 66 pruebas / 726 aserciones satisfactorias (Caja, revocación concurrente, administración de roles, catálogo y autorización/OpenAPI) en PostgreSQL 17 temporal y PHP 8.4.25. Contrato documental: 27 esquemas, 33 ejemplos, 10 operaciones y referencias internas verificados. Pint y diferencias sin errores.
 
 ## Estructura
 

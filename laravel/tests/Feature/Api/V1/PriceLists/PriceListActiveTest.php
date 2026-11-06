@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\V1\PriceLists;
 
 use App\Http\Controllers\Api\V1\PriceListController;
+use App\Models\CommercialClientPriceList;
 use App\Models\Laboratory;
 use App\Models\PriceList;
 use App\Models\Subscription;
@@ -68,6 +69,48 @@ class PriceListActiveTest extends TestCase
                 $this->assertArrayNotHasKey($field, $item);
             }
         }
+    }
+
+    public function test_particular_excludes_assigned_lists_but_unfiltered_catalog_retains_them(): void
+    {
+        [$user, $laboratory] = $this->activeTenant();
+        $particular = $this->priceList($laboratory, ['name' => 'Particular activa']);
+        $assigned = $this->priceList($laboratory, ['name' => 'Comercial activa', 'is_default' => true]);
+        $this->priceList($laboratory, ['status' => PriceList::STATUS_INACTIVE]);
+        CommercialClientPriceList::factory()->create([
+            'laboratory_id' => $laboratory->id,
+            'price_list_id' => $assigned->id,
+        ]);
+        [, $otherLab] = $this->activeTenant($user);
+        $this->priceList($otherLab, ['name' => 'Otro laboratorio']);
+
+        $this->activeRequest($user, $laboratory, ['context' => 'particular'])
+            ->assertOk()->assertExactJson(['data' => [$this->expectedItem($particular)]]);
+        $this->activeRequest($user, $laboratory)->assertOk()
+            ->assertJsonCount(2, 'data')->assertJsonPath('data.0.id', $assigned->id);
+    }
+
+    #[DataProvider('commercialAssignmentStates')]
+    public function test_particular_excludes_all_commercial_assignment_states(array $assignment): void
+    {
+        [$user, $laboratory] = $this->activeTenant();
+        $list = $this->priceList($laboratory);
+        CommercialClientPriceList::factory()->create([
+            'laboratory_id' => $laboratory->id,
+            'price_list_id' => $list->id,
+            ...$assignment,
+        ]);
+        $this->activeRequest($user, $laboratory, ['context' => 'particular'])
+            ->assertOk()->assertExactJson(['data' => []]);
+    }
+
+    public static function commercialAssignmentStates(): array
+    {
+        return [
+            'inactive' => [['status' => 'inactive']],
+            'future' => [['starts_at' => '2027-01-01']],
+            'expired' => [['starts_at' => '2025-01-01', 'ends_at' => '2025-12-31']],
+        ];
     }
 
     #[DataProvider('emptyCatalogProvider')]
@@ -217,6 +260,9 @@ class PriceListActiveTest extends TestCase
             'per page' => ['per_page', '100'],
             'page' => ['page', '1'],
             'unknown' => ['foo', 'bar'],
+            'invalid context' => ['context', 'commercial'],
+            'empty context' => ['context', ''],
+            'array context' => ['context', '[]'],
         ];
     }
 
@@ -406,7 +452,10 @@ class PriceListActiveTest extends TestCase
         $this->assertSame('3.1.0', $document['openapi']);
         $this->assertSame(10, $priceListOperations);
         $this->assertSame(15, $examOperations);
-        $this->assertCount(0, collect($operation['parameters'])->where('in', 'query'));
+        $queryParameters = collect($operation['parameters'])->where('in', 'query')->values();
+        $this->assertCount(1, $queryParameters);
+        $this->assertSame('context', $queryParameters[0]['name']);
+        $this->assertSame(['particular'], $queryParameters[0]['schema']['enum']);
         $this->assertArrayNotHasKey('requestBody', $operation);
         $this->assertSame([200, 400, 401, 403, 404, 422], array_keys($operation['responses']));
         $this->assertSame('#/components/schemas/ActivePriceListCollection', $operation['responses']['200']['content']['application/json']['schema']['$ref']);

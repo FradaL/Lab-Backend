@@ -22,8 +22,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
         $resultInput = fn (Request $request) => ($request->isMethod('PUT') && $request->is('api/v1/laboratory-orders/*/exams/*/results'))
             || ($request->isMethod('POST') && $request->is('api/v1/laboratory-orders/*/exams/*/results/validate'));
-        $middleware->trimStrings(except: [$resultInput]);
-        $middleware->convertEmptyStringsToNull(except: [$resultInput]);
+        $cashInput = fn (Request $request) => $request->isMethod('POST') && $request->is('api/v1/laboratory-orders/*/payments');
+        $middleware->trimStrings(except: [$resultInput, $cashInput]);
+        $middleware->convertEmptyStringsToNull(except: [$resultInput, $cashInput]);
         $middleware->alias([
             'saas.capability' => EnsureSaasCapability::class,
             'user.active' => EnsureActiveUser::class,

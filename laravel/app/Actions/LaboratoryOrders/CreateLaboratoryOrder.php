@@ -5,6 +5,7 @@ namespace App\Actions\LaboratoryOrders;
 use App\Audit\AuditEvent;
 use App\Audit\AuditWriter;
 use App\Audit\OrderAuditEvents;
+use App\Cash\OrderFinancialState;
 use App\ClinicalReports\ReportIdentity;
 use App\Models\Branch;
 use App\Models\CommercialClient;
@@ -15,6 +16,7 @@ use App\Models\LaboratoryOrder;
 use App\Models\Patient;
 use App\Models\PriceList;
 use App\Models\User;
+use App\ReportDelivery\OrderDeliveryPolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
@@ -27,6 +29,8 @@ final class CreateLaboratoryOrder
 
     public function __construct(
         private readonly AuditWriter $auditWriter,
+        private readonly OrderDeliveryPolicy $deliveryPolicy,
+        private readonly OrderFinancialState $financial,
         private readonly AddExamToLaboratoryOrder $addExam,
         private readonly SetLaboratoryOrderDiscount $setDiscount,
     ) {}
@@ -55,6 +59,7 @@ final class CreateLaboratoryOrder
         }
 
         return DB::transaction(function () use ($laboratory, $creator, $attributes, $exams): LaboratoryOrder {
+            $policy = $this->deliveryPolicy->capture($laboratory);
             $branch = $laboratory->branches()
                 ->whereKey($attributes['branch_id'])
                 ->where('status', self::ACTIVE_BRANCH_STATUS)
@@ -103,6 +108,7 @@ final class CreateLaboratoryOrder
             /** @var PriceList $priceList */
             $order = $laboratory->orders()->create([
                 ...(Schema::hasColumn('laboratory_orders', 'report_identity_snapshot') ? ['report_identity_snapshot' => ReportIdentity::snapshot($patient, $branch, 'order_creation', $creator->id)] : []),
+                'delivery_policy_snapshot' => $policy,
                 'branch_id' => $branch->getKey(),
                 'patient_id' => $patient->getKey(),
                 'doctor_id' => $doctor?->getKey(),
@@ -130,6 +136,7 @@ final class CreateLaboratoryOrder
                 OrderAuditEvents::SUBJECT_ORDER,
                 $order->getKey(),
                 newValues: [
+                    'delivery_policy' => $policy,
                     'code' => $order->code,
                     'branch_id' => $order->branch_id,
                     'patient_id' => $order->patient_id,
@@ -170,6 +177,7 @@ final class CreateLaboratoryOrder
             }
 
             $order->refresh();
+            $this->financial->initialize($order);
             $order->setRelation('orderExams', collect($lines));
 
             $order->setRelation('branch', $branch);

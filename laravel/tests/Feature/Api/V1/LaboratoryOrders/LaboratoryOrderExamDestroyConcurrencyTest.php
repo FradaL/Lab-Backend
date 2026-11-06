@@ -9,7 +9,9 @@ use App\Models\LaboratoryExam;
 use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
+use App\Services\LaboratoryOrders\RecalculateLaboratoryOrderEconomics;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -19,6 +21,12 @@ use Throwable;
 final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     public function test_status_transition_and_delete_serialize_on_the_same_order_lock(): void
     {
@@ -96,7 +104,11 @@ final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
         $line = LaboratoryOrderExam::factory()->for($laboratory)->create($attributes);
 
         if (! $withDuplicate) {
-            $order->update(['subtotal' => '35.00', 'total' => '35.00']);
+            DB::transaction(function () use ($laboratory, $order): void {
+                $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+                app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+            });
+            $order->refresh();
 
             return [$laboratory, $order, $line];
         }
@@ -105,7 +117,11 @@ final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
             $attributes,
             ['unit_price' => '40.00', 'exam_name' => 'Independent snapshot'],
         ));
-        $order->update(['subtotal' => '75.00', 'total' => '75.00']);
+        DB::transaction(function () use ($laboratory, $order): void {
+            $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+        });
+        $order->refresh();
 
         return [$laboratory, $order, $line, $duplicate];
     }

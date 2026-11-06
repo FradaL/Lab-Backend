@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Cash\OrderFinancialState;
 use App\Models\Branch;
 use App\Models\CommercialClient;
 use App\Models\Doctor;
@@ -9,8 +10,13 @@ use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\Patient;
 use App\Models\PriceList;
+use App\Models\ReportDeliveryPolicy;
 use App\Models\User;
+use App\ReportDelivery\OrderDeliveryPolicy;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * @extends Factory<LaboratoryOrder>
@@ -60,7 +66,34 @@ class LaboratoryOrderFactory extends Factory
                 ->findOrFail($attributes['price_list_id'])
                 ->currency,
             'created_by' => User::factory(),
+            ...(Schema::hasColumn('laboratory_orders', 'delivery_policy_snapshot') ? [
+                'delivery_policy_snapshot' => function (array $attributes): array {
+                    $lab = Laboratory::findOrFail($attributes['laboratory_id']);
+                    if (! ReportDeliveryPolicy::forLaboratory($lab)->exists()) {
+                        ReportDeliveryPolicy::factory()->for($lab)->create();
+                    }
+
+                    return DB::transaction(fn () => app(OrderDeliveryPolicy::class)->capture($lab));
+                },
+            ] : []),
         ];
+    }
+
+    public function create($attributes = [], ?Model $parent = null)
+    {
+        return DB::transaction(fn () => parent::create($attributes, $parent));
+    }
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (LaboratoryOrder $order): void {
+            if (Schema::hasTable('laboratory_order_financial_states') && $order->delivery_policy_snapshot !== null) {
+                if (! DB::table('laboratory_user')->where('laboratory_id', $order->laboratory_id)->where('user_id', $order->created_by)->exists()) {
+                    User::findOrFail($order->created_by)->laboratories()->attach($order->laboratory_id, ['is_active' => true]);
+                }
+                DB::transaction(fn () => app(OrderFinancialState::class)->initialize($order));
+            }
+        });
     }
 
     public function withoutDoctor(): static

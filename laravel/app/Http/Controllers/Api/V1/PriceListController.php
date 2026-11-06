@@ -181,11 +181,12 @@ class PriceListController extends Controller
         path: '/api/v1/price-lists/active',
         operationId: 'priceListsActive',
         summary: 'Listar listas de precios activas',
-        description: 'Devuelve una colección ligera, completa y no paginada de las listas de precios activas del laboratorio actual, incluidas la predeterminada y las no predeterminadas.',
+        description: 'Devuelve una colección ligera, completa y no paginada de las listas de precios activas del laboratorio actual, incluidas la predeterminada y las no predeterminadas. El filtro opcional context=particular excluye listas con cualquier asignación comercial del laboratorio, sin considerar estado o vigencia de la asignación.',
         security: [['sanctumCookie' => []]],
         tags: ['Price Lists'],
         parameters: [
             new OA\Parameter(ref: '#/components/parameters/LaboratoryContextHeader'),
+            new OA\Parameter(name: 'context', in: 'query', required: false, description: 'particular: solo listas sin asignaciones comerciales.', schema: new OA\Schema(type: 'string', enum: ['particular'])),
         ],
         responses: [
             new OA\Response(response: 200, description: 'Catálogo activo de listas de precios.', content: new OA\JsonContent(ref: '#/components/schemas/ActivePriceListCollection')),
@@ -200,18 +201,21 @@ class PriceListController extends Controller
                 ]),
             ),
             new OA\Response(response: 404, description: 'El laboratorio solicitado no existe.', content: new OA\JsonContent(ref: '#/components/schemas/ApiErrorResponse')),
-            new OA\Response(response: 422, description: 'El endpoint no acepta parámetros de consulta.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
+            new OA\Response(response: 422, description: 'Contexto inválido o parámetro de consulta no admitido.', content: new OA\JsonContent(ref: '#/components/schemas/ApiValidationErrorResponse')),
         ],
     )]
     public function active(
         ActivePriceListRequest $request,
         CurrentLaboratory $currentLaboratory,
     ): AnonymousResourceCollection {
-        $request->validated();
+        $filters = $request->validated();
 
         $priceLists = PriceList::forLaboratory($currentLaboratory->get())
             ->select(['id', 'name', 'currency', 'is_default'])
             ->where('status', PriceList::STATUS_ACTIVE)
+            ->when(($filters['context'] ?? null) === 'particular', fn ($query) => $query
+                ->whereDoesntHave('commercialClientAssignments', fn ($assignments) => $assignments
+                    ->forLaboratory($currentLaboratory->get())))
             ->orderBy('name')
             ->orderBy('id')
             ->get();

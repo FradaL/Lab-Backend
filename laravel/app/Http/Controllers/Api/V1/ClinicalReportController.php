@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\ClinicalReports\ClinicalReportRenderer;
 use App\ClinicalReports\ClinicalReportService;
+use App\ClinicalReports\ReportPreviewDocument;
 use App\ClinicalReports\ReportSettingsService;
 use App\Http\Controllers\Controller;
 use App\Models\LaboratoryReportIssuance;
@@ -17,22 +19,70 @@ final class ClinicalReportController extends Controller
 
     public function settings(Request $r)
     {
-        return response()->json(['data' => $this->settings->read($this->current->get(), $r->user())]);
+        return response()->json(['data' => $this->settings->read($this->current->get(), $r->user(), true)]);
     }
 
     public function updateSettings(Request $r)
     {
-        return response()->json(['data' => $this->settings->update($this->current->get(), $r->user(), $r->all())]);
+        return response()->json(['data' => $this->settings->update($this->current->get(), $r->user(), $r->all(), draft: true)]);
+    }
+
+    public function readLogo(Request $r)
+    {
+        $bytes = $this->settings->readLogo($this->current->get(), $r->user(), true);
+
+        return response($bytes ?? '', $bytes === null ? 404 : 200)
+            ->header('Content-Type', 'image/png')->header('Cache-Control', 'private, no-store')
+            ->header('X-Content-Type-Options', 'nosniff');
     }
 
     public function logo(Request $r)
     {
         $r->validate(['revision' => ['required', 'regex:/\A[0-9]+\z/'], 'logo' => ['required', 'file', 'max:2048']]);
-        if (array_diff(array_keys($r->all()), ['revision', 'logo']) !== []) {
+        if (array_diff(array_keys($r->all()), ['revision', 'logo', 'changes']) !== []) {
             throw ValidationException::withMessages(['input' => ['Unknown logo fields.']]);
         }
 
-        return response()->json(['data' => $this->settings->update($this->current->get(), $r->user(), ['revision' => (int) $r->input('revision')], $r->file('logo'))]);
+        $changes = [];
+        if ($r->has('changes')) {
+            try {
+                $object = json_decode($r->input('changes'), flags: JSON_THROW_ON_ERROR);
+                $changes = json_decode($r->input('changes'), true, flags: JSON_THROW_ON_ERROR);
+            } catch (\Throwable) {
+                throw ValidationException::withMessages(['changes' => ['A JSON object is required.']]);
+            }
+            if (! $object instanceof \stdClass || array_key_exists('revision', $changes) || array_key_exists('remove_logo', $changes)) {
+                throw ValidationException::withMessages(['changes' => ['Only presentation text and styles are accepted.']]);
+            }
+        }
+
+        return response()->json(['data' => $this->settings->update($this->current->get(), $r->user(), ['revision' => (int) $r->input('revision')] + $changes, $r->file('logo'), true)]);
+    }
+
+    public function publishSettings(Request $r)
+    {
+        $r->validate(['revision' => ['required', 'integer', 'min:0']]);
+        if (array_keys($r->all()) !== ['revision'] || ! is_int($r->input('revision'))) {
+            throw ValidationException::withMessages(['revision' => ['Send only the saved integer draft revision.']]);
+        }
+
+        return response()->json(['data' => $this->settings->publish($this->current->get(), $r->user(), $r->input('revision'))]);
+    }
+
+    public function settingsPublications(Request $r)
+    {
+        return response()->json($this->settings->publications($this->current->get(), $r->user()));
+    }
+
+    public function previewSettings(Request $r)
+    {
+        $lab = $this->current->get();
+        $this->settings->read($lab, $r->user(), true);
+        [, $presentation] = $this->settings->snapshot($lab, true);
+        $bytes = app(ClinicalReportRenderer::class)->render(ReportPreviewDocument::make($presentation), 'https://example.invalid/vista-previa-ficticia');
+
+        return response($bytes)->header('Content-Type', 'application/pdf')->header('Content-Disposition', 'inline; filename="vista-previa-ficticia.pdf"')
+            ->header('Cache-Control', 'private, no-store')->header('X-Content-Type-Options', 'nosniff');
     }
 
     public function issue(Request $r, int $order)
@@ -70,7 +120,7 @@ final class ClinicalReportController extends Controller
                 return response()->json(['message' => 'Resource not found.'], 404)->header('Cache-Control', 'no-store');
             }
 
-            return response()->json(['data' => ['authentic' => true, 'number' => $report->number,
+            return response()->json(['data' => ['authentic' => true, 'validity' => 'confirm_with_issuing_laboratory', 'number' => $report->number,
                 'issued_at' => $report->issued_at->toISOString(), 'laboratory' => $report->laboratory_name]])
                 ->header('Cache-Control', 'no-store')->header('Referrer-Policy', 'no-referrer');
         } catch (\Throwable) {

@@ -11,6 +11,7 @@ use App\Models\LaboratoryOrderExam;
 use App\Models\Patient;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
+use App\Models\ReportDeliveryPolicy;
 use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Database\Events\QueryExecuted;
@@ -250,6 +251,7 @@ final class LaboratoryOrderHistoricalSnapshotTest extends TestCase
         ]);
 
         $this->assignAllOrderPermissions($user, $laboratory);
+        ReportDeliveryPolicy::factory()->for($laboratory)->create();
 
         return [$user, $laboratory, $branch, $patient, $client, $priceList, $exam, $catalogPrice];
     }

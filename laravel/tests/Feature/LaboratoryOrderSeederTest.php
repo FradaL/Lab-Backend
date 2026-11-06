@@ -237,6 +237,12 @@ final class LaboratoryOrderSeederTest extends TestCase
         foreach (array_reverse($sampleWorkflowMigrations) as $sampleWorkflowMigration) {
             $sampleWorkflowMigration->down();
         }
+        $cashLedger = require database_path('migrations/2026_11_06_000002_create_order_cash_ledger.php');
+        $cashLedger->down();
+        $orderPolicy = require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php');
+        $orderPolicy->down();
+        $signatures = require database_path('migrations/2026_11_02_000003_add_authorized_validation_signatures.php');
+        $signatures->down();
         $reportExceptions->down();
         $exceptionEvidence->down();
         $replacementEvidence->down();
@@ -266,6 +272,9 @@ final class LaboratoryOrderSeederTest extends TestCase
         $replacementEvidence->up();
         $exceptionEvidence->up();
         $reportExceptions->up();
+        $signatures->up();
+        $orderPolicy->up();
+        $cashLedger->up();
         foreach ($sampleWorkflowMigrations as $sampleWorkflowMigration) {
             $sampleWorkflowMigration->up();
         }

@@ -9,6 +9,7 @@ use App\Models\LaboratoryExam;
 use App\Models\Patient;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
+use App\Models\ReportDeliveryPolicy;
 use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -160,6 +161,7 @@ final class LaboratoryOrderCommercialContextTest extends TestCase
             'trial_ends_at' => null,
         ]);
         $this->assignAllOrderPermissions($user, $laboratory);
+        ReportDeliveryPolicy::factory()->for($laboratory)->create();
 
         return [
             $user,

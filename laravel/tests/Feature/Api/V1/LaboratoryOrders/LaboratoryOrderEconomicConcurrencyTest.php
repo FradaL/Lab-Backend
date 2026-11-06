@@ -10,7 +10,9 @@ use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
+use App\Services\LaboratoryOrders\RecalculateLaboratoryOrderEconomics;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 use Throwable;
@@ -19,6 +21,12 @@ final class LaboratoryOrderEconomicConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
 
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
+
     public function test_concurrent_deletes_of_different_lines_leave_consistent_economics(): void
     {
         $this->requirePostgreSqlConcurrencySupport();
@@ -26,7 +34,11 @@ final class LaboratoryOrderEconomicConcurrencyTest extends TestCase
         $first = $this->line($laboratory, $order, $exam, '35.00');
         $second = $this->line($laboratory, $order, $exam, '40.00');
         $remaining = $this->line($laboratory, $order, $exam, '20.00');
-        $order->update(['subtotal' => '95.00', 'total' => '95.00']);
+        DB::transaction(function () use ($laboratory, $order): void {
+            $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+        });
+        $order->refresh();
 
         $results = $this->runConcurrently($laboratory, $order, $exam, [
             'delete-a' => ['action' => 'delete', 'line_id' => $first->id],
@@ -45,7 +57,11 @@ final class LaboratoryOrderEconomicConcurrencyTest extends TestCase
         $this->requirePostgreSqlConcurrencySupport();
         [$laboratory, $order, $exam] = $this->context(addPrice: '35.00');
         $deleted = $this->line($laboratory, $order, $exam, '20.00');
-        $order->update(['subtotal' => '20.00', 'total' => '20.00']);
+        DB::transaction(function () use ($laboratory, $order): void {
+            $locked = LaboratoryOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            app(RecalculateLaboratoryOrderEconomics::class)->execute($laboratory, $locked);
+        });
+        $order->refresh();
 
         $results = $this->runConcurrently($laboratory, $order, $exam, [
             'add' => ['action' => 'add'],

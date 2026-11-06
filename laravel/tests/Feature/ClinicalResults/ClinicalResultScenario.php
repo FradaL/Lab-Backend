@@ -51,7 +51,7 @@ trait ClinicalResultScenario
         $exam->update(['status' => 'active']);
         $prices = PriceList::factory()->for($lab)->create(['status' => 'active', 'currency' => 'GTQ']);
         PriceListExam::factory()->for($lab)->create(['price_list_id' => $prices->id, 'laboratory_exam_id' => $exam->id, 'status' => 'active']);
-        $order = LaboratoryOrder::factory()->for($lab)->create(['price_list_id' => $prices->id, 'currency' => 'GTQ', 'status' => 'pending']);
+        $order = $this->makeScenarioOrder($lab, $prices);
         $line = app(AddExamToLaboratoryOrder::class)->execute($lab, $order->id, $exam->id, $actor);
         if ($start) {
             app(LaboratorySampleService::class)->start($lab, $actor, $order->id, $line->id);
@@ -59,5 +59,10 @@ trait ClinicalResultScenario
         $url = "/api/v1/laboratory-orders/$order->id/exams/$line->id/results";
 
         return [$lab, $actor, $order, $line, $url];
+    }
+
+    protected function makeScenarioOrder($lab, $prices): LaboratoryOrder
+    {
+        return LaboratoryOrder::factory()->for($lab)->create(['price_list_id' => $prices->id, 'currency' => 'GTQ', 'status' => 'pending']);
     }
 }

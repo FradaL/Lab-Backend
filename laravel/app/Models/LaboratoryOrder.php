@@ -26,6 +26,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'status',
     'clinical_revision',
     'report_identity_snapshot',
+    'delivery_policy_snapshot',
     'notes',
     'subtotal',
     'discount',
@@ -124,6 +125,11 @@ class LaboratoryOrder extends Model
         return $this->hasOne(ClinicalOrderFinalization::class);
     }
 
+    public function financialState(): HasOne
+    {
+        return $this->hasOne(LaboratoryOrderFinancialState::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -131,6 +137,7 @@ class LaboratoryOrder extends Model
             'ordered_at' => 'datetime',
             'clinical_revision' => 'integer',
             'report_identity_snapshot' => 'array',
+            'delivery_policy_snapshot' => 'array',
             'subtotal' => 'decimal:2',
             'discount' => 'decimal:2',
             'discount_value' => 'decimal:2',

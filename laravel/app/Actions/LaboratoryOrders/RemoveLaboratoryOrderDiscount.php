@@ -43,7 +43,7 @@ final class RemoveLaboratoryOrderDiscount
             $order->discount_value = null;
             $order->save();
 
-            $this->recalculateEconomics->execute($laboratory, $order);
+            $this->recalculateEconomics->execute($laboratory, $order, $actor);
 
             $newValues = $this->discountState($order);
             if ($oldValues !== $newValues) {

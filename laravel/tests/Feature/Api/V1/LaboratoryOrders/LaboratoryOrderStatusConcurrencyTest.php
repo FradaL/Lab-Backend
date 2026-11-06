@@ -7,6 +7,7 @@ use App\ClinicalExams\ClinicalConflict;
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -15,6 +16,12 @@ use Throwable;
 final class LaboratoryOrderStatusConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     public function test_concurrent_pending_transitions_have_a_serializable_workflow_result(): void
     {
