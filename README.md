@@ -1,5 +1,9 @@
 # Donqer Lab Backend
 
+## Devoluciones manuales de excedente — BE-D02-12, 2026-11-06
+
+Implementación local en `7fd3aab`: `POST /api/v1/laboratory-orders/{order}/refunds`, con `payments.refund`, monto positivo limitado al excedente actual, motivo/medio/referencia, actor/fecha del servidor, idempotencia y auditoría/revisión atómicas. Migración aditiva con guardas PostgreSQL y resumen BE06 actualizado por los movimientos confirmados. [Contrato, pruebas, activación y límites](docs/sprint-2/BE-D02-12-devoluciones-excedente.md). Sin aplicación de migraciones a la base habitual, frontend, cambios de Trello, push ni despliegue; anulación, crédito e integración de entrega conservan sus tareas. Los cortes inferiores se preservan.
+
 ## Versionado de Caja — 2026-11-06
 
 Por solicitud expresa de Daniel Lara («haz commit porfavor»), se versionan conjuntamente BE-D02-05 y BE-D02-06 con su documentación y pruebas. Las menciones a cambios «sin commit» de los informes inferiores conservan el corte previo al versionado. No se realiza push, despliegue ni aplicación de migraciones a la base habitual. Evidencia: BE05, 699 pruebas satisfactorias y 1 omisión previa; BE06, 625 satisfactorias y 1 omisión previa, sin sumar casos repetidos entre baterías.
