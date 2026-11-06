@@ -57,6 +57,38 @@ class ReportDeliveryTest extends TestCase
         app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'payment_or_credit', 'reason' => 'Obsolete']);
     }
 
+    public function test_default_mode_requires_and_records_an_explicit_initial_selection(): void
+    {
+        [$lab,$actor] = $this->issued();
+
+        $selected = app(ReportDeliveryPolicyService::class)->update($lab, $actor, [
+            'revision' => 0,
+            'mode' => 'full_payment_required',
+            'reason' => 'FICTICIO: selección inicial explícita.',
+        ]);
+
+        $this->assertSame('configured', $selected['source']);
+        $this->assertSame(1, $selected['revision']);
+        $this->assertDatabaseHas('report_delivery_policies', [
+            'laboratory_id' => $lab->id,
+            'revision' => 1,
+            'mode' => 'full_payment_required',
+            'updated_by' => $actor->id,
+        ]);
+        $this->assertDatabaseHas('report_delivery_policy_changes', [
+            'laboratory_id' => $lab->id,
+            'revision' => 1,
+            'previous_revision' => 0,
+            'previous_mode' => 'full_payment_required',
+            'new_mode' => 'full_payment_required',
+            'changed_by' => $actor->id,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'laboratory_id' => $lab->id,
+            'event' => 'order_report.delivery_policy_changed',
+        ]);
+    }
+
     #[DataProvider('commercialCases')]
     public function test_typed_commercial_evaluation_applies_each_policy(string $mode, string $status, string $evidence, bool $eligible): void
     {
