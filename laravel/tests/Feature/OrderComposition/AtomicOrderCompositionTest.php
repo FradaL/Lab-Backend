@@ -15,6 +15,7 @@ use App\Models\LaboratoryOrderSampleRequirement;
 use App\Models\Patient;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
+use App\Models\ReportDeliveryPolicy;
 use App\Models\SampleType;
 use App\Models\Subscription;
 use App\Models\User;
@@ -22,6 +23,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
@@ -53,6 +55,15 @@ class AtomicOrderCompositionTest extends TestCase
             'doctor_id' => null, 'commercial_client_id' => null, 'price_list_id' => $this->prices->id,
             'ordered_at' => '2026-10-10 09:00:00', 'notes' => null,
         ];
+    }
+
+    protected function postOrderJson(string $uri, array $data = []): TestResponse
+    {
+        if ($uri === '/api/v1/laboratory-orders' && ! ReportDeliveryPolicy::forLaboratory($this->lab)->exists()) {
+            ReportDeliveryPolicy::factory()->for($this->lab)->create();
+        }
+
+        return $this->postJson($uri, $data);
     }
 
     protected function tearDown(): void
@@ -95,7 +106,7 @@ class AtomicOrderCompositionTest extends TestCase
     public function test_omitted_and_empty_exams_return_complete_empty_creation_and_cannot_start(): void
     {
         foreach ([$this->header, $this->header + ['exams' => []]] as $payload) {
-            $data = $this->postJson('/api/v1/laboratory-orders', $payload)->assertCreated()
+            $data = $this->postOrderJson('/api/v1/laboratory-orders', $payload)->assertCreated()
                 ->assertJsonPath('data.exams', [])->assertJsonPath('data.total', '0.00')->json('data');
             $this->patchJson('/api/v1/laboratory-orders/'.$data['id'].'/status', ['status' => 'in_process'])
                 ->assertUnprocessable()->assertJsonValidationErrors('status');
@@ -109,7 +120,7 @@ class AtomicOrderCompositionTest extends TestCase
     {
         [$physical, $version] = $this->publishedExam(true);
         [$none, $noneVersion] = $this->publishedExam();
-        $data = $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => [...$this->selections($physical, 2), ...$this->selections($none)]])
+        $data = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => [...$this->selections($physical, 2), ...$this->selections($none)]])
             ->assertCreated()->assertJsonPath('data.total', '75.00')->json('data');
         $this->assertCount(3, $data['exams']);
         $this->assertCount(3, array_unique(array_column($data['exams'], 'id')));
@@ -123,7 +134,7 @@ class AtomicOrderCompositionTest extends TestCase
         $this->assertDatabaseCount('laboratory_order_sample_requirements', 4);
         $this->assertSame(3, AuditLog::where('event', 'order_exam.added')->count());
         $this->patchJson('/api/v1/laboratory-orders/'.$data['id'].'/status', ['status' => 'in_process'])->assertConflict();
-        $this->postJson('/api/v1/laboratory-orders/'.$data['id'].'/exams/'.$data['exams'][2]['id'].'/start')->assertOk();
+        $this->postOrderJson('/api/v1/laboratory-orders/'.$data['id'].'/exams/'.$data['exams'][2]['id'].'/start')->assertOk();
         $this->patchJson('/api/v1/laboratory-orders/'.$data['id'].'/status', ['status' => 'in_process'])->assertOk();
     }
 
@@ -131,7 +142,7 @@ class AtomicOrderCompositionTest extends TestCase
     {
         [$exam, $version] = $this->publishedExam(true);
 
-        $data = $this->postJson('/api/v1/laboratory-orders', $this->header + [
+        $data = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
             'exams' => $this->selections($exam, 3),
             'discount' => ['type' => 'percentage', 'value' => 10],
         ])->assertCreated()
@@ -163,7 +174,7 @@ class AtomicOrderCompositionTest extends TestCase
 
     public function test_creation_preserves_discount_intent_on_empty_order_and_clamps_amount_to_subtotal(): void
     {
-        $empty = $this->postJson('/api/v1/laboratory-orders', $this->header + [
+        $empty = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
             'discount' => ['type' => 'amount', 'value' => '100'],
         ])->assertCreated()
             ->assertJsonPath('data.exams', [])
@@ -175,7 +186,7 @@ class AtomicOrderCompositionTest extends TestCase
             ->json('data');
 
         [$exam] = $this->publishedExam();
-        $limited = $this->postJson('/api/v1/laboratory-orders', $this->header + [
+        $limited = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
             'exams' => $this->selections($exam),
             'discount' => ['type' => 'amount', 'value' => '100.00'],
         ])->assertCreated()
@@ -196,24 +207,24 @@ class AtomicOrderCompositionTest extends TestCase
         $this->assignDirectLaboratoryPermission($user, $this->lab, 'orders.create');
         $this->actingAs($user);
 
-        $this->postJson('/api/v1/laboratory-orders', $this->header)->assertCreated();
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header)->assertCreated();
         $orderCount = LaboratoryOrder::count();
         $auditCount = AuditLog::count();
 
-        $this->postJson('/api/v1/laboratory-orders', $this->header + [
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
             'discount' => ['type' => 'percentage', 'value' => '10.00'],
         ])->assertForbidden();
         $this->assertSame($orderCount, LaboratoryOrder::count());
         $this->assertSame($auditCount, AuditLog::count());
 
         $this->assignDirectLaboratoryPermission($user, $this->lab, 'orders.manage_discount');
-        $this->postJson('/api/v1/laboratory-orders', $this->header + [
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
             'discount' => ['type' => 'percentage', 'value' => '10.00'],
         ])->assertCreated();
         $orderCount = LaboratoryOrder::count();
         $auditCount = AuditLog::count();
 
-        $this->postJson('/api/v1/laboratory-orders', $this->header + [
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
             'exams' => $this->selections($exam),
             'discount' => ['type' => 'percentage', 'value' => '10.00'],
         ])->assertForbidden();
@@ -226,7 +237,7 @@ class AtomicOrderCompositionTest extends TestCase
     {
         $auditCount = AuditLog::count();
 
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['discount' => $discount])
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['discount' => $discount])
             ->assertUnprocessable()
             ->assertJsonValidationErrors($errorFields);
 
@@ -264,7 +275,7 @@ class AtomicOrderCompositionTest extends TestCase
         $this->withoutExceptionHandling();
 
         try {
-            $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
                 'exams' => $this->selections($exam, 2),
                 'discount' => ['type' => 'amount', 'value' => '10.00'],
             ]);
@@ -293,7 +304,7 @@ class AtomicOrderCompositionTest extends TestCase
         $this->withoutExceptionHandling();
 
         try {
-            $this->postJson('/api/v1/laboratory-orders', $this->header + [
+            $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
                 'exams' => $this->selections($exam),
                 'discount' => ['type' => 'percentage', 'value' => '10.00'],
             ]);
@@ -313,7 +324,7 @@ class AtomicOrderCompositionTest extends TestCase
     public function test_embedded_discount_recalculates_after_composition_changes_and_standalone_endpoints_remain_compatible(): void
     {
         [$exam, $version] = $this->publishedExam();
-        $data = $this->postJson('/api/v1/laboratory-orders', $this->header + [
+        $data = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
             'exams' => $this->selections($exam, 2),
             'discount' => ['type' => 'amount', 'value' => '30.00'],
         ])->assertCreated()->json('data');
@@ -324,7 +335,7 @@ class AtomicOrderCompositionTest extends TestCase
             ->sole();
         $price->update(['price' => '40.00']);
 
-        $this->postJson('/api/v1/laboratory-orders/'.$data['id'].'/exams', ['laboratory_exam_id' => $exam->id])
+        $this->postOrderJson('/api/v1/laboratory-orders/'.$data['id'].'/exams', ['laboratory_exam_id' => $exam->id])
             ->assertCreated()
             ->assertJsonPath('data.unit_price', '40.00')
             ->assertJsonPath('data.clinical_version_id', $version->id);
@@ -345,10 +356,10 @@ class AtomicOrderCompositionTest extends TestCase
     public function test_fifty_lines_are_allowed_and_fifty_one_roll_back_before_writing(): void
     {
         [$exam] = $this->publishedExam();
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam, 50)])
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam, 50)])
             ->assertCreated()->assertJsonCount(50, 'data.exams')->assertJsonPath('data.total', '1250.00');
         $auditCount = AuditLog::count();
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam, 51)])
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam, 51)])
             ->assertUnprocessable()->assertJsonValidationErrors('exams');
         $this->assertDatabaseCount('laboratory_orders', 1);
         $this->assertDatabaseCount('laboratory_order_exams', 50);
@@ -358,7 +369,7 @@ class AtomicOrderCompositionTest extends TestCase
     #[DataProvider('invalidExams')]
     public function test_invalid_exam_structure_is_rejected_without_writes(mixed $exams): void
     {
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $exams])->assertUnprocessable();
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $exams])->assertUnprocessable();
         $this->assertDatabaseCount('laboratory_orders', 0);
         $this->assertDatabaseCount('audit_logs', 0);
     }
@@ -374,24 +385,24 @@ class AtomicOrderCompositionTest extends TestCase
         $user = $this->createLaboratoryMember($this->lab);
         $this->assignDirectLaboratoryPermission($user, $this->lab, 'orders.create');
         $this->actingAs($user);
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => []])->assertCreated();
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => []])->assertCreated();
         $auditCount = AuditLog::count();
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertForbidden();
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertForbidden();
         $this->assertDatabaseCount('laboratory_order_exams', 0);
         $this->assertSame($auditCount, AuditLog::count());
         $this->assignDirectLaboratoryPermission($user, $this->lab, 'orders.add_exam');
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated();
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated();
     }
 
     public function test_new_catalog_exam_without_publication_is_not_a_legacy_bypass(): void
     {
         $exam = LaboratoryExam::factory()->for($this->lab)->create(['status' => 'active']);
         PriceListExam::factory()->for($this->lab)->create(['price_list_id' => $this->prices->id, 'laboratory_exam_id' => $exam->id, 'status' => 'active']);
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])
             ->assertConflict()->assertJsonPath('code', 'clinical_exam_unavailable');
         $this->assertDatabaseCount('laboratory_orders', 0);
         $order = LaboratoryOrder::factory()->for($this->lab)->create(['price_list_id' => $this->prices->id, 'currency' => 'GTQ']);
-        $this->postJson('/api/v1/laboratory-orders/'.$order->id.'/exams', ['laboratory_exam_id' => $exam->id])->assertConflict();
+        $this->postOrderJson('/api/v1/laboratory-orders/'.$order->id.'/exams', ['laboratory_exam_id' => $exam->id])->assertConflict();
         $this->assertDatabaseCount('laboratory_order_exams', 0);
     }
 
@@ -409,6 +420,10 @@ class AtomicOrderCompositionTest extends TestCase
         $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
         $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $orderPolicy = require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php');
+        $orderPolicy->down();
+        $signatures = require database_path('migrations/2026_11_02_000003_add_authorized_validation_signatures.php');
+        $signatures->down();
         $reportExceptions->down();
         $exceptionEvidence->down();
         $replacementEvidence->down();
@@ -436,10 +451,12 @@ class AtomicOrderCompositionTest extends TestCase
         $replacementEvidence->up();
         $exceptionEvidence->up();
         $reportExceptions->up();
+        $signatures->up();
+        $orderPolicy->up();
         $this->assertDatabaseHas('laboratory_order_legacy_exams', ['laboratory_exam_id' => $legacy->id]);
         $this->assertDatabaseMissing('laboratory_order_legacy_exams', ['laboratory_exam_id' => $enrolled->id]);
         PriceListExam::factory()->for($this->lab)->create(['price_list_id' => $this->prices->id, 'laboratory_exam_id' => $legacy->id, 'status' => 'active']);
-        $data = $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($legacy)])
+        $data = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($legacy)])
             ->assertCreated()->assertJsonPath('data.exams.0.clinical_version_id', null)
             ->assertJsonPath('data.exams.0.clinical_configuration_source', 'legacy_compatibility')->json('data');
         $this->patchJson('/api/v1/laboratory-orders/'.$data['id'].'/status', ['status' => 'in_process'])
@@ -472,6 +489,10 @@ class AtomicOrderCompositionTest extends TestCase
         $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
         $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $orderPolicy = require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php');
+        $orderPolicy->down();
+        $signatures = require database_path('migrations/2026_11_02_000003_add_authorized_validation_signatures.php');
+        $signatures->down();
         $reportExceptions->down();
         $exceptionEvidence->down();
         $replacementEvidence->down();
@@ -507,6 +528,8 @@ class AtomicOrderCompositionTest extends TestCase
         $replacementEvidence->up();
         $exceptionEvidence->up();
         $reportExceptions->up();
+        $signatures->up();
+        $orderPolicy->up();
 
         $this->assertSame($beforeOrder, array_intersect_key($order->refresh()->getRawOriginal(), $beforeOrder));
         $this->assertSame($beforeExam, $exam->refresh()->getRawOriginal());
@@ -531,6 +554,10 @@ class AtomicOrderCompositionTest extends TestCase
         $replacementEvidence = require database_path('migrations/2026_10_29_000001_add_clinical_replacement_evidence.php');
         $exceptionEvidence = require database_path('migrations/2026_10_29_150442_add_clinical_exception_evidence_reviews.php');
         $reportExceptions = require database_path('migrations/2026_10_29_164459_version_clinical_report_exception_snapshots.php');
+        $orderPolicy = require database_path('migrations/2026_11_06_000001_preserve_order_delivery_policy.php');
+        $orderPolicy->down();
+        $signatures = require database_path('migrations/2026_11_02_000003_add_authorized_validation_signatures.php');
+        $signatures->down();
         $reportExceptions->down();
         $exceptionEvidence->down();
         $replacementEvidence->down();
@@ -556,15 +583,17 @@ class AtomicOrderCompositionTest extends TestCase
         $replacementEvidence->up();
         $exceptionEvidence->up();
         $reportExceptions->up();
+        $signatures->up();
+        $orderPolicy->up();
         PriceListExam::factory()->for($this->lab)->create(['price_list_id' => $this->prices->id, 'laboratory_exam_id' => $legacy->id, 'status' => 'active']);
-        $orderId = $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($legacy)])->assertCreated()->json('data.id');
+        $orderId = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($legacy)])->assertCreated()->json('data.id');
         $old = LaboratoryOrderExam::sole()->getRawOriginal();
         $service = app(ClinicalExamService::class);
         $draft = $service->fork($this->lab, $this->actor, $legacy->id, null);
         $configuration = $draft->configuration + ['sample_mode' => 'none', 'parameters' => [['code' => 'OBS', 'name' => 'Observation', 'type' => 'text']]];
         $draft = $service->update($this->lab, $this->actor, $legacy->id, $draft->id, 1, $configuration);
         $version = $service->publish($this->lab, $this->actor, $legacy->id, $draft->id, $draft->revision);
-        $this->postJson('/api/v1/laboratory-orders/'.$orderId.'/exams', ['laboratory_exam_id' => $legacy->id])->assertCreated()
+        $this->postOrderJson('/api/v1/laboratory-orders/'.$orderId.'/exams', ['laboratory_exam_id' => $legacy->id])->assertCreated()
             ->assertJsonPath('data.clinical_version_id', $version->id)->assertJsonPath('data.clinical_configuration_source', 'published_version');
         $this->assertSame($old, LaboratoryOrderExam::findOrFail($old['id'])->getRawOriginal());
     }
@@ -572,7 +601,7 @@ class AtomicOrderCompositionTest extends TestCase
     public function test_delete_removes_only_its_pending_requirements_and_audits_origin(): void
     {
         [$exam, $version] = $this->publishedExam(true);
-        $data = $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam, 2)])->assertCreated()->json('data');
+        $data = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam, 2)])->assertCreated()->json('data');
         $first = $data['exams'][0];
         $this->deleteJson('/api/v1/laboratory-orders/'.$data['id'].'/exams/'.$first['id'])->assertNoContent();
         $this->assertDatabaseCount('laboratory_order_exams', 1);
@@ -586,7 +615,7 @@ class AtomicOrderCompositionTest extends TestCase
     public function test_activity_prevents_delete_and_cannot_be_erased_by_sql(): void
     {
         [$exam] = $this->publishedExam(true);
-        $data = $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated()->json('data');
+        $data = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated()->json('data');
         $requirement = LaboratoryOrderSampleRequirement::orderBy('id')->firstOrFail();
         $requirement->update(['clinical_activity_started_at' => now()]);
         $this->deleteJson('/api/v1/laboratory-orders/'.$data['id'].'/exams/'.$data['exams'][0]['id'])
@@ -599,7 +628,7 @@ class AtomicOrderCompositionTest extends TestCase
     public function test_physical_pending_requirements_do_not_satisfy_start(): void
     {
         [$exam] = $this->publishedExam(true);
-        $id = $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated()->json('data.id');
+        $id = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated()->json('data.id');
         $before = AuditLog::count();
         $this->patchJson('/api/v1/laboratory-orders/'.$id.'/status', ['status' => 'in_process'])->assertConflict();
         $this->assertSame('pending', LaboratoryOrder::findOrFail($id)->status);
@@ -609,7 +638,7 @@ class AtomicOrderCompositionTest extends TestCase
     public function test_later_publication_preserves_line_and_requirement_history(): void
     {
         [$exam, $version] = $this->publishedExam(true);
-        $id = $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated()->json('data.id');
+        $id = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated()->json('data.id');
         $before = $this->getJson('/api/v1/laboratory-orders/'.$id.'/exams')->assertOk()->json('data');
         $service = app(ClinicalExamService::class);
         $next = $service->fork($this->lab, $this->actor, $exam->id, $version->id);
@@ -625,7 +654,7 @@ class AtomicOrderCompositionTest extends TestCase
     {
         [$exam] = $this->publishedExam(true);
         $auditCount = AuditLog::count();
-        $this->postJson('/api/v1/laboratory-orders', $this->header + [
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + [
             'exams' => [...$this->selections($exam), ['laboratory_exam_id' => PHP_INT_MAX]],
             'discount' => ['type' => 'percentage', 'value' => '10.00'],
         ])
@@ -647,7 +676,7 @@ class AtomicOrderCompositionTest extends TestCase
         });
         $this->withoutExceptionHandling();
         try {
-            $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)]);
+            $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)]);
             $this->fail('Audit failure must abort creation.');
         } catch (RuntimeException $exception) {
             $this->assertSame('audit failure', $exception->getMessage());
@@ -663,7 +692,7 @@ class AtomicOrderCompositionTest extends TestCase
     public function test_foreign_exam_is_neutral_and_does_not_leave_header(): void
     {
         $foreign = LaboratoryExam::factory()->orderable()->create();
-        $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($foreign)])
+        $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($foreign)])
             ->assertUnprocessable()->assertJsonValidationErrors('exams.0.laboratory_exam_id');
         $this->assertDatabaseCount('laboratory_orders', 0);
     }
@@ -671,7 +700,7 @@ class AtomicOrderCompositionTest extends TestCase
     public function test_sql_rejects_draft_foreign_version_null_bypass_and_snapshot_rewrite(): void
     {
         [$exam] = $this->publishedExam(true);
-        $data = $this->postJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated()->json('data');
+        $data = $this->postOrderJson('/api/v1/laboratory-orders', $this->header + ['exams' => $this->selections($exam)])->assertCreated()->json('data');
         $line = LaboratoryOrderExam::sole();
         $draft = app(ClinicalExamService::class)->fork($this->lab, $this->actor, $exam->id, $line->clinical_version_id);
         $attributes = $line->getRawOriginal();

@@ -3,12 +3,21 @@
 namespace Tests\Feature\ReportDelivery;
 
 use App\ClinicalReports\ClinicalReportService;
+use App\Models\LaboratoryOrder;
 use App\ReportDelivery\ReportDeliveryService;
 use Tests\Feature\ClinicalReports\ClinicalReportScenario;
+use Tests\Support\HistoricalOrderFixture;
 
 trait ReportDeliveryScenario
 {
     use ClinicalReportScenario;
+
+    protected function makeScenarioOrder($lab, $prices): LaboratoryOrder
+    {
+        return HistoricalOrderFixture::create(fn () => LaboratoryOrder::factory()->for($lab)->create([
+            'price_list_id' => $prices->id, 'currency' => 'GTQ', 'status' => 'pending', 'delivery_policy_snapshot' => null,
+        ]));
+    }
 
     protected function issued(): array
     {

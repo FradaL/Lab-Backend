@@ -12,6 +12,7 @@ use App\Models\PriceList;
 use App\Models\PriceListExam;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -21,6 +22,12 @@ use Throwable;
 final class OrderCompositionConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     #[DataProvider('writers')]
     public function test_add_waits_for_catalog_writer_and_uses_only_committed_state(string $writer): void

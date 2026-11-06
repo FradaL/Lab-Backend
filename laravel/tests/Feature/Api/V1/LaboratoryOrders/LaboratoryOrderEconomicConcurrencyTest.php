@@ -11,6 +11,7 @@ use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 use Throwable;
@@ -18,6 +19,12 @@ use Throwable;
 final class LaboratoryOrderEconomicConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     public function test_concurrent_deletes_of_different_lines_leave_consistent_economics(): void
     {

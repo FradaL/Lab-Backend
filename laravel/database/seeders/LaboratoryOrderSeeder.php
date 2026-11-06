@@ -4,6 +4,8 @@ namespace Database\Seeders;
 
 use App\Actions\LaboratoryOrders\CreateLaboratoryOrder;
 use App\Actions\LaboratoryOrders\SetLaboratoryOrderDiscount;
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
 use App\Models\Branch;
 use App\Models\CommercialClient;
 use App\Models\CommercialClientPriceList;
@@ -13,9 +15,11 @@ use App\Models\LaboratoryExam;
 use App\Models\LaboratoryOrder;
 use App\Models\Patient;
 use App\Models\PriceList;
+use App\Models\ReportDeliveryPolicy;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 use LogicException;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -31,6 +35,28 @@ class LaboratoryOrderSeeder extends Seeder
                 $lab = DemoDataset::owned(Laboratory::class, ['nit' => '000000000001']);
                 $actor = DemoDataset::owned(User::class, ['email' => 'reception@donqerlab.test']);
                 setPermissionsTeamId($lab->id);
+                $policyActor = DemoDataset::owned(User::class, ['email' => 'admin@donqerlab.test']);
+                if (! ReportDeliveryPolicy::forLaboratory($lab)->exists()) {
+                    DemoDataset::assertOwned($lab);
+                    DemoDataset::assertOwned($policyActor);
+                    DemoDataset::create(ReportDeliveryPolicy::class, ['laboratory_id' => $lab->id], factory: function () use ($lab, $policyActor) {
+                        $configuredAt = now();
+                        $policy = ReportDeliveryPolicy::create(['laboratory_id' => $lab->id, 'revision' => 1,
+                            'mode' => 'full_payment_required', 'updated_by' => $policyActor->id, 'updated_at' => $configuredAt]);
+                        DB::table('report_delivery_policy_changes')->insert([
+                            'laboratory_id' => $lab->id, 'revision' => 1, 'previous_revision' => 0,
+                            'previous_mode' => 'full_payment_required', 'new_mode' => 'full_payment_required',
+                            'reason' => DemoDataset::DISCLAIMER.' Selección explícita sintética del seeder.',
+                            'changed_by' => $policyActor->id, 'changed_at' => $configuredAt->format('Y-m-d H:i:s.uP'),
+                        ]);
+                        app(AuditWriter::class)->record($lab, $policyActor, new AuditEvent('order_report.delivery_policy_changed', 'laboratory', $lab->id,
+                            oldValues: ['revision' => 0, 'mode' => 'full_payment_required'],
+                            newValues: ['revision' => 1, 'mode' => 'full_payment_required'],
+                            metadata: ['reason' => DemoDataset::DISCLAIMER, 'synthetic_dataset' => DemoDataset::KEY]));
+
+                        return $policy;
+                    });
+                }
                 $actor->unsetRelation('roles')->unsetRelation('permissions');
                 foreach ($this->orders() as $index => $definition) {
                     DemoDataset::remember('order_scenario', sprintf('order-%02d', $index + 1),

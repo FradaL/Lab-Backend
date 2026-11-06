@@ -15,6 +15,7 @@ use App\Models\PriceList;
 use App\Models\PriceListExam;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -23,6 +24,12 @@ use Throwable;
 final class LaboratoryOrderDiscountConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     protected function tearDown(): void
     {

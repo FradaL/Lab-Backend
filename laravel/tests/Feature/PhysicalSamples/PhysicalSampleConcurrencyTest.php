@@ -17,6 +17,7 @@ use App\Models\PriceList;
 use App\Models\PriceListExam;
 use App\Models\SampleType;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -25,6 +26,12 @@ use Throwable;
 class PhysicalSampleConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     #[DataProvider('races')]
     public function test_independent_connections_serialize_sample_operations(string $writer, string $reader, string $expected): void

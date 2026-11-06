@@ -9,6 +9,7 @@ use App\ClinicalResults\LaboratoryResultService;
 use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderResult;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -19,6 +20,12 @@ class ClinicalResultConcurrencyTest extends TestCase
 {
     use ClinicalResultScenario;
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     #[DataProvider('races')]
     public function test_independent_connections_preserve_revision_state_and_fixed_version(string $writer, bool $rollback, string $expected): void

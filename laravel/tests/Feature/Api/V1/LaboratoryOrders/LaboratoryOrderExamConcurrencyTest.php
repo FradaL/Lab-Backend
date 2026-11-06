@@ -10,6 +10,7 @@ use App\Models\LaboratoryOrder;
 use App\Models\PriceList;
 use App\Models\PriceListExam;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -18,6 +19,12 @@ use Throwable;
 final class LaboratoryOrderExamConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     public function test_status_transition_and_add_serialize_on_the_same_order_lock(): void
     {

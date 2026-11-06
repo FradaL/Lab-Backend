@@ -10,6 +10,7 @@ use App\Models\LaboratoryOrder;
 use App\Models\LaboratoryOrderExam;
 use App\Models\PriceList;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -19,6 +20,12 @@ use Throwable;
 final class LaboratoryOrderExamDestroyConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     public function test_status_transition_and_delete_serialize_on_the_same_order_lock(): void
     {
