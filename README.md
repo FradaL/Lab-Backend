@@ -1,5 +1,9 @@
 # Donqer Lab Backend
 
+## Política de pago conservada por orden — BE-D02-03, 2026-11-06
+
+La creación guarda la política explícita del laboratorio y su procedencia en un snapshot inmutable, dentro de la transacción de cabecera, líneas y descuento. Creación, detalle y listado devuelven `delivery_policy`; las órdenes anteriores permanecen con null. Sin selección explícita se devuelve 409; una procedencia inconsistente devuelve 503, sin crear una orden parcial. [Migración, evidencia, pruebas y límites de integración financiera/entrega](docs/sprint-2/BE-D02-03-politica-conservada-orden.md). La migración se verifica únicamente en PostgreSQL aislado en esta entrega; su aplicación en otros entornos requiere preflight.
+
 Backend SaaS para laboratorios clínicos Donqer Lab. Incluye Laravel, PostgreSQL, Laradock, autenticación SPA con Sanctum y módulos tenant-aware de pacientes y médicos. Spatie Laravel Permission está preparado para una etapa posterior.
 
 ## BE-D02-04 — Permisos de Caja (implementación local, 2026-11-05)
