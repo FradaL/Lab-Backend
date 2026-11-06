@@ -21,6 +21,7 @@ use App\Models\PriceList;
 use App\Models\PriceListExam;
 use App\Models\Subscription;
 use App\Models\User;
+use App\ReportDelivery\ReportDeliveryPolicyService;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
@@ -55,6 +56,7 @@ final class LaboratoryValidationSeeder extends Seeder
                         }
                         $plan = DemoDataset::owned(Plan::class, ['code' => 'DEMO']);
                         DemoDataset::create(Subscription::class, ['laboratory_id' => $lab->id, 'plan_id' => $plan->id, 'starts_at' => '2026-01-01 00:00:00'], ['status' => 'active', 'ends_at' => null]);
+                        app(ReportDeliveryPolicyService::class)->update($lab, $admin, ['revision' => 0, 'mode' => 'full_payment_required', 'reason' => DemoDataset::DISCLAIMER.' Política explícita del dataset.']);
                         $branch = DemoDataset::create(Branch::class, ['laboratory_id' => $lab->id, 'code' => 'BE07'], ['name' => 'FICTICIO', 'status' => 'active', 'is_main' => true]);
                         $patient = DemoDataset::create(Patient::class, ['laboratory_id' => $lab->id, 'affiliation_number' => 'BE07'], ['first_names' => 'FICTICIO', 'last_names' => 'DEMO', 'birth_date' => '2000-01-01', 'status' => 'active']);
                         $area = DemoDataset::create(LaboratoryArea::class, ['laboratory_id' => $lab->id, 'code' => 'BE07'], ['name' => 'FICTICIO', 'status' => 'active']);

@@ -39,7 +39,7 @@ final class LaboratoryReportDeliveryEvidenceSeeder extends Seeder
                     $freeActor = DemoDataset::owned(User::class, ['email' => 'be091-manager@donqerlab.test']);
                     setPermissionsTeamId($freeLab->id);
                     app(ReportDeliveryPolicyService::class)->update($freeLab, $freeActor, [
-                        'revision' => 0, 'mode' => 'unrestricted', 'reason' => DemoDataset::DISCLAIMER,
+                        'revision' => 1, 'mode' => 'unrestricted', 'reason' => DemoDataset::DISCLAIMER,
                     ]);
 
                     $lab = DemoDataset::create(Laboratory::class, ['nit' => 'DEMO-BE092-1'], [

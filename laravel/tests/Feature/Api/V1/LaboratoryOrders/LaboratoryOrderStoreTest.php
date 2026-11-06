@@ -11,6 +11,7 @@ use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\Patient;
 use App\Models\PriceList;
+use App\Models\ReportDeliveryPolicy;
 use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Database\Events\QueryExecuted;
@@ -59,7 +60,7 @@ final class LaboratoryOrderStoreTest extends TestCase
         $this->assertLessThanOrEqual(45, strlen($order->code));
 
         $this->assertSame([
-            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'notes', 'patient', 'doctor',
+            'id', 'code', 'ordered_at', 'status', 'clinical_revision', 'delivery_policy', 'notes', 'patient', 'doctor',
             'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type',
             'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by',
             'created_at', 'updated_at', 'exams',
@@ -465,10 +466,10 @@ final class LaboratoryOrderStoreTest extends TestCase
         )));
 
         $this->assertSame('3.1.0', $document['openapi']);
-        $this->assertSame(186, $operationCount);
+        $this->assertSame(193, $operationCount);
         // The test bootstrap omits Laravel's generated storage route; the real
         // CLI inventory is asserted separately and contains one additional route.
-        $this->assertCount(194, Route::getRoutes()->getRoutes());
+        $this->assertCount(201, Route::getRoutes()->getRoutes());
         $this->assertSame([
             'branch_id', 'patient_id', 'doctor_id', 'commercial_client_id',
             'price_list_id', 'ordered_at', 'notes',
@@ -493,7 +494,7 @@ final class LaboratoryOrderStoreTest extends TestCase
         $this->assertStringContainsString('Monto monetario resultante', $orderOutput['properties']['discount']['description']);
         $this->assertSame('#/components/schemas/CreateLaboratoryOrderInput', $operation['requestBody']['content']['application/json']['schema']['$ref']);
         $this->assertSame('#/components/schemas/LaboratoryOrderCreationResponse', $operation['responses']['201']['content']['application/json']['schema']['$ref']);
-        $this->assertSame([201, 400, 401, 403, 409, 422], array_keys($operation['responses']));
+        $this->assertSame([201, 400, 401, 403, 409, 503, 422], array_keys($operation['responses']));
     }
 
     /** @return array{User, Laboratory, Branch, Patient, Doctor, CommercialClient, PriceList} */
@@ -508,6 +509,7 @@ final class LaboratoryOrderStoreTest extends TestCase
             'trial_ends_at' => null,
         ]);
         $this->assignAllOrderPermissions($user, $laboratory);
+        ReportDeliveryPolicy::factory()->for($laboratory)->create();
 
         return [
             $user,

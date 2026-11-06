@@ -225,14 +225,30 @@ use OpenApi\Attributes as OA;
     type: 'object',
 )]
 #[OA\Schema(
+    schema: 'OrderDeliveryPolicySnapshot',
+    description: 'Política original inmutable capturada por el servidor. Null en órdenes anteriores sin procedencia conocida.',
+    required: ['mode', 'source_revision', 'source', 'configured_by', 'configured_at', 'captured_at'],
+    properties: [
+        new OA\Property(property: 'mode', type: 'string', enum: ['unrestricted', 'full_payment_required', 'payment_or_credit']),
+        new OA\Property(property: 'source_revision', type: 'integer', minimum: 1),
+        new OA\Property(property: 'source', type: 'string', enum: ['configured']),
+        new OA\Property(property: 'configured_by', type: 'integer', format: 'int64'),
+        new OA\Property(property: 'configured_at', type: 'string', format: 'date-time'),
+        new OA\Property(property: 'captured_at', type: 'string', format: 'date-time'),
+    ],
+    type: 'object',
+    additionalProperties: false,
+)]
+#[OA\Schema(
     schema: 'LaboratoryOrderListItem',
-    required: ['id', 'code', 'ordered_at', 'status', 'branch', 'patient', 'doctor', 'commercial_client', 'exam_count', 'currency', 'total', 'created_by'],
+    required: ['id', 'code', 'ordered_at', 'status', 'delivery_policy', 'branch', 'patient', 'doctor', 'commercial_client', 'exam_count', 'currency', 'total', 'created_by'],
     properties: [
         new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 123),
         new OA\Property(property: 'code', type: 'string', maxLength: 45, pattern: '^ORD-[0-9A-HJKMNP-TV-Z]{26}$', example: 'ORD-01K6PW1VC7QFM4R6FY0WYQ0B6W'),
         new OA\Property(property: 'ordered_at', type: 'string', example: '2026-10-03 14:30:00'),
         new OA\Property(property: 'status', type: 'string', enum: ['pending', 'in_process', 'completed', 'cancelled'], example: 'pending'),
         new OA\Property(property: 'clinical_revision', type: 'integer', minimum: 0),
+        new OA\Property(property: 'delivery_policy', oneOf: [new OA\Schema(ref: '#/components/schemas/OrderDeliveryPolicySnapshot'), new OA\Schema(type: 'null')]),
         new OA\Property(property: 'clinical_finalization', type: ['object', 'null'], properties: [new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'finalized_by', type: 'integer'), new OA\Property(property: 'finalized_at', type: 'string', format: 'date-time')]),
         new OA\Property(property: 'branch', ref: '#/components/schemas/LaboratoryOrderBranch'),
         new OA\Property(property: 'patient', ref: '#/components/schemas/LaboratoryOrderPatient'),
@@ -279,13 +295,14 @@ use OpenApi\Attributes as OA;
 )]
 #[OA\Schema(
     schema: 'LaboratoryOrder',
-    required: ['id', 'code', 'ordered_at', 'status', 'notes', 'patient', 'doctor', 'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type', 'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at'],
+    required: ['id', 'code', 'ordered_at', 'status', 'delivery_policy', 'notes', 'patient', 'doctor', 'commercial_client', 'price_list', 'branch', 'subtotal', 'discount_type', 'discount_value', 'discount', 'taxes', 'total', 'currency', 'created_by', 'created_at', 'updated_at'],
     properties: [
         new OA\Property(property: 'id', type: 'integer', format: 'int64', example: 123),
         new OA\Property(property: 'code', type: 'string', maxLength: 45, pattern: '^ORD-[0-9A-HJKMNP-TV-Z]{26}$', example: 'ORD-01K6PW1VC7QFM4R6FY0WYQ0B6W'),
         new OA\Property(property: 'ordered_at', type: 'string', example: '2026-10-03 14:30:00'),
         new OA\Property(property: 'status', type: 'string', enum: ['pending', 'in_process', 'completed', 'cancelled'], example: 'pending'),
         new OA\Property(property: 'clinical_revision', type: 'integer', minimum: 0),
+        new OA\Property(property: 'delivery_policy', oneOf: [new OA\Schema(ref: '#/components/schemas/OrderDeliveryPolicySnapshot'), new OA\Schema(type: 'null')]),
         new OA\Property(property: 'clinical_finalization', type: ['object', 'null'], properties: [new OA\Property(property: 'id', type: 'integer'), new OA\Property(property: 'finalized_by', type: 'integer'), new OA\Property(property: 'finalized_at', type: 'string', format: 'date-time')]),
         new OA\Property(property: 'notes', type: ['string', 'null'], example: 'Observaciones opcionales'),
         new OA\Property(property: 'patient', ref: '#/components/schemas/LaboratoryOrderPatient'),
