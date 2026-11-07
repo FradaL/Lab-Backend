@@ -1,5 +1,12 @@
 # Donqer Lab Backend
 
+## Integración de anulaciones y devoluciones — 2026-11-06
+
+Resolución de conflictos entre `f75c844` (BE11) y `0890873` (`develop`, BE12), conservando las dos rutas, validaciones, evidencia y auditoría. Se corrige también la incompatibilidad de las migraciones: soporte SQL compartido y migración correctiva `000004` para bases con las originales ejecutadas. Regresión final: 807 casos / 5.162 aserciones, 806 satisfactorios y 1 omisión previa, cero fallos/errores. [Cambios, pruebas y activación](docs/sprint-2/BE-D02-11-12-integracion-migraciones.md). Sin aplicación a la base habitual, commit, push ni despliegue. Los apartados inferiores conservan sus cortes anteriores.
+
+## Anulaciones BE-D02-11 — 2026-11-06
+
+[Implementación local, migración, pruebas y límites](docs/sprint-2/BE-D02-11-anulaciones-trazables.md), sobre `105d1f1` más cambios sin commit. Anulación completa e idempotente con `payments.void`, cobro original inmutable, motivo y auditoría/revisión atómicas; bloqueo del neto negativo. No genera devoluciones ni integra entrega. Requiere migración adicional en el entorno que adopte el cambio; sin aplicación a la base habitual, Trello ni despliegue. Los cortes anteriores se conservan.
 ## Devoluciones manuales de excedente — BE-D02-12, 2026-11-06
 
 Implementación local en `7fd3aab`: `POST /api/v1/laboratory-orders/{order}/refunds`, con `payments.refund`, monto positivo limitado al excedente actual, motivo/medio/referencia, actor/fecha del servidor, idempotencia y auditoría/revisión atómicas. Migración aditiva con guardas PostgreSQL y resumen BE06 actualizado por los movimientos confirmados. [Contrato, pruebas, activación y límites](docs/sprint-2/BE-D02-12-devoluciones-excedente.md). Sin aplicación de migraciones a la base habitual, frontend, cambios de Trello, push ni despliegue; anulación, crédito e integración de entrega conservan sus tareas. Los cortes inferiores se preservan.

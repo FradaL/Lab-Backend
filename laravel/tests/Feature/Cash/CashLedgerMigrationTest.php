@@ -24,12 +24,14 @@ class CashLedgerMigrationTest extends TestCase
     public function test_activation_preserves_existing_snapshot_order_without_inventing_financial_context(): void
     {
         $migration = require database_path('migrations/2026_11_06_000002_create_order_cash_ledger.php');
+        (require database_path('migrations/2026_11_06_000003_enable_order_payment_voids.php'))->down();
         (require database_path('migrations/2026_11_06_000003_enable_order_cash_refunds.php'))->down();
         $migration->down();
         $order = LaboratoryOrder::factory()->create(['total' => '80.00', 'subtotal' => '80.00']);
         $before = $order->fresh()->getAttributes();
         $migration->up();
         (require database_path('migrations/2026_11_06_000003_enable_order_cash_refunds.php'))->up();
+        (require database_path('migrations/2026_11_06_000003_enable_order_payment_voids.php'))->up();
         $this->assertSame($before, $order->fresh()->getAttributes());
         $this->assertDatabaseCount('laboratory_order_financial_states', 0);
         $this->assertDatabaseCount('laboratory_order_financial_revisions', 0);

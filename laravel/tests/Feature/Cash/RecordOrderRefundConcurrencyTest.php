@@ -6,6 +6,7 @@ use App\Cash\CashAuthority;
 use App\Cash\CashLedgerProjection;
 use App\Cash\RecordOrderPayment;
 use App\Cash\RecordOrderRefund;
+use App\Cash\VoidOrderPayment;
 use App\ClinicalExams\ClinicalConflict;
 use App\Models\LaboratoryOrder;
 use App\Models\Subscription;
@@ -36,9 +37,10 @@ class RecordOrderRefundConcurrencyTest extends TestCase
         $actor = $this->createLaboratoryMember($lab);
         $this->assignDirectLaboratoryPermission($actor, $lab, CashAuthority::CREATE);
         $this->assignDirectLaboratoryPermission($actor, $lab, CashAuthority::REFUND);
+        $this->assignDirectLaboratoryPermission($actor, $lab, CashAuthority::VOID);
         setPermissionsTeamId($lab->id);
-        app(RecordOrderPayment::class)->execute($lab, $actor, $order->id,
-            ['expected_revision' => 1, 'amount' => '100.00', 'method' => 'cash'], 'ficticio-race-seed');
+        $payment = app(RecordOrderPayment::class)->execute($lab, $actor, $order->id,
+            ['expected_revision' => 1, 'amount' => '100.00', 'method' => 'cash'], 'ficticio-race-seed')['body']['data']['resource']['id'];
         $other = $scenario === 'other-order' ? LaboratoryOrder::factory()->for($lab)->create(['total' => '80.00', 'subtotal' => '80.00']) : $order;
         $initialPayments = $scenario === 'other-order' ? 2 : 1;
         if ($scenario === 'other-order') {
@@ -72,6 +74,10 @@ class RecordOrderRefundConcurrencyTest extends TestCase
                                 app(RecalculateLaboratoryOrderEconomics::class)->execute($lab, $locked, $actor);
                             });
                             $status = 'total_changed';
+                        } elseif ($scenario === 'void-change' && $index === 1) {
+                            app(VoidOrderPayment::class)->execute($lab, $actor, $order->id, $payment,
+                                ['expected_revision' => 2, 'reason' => 'Corrección ficticia concurrente'], 'ficticio-race-void-refund');
+                            $status = 'created';
                         } else {
                             $writer = $scenario === 'payment-change' && $index === 1 ? RecordOrderPayment::class : RecordOrderRefund::class;
                             $input = ['expected_revision' => 2, 'amount' => $scenario === 'different-content' && $index === 1 ? '15.00' : '20.00', 'method' => 'cash'];
@@ -119,7 +125,7 @@ class RecordOrderRefundConcurrencyTest extends TestCase
             DB::reconnect();
             $this->assertDatabaseCount('laboratory_order_cash_movements', $initialPayments + $count);
             $this->assertDatabaseCount('laboratory_order_cash_operations', $initialPayments + $count);
-            $this->assertSame($initialPayments + $count, DB::table('audit_logs')->whereIn('event', ['cash.payment_recorded', 'cash.refund_recorded'])->count());
+            $this->assertSame($initialPayments + $count, DB::table('audit_logs')->whereIn('event', ['cash.payment_recorded', 'cash.refund_recorded', 'cash.payment_voided'])->count());
             $totals = app(CashLedgerProjection::class)->totals(DB::table('laboratory_order_cash_movements')
                 ->where('laboratory_id', $lab->id)->where('laboratory_order_id', $order->id), $order->fresh()->total);
             $this->assertContains($totals['refunds'], ['0.00', '15.00', '20.00']);
@@ -142,6 +148,7 @@ class RecordOrderRefundConcurrencyTest extends TestCase
             ['other-order', ['created', 'cash_idempotency_conflict'], 1],
             ['total-change', [], 0],
             ['payment-change', ['created', 'cash_revision_conflict'], 1],
+            ['void-change', ['created', 'cash_revision_conflict'], 1],
         ];
     }
 }

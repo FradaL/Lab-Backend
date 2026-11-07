@@ -64,3 +64,7 @@ Sin frontend, transferencias bancarias, monedero, traspaso entre órdenes, conci
 | Fecha | Cambio | Fuente |
 | --- | --- | --- |
 | 2026-11-06 | Implementar registro manual de devoluciones, excedente protegido, idempotencia, auditoría y revisión; ampliar guardas SQL y contratos, con pruebas y preservación histórica. | Solicitud explícita de BE-D02-12 y autorización de commits locales en esta conversación. |
+
+## Integración posterior BE11/BE12 — 2026-11-06
+
+[Resolución de conflictos, compatibilidad SQL y pruebas conjuntas](BE-D02-11-12-integracion-migraciones.md), entre `f75c844` y `0890873`, más cambios locales. Conserva ambas operaciones y evidencia; añade migración correctiva para instalaciones previas. No aplica cambios a la base habitual ni acredita entrega de resultados. Las referencias anteriores a la otra tarea pendiente conservan su corte histórico.
