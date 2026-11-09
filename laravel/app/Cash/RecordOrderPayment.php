@@ -54,7 +54,7 @@ final class RecordOrderPayment
                 throw new ClinicalConflict('cash_revision_conflict', 'La revisión financiera cambió. Actualiza la orden antes de registrar el cobro.');
             }
             $revision = $this->financial->next($state->revision);
-            $overflow = DB::selectOne('SELECT COALESCE(SUM(amount),0) + CAST(? AS numeric) > 9999999999999999.99 AS overflow FROM laboratory_order_cash_movements WHERE laboratory_id=? AND laboratory_order_id=?', [$input['amount'], $lab->id, $orderId]);
+            $overflow = DB::selectOne("SELECT COALESCE(SUM(amount),0) + CAST(? AS numeric) > 9999999999999999.99 AS overflow FROM laboratory_order_cash_movements WHERE laboratory_id=? AND laboratory_order_id=? AND type='payment'", [$input['amount'], $lab->id, $orderId]);
             if ($overflow->overflow) {
                 throw new ClinicalConflict('cash_accumulator_overflow', 'El acumulado financiero alcanzó su límite.');
             }
