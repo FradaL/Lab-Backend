@@ -11,13 +11,8 @@ final class ReportCommercialEvaluator
 
     public function evaluate(Laboratory $lab, LaboratoryOrder $order, array $policy): array
     {
-        if ($policy['mode'] === 'unrestricted') {
-            $snapshot = (new CommercialAssessment('satisfied', 'none', 'delivery_policy', null, (string) $policy['revision']))->snapshot();
-
-            return ['eligible' => true, 'reason' => 'policy_unrestricted', 'assessment' => $snapshot];
-        }
-
         $snapshot = $this->provider->assess($lab, $order)->snapshot();
+        if ($policy['mode'] === 'unrestricted') return ['eligible' => true, 'reason' => 'policy_unrestricted', 'assessment' => $snapshot];
         $eligible = $snapshot['status'] === 'satisfied' && match ($policy['mode']) {
             'full_payment_required' => $snapshot['evidence_type'] === 'full_payment',
             'payment_or_credit' => in_array($snapshot['evidence_type'], ['full_payment', 'authorized_credit'], true),
