@@ -10,6 +10,7 @@ use App\UserAdministration\UserAdministrationConflict;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 use Throwable;
@@ -17,6 +18,12 @@ use Throwable;
 class CashAuthorizationConcurrencyTest extends TestCase
 {
     use DatabaseMigrations;
+
+    public function runDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh');
+        $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
+    }
 
     public function test_in_flight_cash_operation_reauthorizes_after_concurrent_revocation_commits(): void
     {

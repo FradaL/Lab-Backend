@@ -1,5 +1,11 @@
 # Donqer Lab Backend
 
+## Excepción comercial exclusiva — BE-D02-09, 2026-11-10
+
+[Contrato, migración, pruebas y límites](docs/sprint-2/BE-D02-09-excepcion-preparacion.md): autorización con vencimiento fijo máximo de 15 minutos, vínculo irreversible a una preparación y emisión exactas, revalidación en descarga/confirmación y consumo único. Cambios locales sobre `c91dc31`, sin commit; 57 pruebas de entrega / 240 aserciones satisfactorias en PostgreSQL desechable. La regresión ampliada conserva nueve incidencias reproducidas en el commit base, detalladas en el informe. Sin aplicación a la base habitual, frontend, Trello, push ni despliegue. Los cortes inferiores conservan su evidencia histórica.
+
+Historial: 2026-11-10, solicitud expresa del usuario; implementación y documentación por el agente. D02 1.2 y D12 1.1 conservan sus aprobaciones.
+
 ## Integración de anulaciones y devoluciones — 2026-11-06
 
 Resolución de conflictos entre `f75c844` (BE11) y `0890873` (`develop`, BE12), conservando las dos rutas, validaciones, evidencia y auditoría. Se corrige también la incompatibilidad de las migraciones: soporte SQL compartido y migración correctiva `000004` para bases con las originales ejecutadas. Regresión final: 807 casos / 5.162 aserciones, 806 satisfactorios y 1 omisión previa, cero fallos/errores. [Cambios, pruebas y activación](docs/sprint-2/BE-D02-11-12-integracion-migraciones.md). Sin aplicación a la base habitual, commit, push ni despliegue. Los apartados inferiores conservan sus cortes anteriores.

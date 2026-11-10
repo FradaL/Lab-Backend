@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\ReportDelivery;
 
+use App\Cash\AuthorizeOrderCredit;
 use App\ClinicalExams\ClinicalConflict;
 use App\ClinicalReports\ClinicalReportService;
 use App\Models\Laboratory;
@@ -9,7 +10,6 @@ use App\Models\LaboratoryOrder;
 use App\Models\ReportDelivery;
 use App\Models\Subscription;
 use App\ReportDelivery\CommercialComplianceProvider;
-use App\Cash\AuthorizeOrderCredit;
 use App\ReportDelivery\ReportDeliveryPolicyService;
 use App\ReportDelivery\ReportDeliveryService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\HistoricalOrderFixture;
 use Tests\TestCase;
 
 class ReportDeliveryTest extends TestCase
@@ -89,7 +90,7 @@ class ReportDeliveryTest extends TestCase
     public function test_historical_order_returns_unavailable_financial_evidence(): void
     {
         [$lab,$actor] = $this->issued();
-        $historical = \Tests\Support\HistoricalOrderFixture::create(fn () => LaboratoryOrder::factory()->for($lab)->create(['delivery_policy_snapshot' => null]));
+        $historical = HistoricalOrderFixture::create(fn () => LaboratoryOrder::factory()->for($lab)->create(['delivery_policy_snapshot' => null]));
         $assessment = app(CommercialComplianceProvider::class)->assess($lab, $historical);
 
         $this->assertSame('unavailable', $assessment->status);
@@ -250,7 +251,8 @@ class ReportDeliveryTest extends TestCase
 
     public function test_postgresql_rejects_policy_state_without_matching_history(): void
     {
-        [$lab,$actor] = $this->issued();
+        $lab = Laboratory::factory()->create();
+        $actor = $this->createLaboratoryMember($lab);
         try {
             DB::transaction(fn () => DB::table('report_delivery_policies')->insert([
                 'laboratory_id' => $lab->id, 'revision' => 1, 'mode' => 'unrestricted',
@@ -258,7 +260,7 @@ class ReportDeliveryTest extends TestCase
             ]));
             $this->fail('A policy without immutable history must be rejected.');
         } catch (QueryException|\PDOException $exception) {
-            $this->assertContains($exception->errorInfo[0], ['23505', '23514']);
+            $this->assertSame('23514', $exception->errorInfo[0]);
         }
         $this->assertDatabaseCount('report_delivery_policies', 0);
     }
@@ -339,5 +341,4 @@ class ReportDeliveryTest extends TestCase
             $this->assertDatabaseHas('report_delivery_exceptions', ['id' => $authorized['exception']['id'], 'status' => 'authorized', 'revision' => 2]);
         }
     }
-
 }

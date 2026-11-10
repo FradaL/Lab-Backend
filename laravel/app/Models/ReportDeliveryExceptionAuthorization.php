@@ -15,6 +15,8 @@ final class ReportDeliveryExceptionAuthorization extends Model
 
     protected $guarded = ['id'];
 
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     public function exception(): BelongsTo
     {
         return $this->belongsTo(ReportDeliveryException::class, 'exception_id');
@@ -27,6 +29,6 @@ final class ReportDeliveryExceptionAuthorization extends Model
 
     protected function casts(): array
     {
-        return ['policy_revision' => 'integer', 'evaluation_snapshot' => 'array', 'authorized_at' => 'immutable_datetime'];
+        return ['policy_revision' => 'integer', 'evaluation_snapshot' => 'array', 'authorized_at' => 'immutable_datetime', 'expires_at' => 'immutable_datetime'];
     }
 }
