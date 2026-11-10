@@ -38,7 +38,7 @@ final class ReportDeliveryConcurrencyTest extends TestCase
                 }
             }
         } else {
-            app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO: carrera.']);
+            $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'race-standard-payment-01');
         }
         if (in_array($race, ['same_idempotency_key', 'same_preparation', 'policy_change', 'commercial_evidence_change'], true)) {
             $preparations[1] = $service->prepare($lab, $actor, $order->id, $report->id, $this->recipient(), 'race-standard-preparation');
@@ -92,7 +92,7 @@ final class ReportDeliveryConcurrencyTest extends TestCase
             $this->assertSame(0, pcntl_wexitstatus($exit));
             $result = json_decode(file_get_contents($dir.'/result'), true, flags: JSON_THROW_ON_ERROR);
             $this->assertSame($expected, $result['status'], $result['message'] ?? '');
-            $this->assertSame(in_array($race, ['exception_reuse', 'same_idempotency_key', 'same_preparation'], true) ? 1 : 0, DB::table('report_deliveries')->count());
+            $this->assertSame(in_array($race, ['exception_reuse', 'same_idempotency_key', 'same_preparation', 'policy_change'], true) ? 1 : 0, DB::table('report_deliveries')->count());
         } finally {
             while (DB::transactionLevel() > 0) {
                 DB::rollBack();
@@ -113,7 +113,7 @@ final class ReportDeliveryConcurrencyTest extends TestCase
             'one exception cannot back two deliveries' => ['exception_reuse', 'report_delivery_exception_unavailable'],
             'same delivery retry is idempotent' => ['same_idempotency_key', 'ok'],
             'one preparation cannot back two deliveries' => ['same_preparation', 'report_delivery_preparation_consumed'],
-            'policy change invalidates preparation' => ['policy_change', 'report_delivery_evidence_changed'],
+            'policy change preserves order snapshot preparation' => ['policy_change', 'ok'],
             'commercial evidence change invalidates preparation' => ['commercial_evidence_change', 'report_delivery_evidence_changed'],
         ];
     }

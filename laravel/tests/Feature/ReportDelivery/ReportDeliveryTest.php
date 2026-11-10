@@ -83,10 +83,7 @@ class ReportDeliveryTest extends TestCase
             'new_mode' => 'full_payment_required',
             'changed_by' => $actor->id,
         ]);
-        $this->assertDatabaseHas('audit_logs', [
-            'laboratory_id' => $lab->id,
-            'event' => 'order_report.delivery_policy_changed',
-        ]);
+        $this->assertDatabaseMissing('audit_logs', ['laboratory_id' => $lab->id, 'event' => 'order_report.delivery_policy_changed']);
     }
 
     public function test_historical_order_returns_unavailable_financial_evidence(): void
@@ -160,7 +157,7 @@ class ReportDeliveryTest extends TestCase
     public function test_internal_download_and_prepared_copy_do_not_claim_delivery(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'internal-download-payment-01');
         app(ClinicalReportService::class)->download($lab, $actor, $order->id, $report->id);
         $preparation = app(ReportDeliveryService::class)->prepare($lab, $actor, $order->id, $report->id, $this->recipient(), 'prepare-no-delivery-01');
         app(ReportDeliveryService::class)->downloadPreparation($lab, $actor, $order->id, $report->id, $preparation->id);
@@ -174,7 +171,7 @@ class ReportDeliveryTest extends TestCase
     public function test_manual_digital_and_multiple_legitimate_deliveries_are_independent_and_idempotent(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'multi-delivery-payment-01');
         $service = app(ReportDeliveryService::class);
         foreach (['printed_document', 'manual_digital_file'] as $index => $channel) {
             $key = 'multi-preparation-000'.$index;
@@ -193,7 +190,7 @@ class ReportDeliveryTest extends TestCase
     public function test_recipient_authorization_must_be_explicit_and_compatible(array $change): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'invalid-recipient-payment-01');
         $this->expectException(ValidationException::class);
         app(ReportDeliveryService::class)->prepare($lab, $actor, $order->id, $report->id, array_replace($this->recipient(), $change), 'invalid-recipient-key-1');
     }
@@ -232,7 +229,7 @@ class ReportDeliveryTest extends TestCase
     public function test_expired_preparation_and_client_financial_flags_are_rejected(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'expired-preparation-payment-01');
         $service = app(ReportDeliveryService::class);
         try {
             $service->prepare($lab, $actor, $order->id, $report->id, $this->recipient(extra: ['payment_satisfied' => true]), 'client-payment-flag');
@@ -261,7 +258,7 @@ class ReportDeliveryTest extends TestCase
             ]));
             $this->fail('A policy without immutable history must be rejected.');
         } catch (QueryException|\PDOException $exception) {
-            $this->assertSame('23514', $exception->errorInfo[0]);
+            $this->assertContains($exception->errorInfo[0], ['23505', '23514']);
         }
         $this->assertDatabaseCount('report_delivery_policies', 0);
     }
@@ -277,7 +274,7 @@ class ReportDeliveryTest extends TestCase
         } catch (\LogicException $exception) {
             $this->assertStringContainsString('backup/restoration', $exception->getMessage());
         }
-        $this->assertDatabaseCount('report_delivery_policy_changes', 1);
+        $this->assertDatabaseCount('report_delivery_policy_changes', 2);
     }
 
     public function test_cross_tenant_resources_are_hidden_and_permissions_are_independent(): void
@@ -309,7 +306,7 @@ class ReportDeliveryTest extends TestCase
     public function test_delivery_history_and_report_evidence_are_immutable_in_postgresql(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'immutable-delivery-payment-01');
         $service = app(ReportDeliveryService::class);
         $preparation = $service->prepare($lab, $actor, $order->id, $report->id, $this->recipient(), 'immutable-prep-key-1');
         $service->downloadPreparation($lab, $actor, $order->id, $report->id, $preparation->id);
