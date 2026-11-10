@@ -193,6 +193,7 @@ final class ReportDeliveryService
                 throw new ClinicalConflict('report_delivery_exception_expired', 'La autorización comercial ya venció.');
             }
             $preparation = ReportDeliveryPreparation::create(['laboratory_id' => $lab->id, 'laboratory_order_id' => $orderId, 'report_id' => $reportId,
+                'validity_revision' => DB::table('report_validity_events')->where('report_id', $reportId)->orderByDesc('revision')->value('revision'),
                 'idempotency_hash' => $keyHash, 'request_hash' => $fingerprint, 'channel' => $input['channel'], 'recipient_snapshot' => $recipient,
                 'policy_revision' => $policy['revision'], 'policy_mode' => $policy['mode'], 'evaluation_snapshot' => $evaluation['assessment'],
                 'exception_authorization_id' => $authorization?->id, 'prepared_by' => $actor->id, 'prepared_at' => $preparedAt,
@@ -343,7 +344,7 @@ final class ReportDeliveryService
             ->where('policy_revision', $policy['revision'])
             ->where('policy_mode', $policy['mode'])
             ->where('evaluation_snapshot->fingerprint', $evaluation['assessment']['fingerprint'])
-            ->where('expires_at', '>', now())
+            ->where('expires_at', '>', now()->format('Y-m-d H:i:s.uP'))
             ->whereHas('unusedAuthorizedException');
 
         return ($write ? $query->lockForUpdate() : $query->sharedLock())->first();
@@ -369,11 +370,17 @@ final class ReportDeliveryService
         $authorization = ReportDeliveryExceptionAuthorization::forLaboratory($lab)->where('laboratory_order_id', $orderId)->where('report_id', $reportId)->whereKey($authorizationId)->lockForUpdate()->firstOrFail();
         $exception = ReportDeliveryException::forLaboratory($lab)->whereKey($authorization->exception_id)->lockForUpdate()->firstOrFail();
         $bound = ReportDeliveryPreparation::forLaboratory($lab)->where('exception_authorization_id', $authorization->id)->first();
-        if ($authorization->authorized_at->addMinutes(15)->lessThanOrEqualTo(now()) || ($bound !== null && $bound->id !== $preparationId) || $exception->status !== 'authorized' || $authorization->policy_revision !== $policy['revision'] || $authorization->policy_mode !== $policy['mode'] || $authorization->evaluation_snapshot['fingerprint'] !== $evaluation['assessment']['fingerprint']) {
+        if ($exception->status !== 'authorized') {
             throw new ClinicalConflict('report_delivery_exception_unavailable', 'The commercial exception is obsolete, revoked or already consumed.');
         }
         if ($authorization->expires_at === null || $authorization->expires_at->lessThanOrEqualTo(now())) {
             throw new ClinicalConflict('report_delivery_exception_expired', 'La autorización comercial no tiene una vigencia verificable o ya venció.');
+        }
+        if ($authorization->authorized_at->addMinutes(15)->lessThanOrEqualTo(now()) || $authorization->policy_revision !== $policy['revision'] || $authorization->policy_mode !== $policy['mode'] || $authorization->evaluation_snapshot['fingerprint'] !== $evaluation['assessment']['fingerprint']) {
+            throw new ClinicalConflict('report_delivery_exception_unavailable', 'The commercial exception is obsolete, revoked or already consumed.');
+        }
+        if ($bound !== null && $bound->id !== $preparationId) {
+            throw new ClinicalConflict('report_delivery_exception_bound', 'The exception already belongs to another exact preparation.');
         }
 
         return $authorization;
@@ -386,6 +393,10 @@ final class ReportDeliveryService
 
     private function assertPreparationCurrent(Laboratory $lab, LaboratoryOrder $order, ReportDeliveryPreparation $preparation, bool $requireDownloaded): void
     {
+        $validity = DB::table('report_validity_events')->where('report_id', $preparation->report_id)->orderByDesc('revision')->first();
+        if ($validity?->state !== 'released' || $preparation->validity_revision !== $validity->revision) {
+            throw new ClinicalConflict('report_validity_changed', 'The report validity changed after preparation. Create a new preparation.');
+        }
         if ($preparation->expires_at->lessThanOrEqualTo(now())) {
             throw new ClinicalConflict('report_delivery_preparation_expired', 'Create a new delivery preparation.');
         }
@@ -401,7 +412,7 @@ final class ReportDeliveryService
             throw new ClinicalConflict('report_delivery_evidence_changed', 'Policy or commercial evidence changed after preparation.');
         }
         if (! $evaluation['eligible']) {
-            $authorization = $this->requiredAuthorization($lab, $order->id, $preparation->report_id, $preparation->exception_authorization_id, $policy, $evaluation);
+            $authorization = $this->requiredAuthorization($lab, $order->id, $preparation->report_id, $preparation->exception_authorization_id, $policy, $evaluation, $preparation->id);
             if ($this->boundPreparationId($authorization) !== $preparation->id) {
                 throw new ClinicalConflict('report_delivery_exception_bound', 'La excepción no corresponde a esta preparación exacta.');
             }
@@ -513,6 +524,35 @@ final class ReportDeliveryService
             ->value('preparation_id');
 
         return $id === null ? null : (int) $id;
+    }
+
+    private function assertPreparationActor(ReportDeliveryPreparation $preparation, User $actor): void
+    {
+        $recipient = $preparation->recipient_snapshot;
+        if ($preparation->prepared_by !== $actor->id || ($recipient['verified_by'] ?? null) !== $actor->id
+            || ($recipient['authorization_confirmed'] ?? false) !== true || empty($recipient['declaration']) || empty($recipient['verified_at'])) {
+            throw new ClinicalConflict('report_delivery_declaration_required', 'Create a new preparation with the current employee recipient declaration.');
+        }
+    }
+
+    private function operation(Laboratory $lab, User $actor, int $orderId, int $reportId, string $operation, \Closure $callback): mixed
+    {
+        try {
+            return $callback();
+        } catch (ClinicalConflict|ValidationException|AuthorizationException $error) {
+            $reason = match (true) {
+                $error instanceof ClinicalConflict => $error->errorCode,
+                $error instanceof AuthorizationException => 'permission_denied',
+                default => 'invalid_declaration_or_input',
+            };
+            $this->blocks->record($lab, $actor, $orderId, $reportId, $operation, $reason);
+            throw $error;
+        } catch (HttpExceptionInterface $error) {
+            if (in_array($error->getStatusCode(), [403, 409, 422], true)) {
+                $this->blocks->record($lab, $actor, $orderId, $reportId, $operation, 'operation_rejected');
+            }
+            throw $error;
+        }
     }
 
     private function page($page): array

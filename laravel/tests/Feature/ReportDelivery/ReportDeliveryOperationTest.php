@@ -95,7 +95,7 @@ final class ReportDeliveryOperationTest extends TestCase
             $service->prepare($lab, $actor, $order->id, $report->id, $input, 'another-preparation-key');
             $this->fail('One authorization must reserve exactly one preparation.');
         } catch (ClinicalConflict $error) {
-            $this->assertSame('report_delivery_exception_unavailable', $error->errorCode);
+            $this->assertSame('report_delivery_exception_bound', $error->errorCode);
         }
         $this->travelTo($deadline);
         $this->assertFalse($service->eligibility($lab, $actor, $order->id, $report->id)['eligible']);
@@ -126,6 +126,7 @@ final class ReportDeliveryOperationTest extends TestCase
             $this->assertSame('report_clinical_evidence_changed', $error->errorCode);
         }
         $complete = app(ClinicalReportService::class)->issue($lab, $actor, $order->id, $this->body($order, $line, true), 'current-complete-report-key');
+        $this->releaseReport($lab, $actor, $order, $complete);
         $prepared = $service->prepare($lab, $actor, $order->id, $complete->id, $this->recipient(), 'current-complete-prep-key');
         $service->downloadPreparation($lab, $actor, $order->id, $complete->id, $prepared->id);
         $delivery = $service->deliver($lab, $actor, $order->id, $complete->id, ['preparation_id' => $prepared->id, 'delivery_confirmed' => true], 'current-complete-delivery-key');

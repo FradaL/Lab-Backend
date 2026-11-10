@@ -18,8 +18,6 @@ final class ReportDeliveryPreparation extends Model
 
     protected $hidden = ['idempotency_hash', 'request_hash'];
 
-    protected $dateFormat = 'Y-m-d H:i:s.u';
-
     public function report(): BelongsTo
     {
         return $this->belongsTo(LaboratoryReportIssuance::class, 'report_id');
@@ -32,7 +30,7 @@ final class ReportDeliveryPreparation extends Model
 
     protected function casts(): array
     {
-        return ['policy_revision' => 'integer', 'recipient_snapshot' => 'array', 'evaluation_snapshot' => 'array',
+        return ['policy_revision' => 'integer', 'validity_revision' => 'integer', 'recipient_snapshot' => 'array', 'evaluation_snapshot' => 'array',
             'prepared_at' => 'immutable_datetime', 'expires_at' => 'immutable_datetime', 'downloaded_at' => 'immutable_datetime'];
     }
 }

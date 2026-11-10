@@ -127,6 +127,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/laboratory/report-settings/logo', [ClinicalReportController::class, 'readLogo'])->middleware('can:reports.settings.view');
         Route::post('/laboratory/report-settings/logo', [ClinicalReportController::class, 'logo'])->middleware('can:reports.settings.edit');
         Route::post('/laboratory-orders/{order}/reports', [ClinicalReportController::class, 'issue'])->middleware('can:reports.issue')->whereNumber('order');
+        Route::post('/laboratory-orders/{order}/reports/{report}/validity-events', [ClinicalReportController::class, 'changeValidity'])->middleware('can:reports.issue')->whereNumber(['order', 'report']);
+        Route::get('/laboratory-orders/{order}/reports/{report}/validity-events', [ClinicalReportController::class, 'validityHistory'])->middleware('can:reports.view_history')->whereNumber(['order', 'report']);
         Route::get('/laboratory-orders/{order}/reports', [ClinicalReportController::class, 'history'])->middleware('can:reports.view_history')->whereNumber('order');
         Route::get('/laboratory-orders/{order}/reports/{report}', [ClinicalReportController::class, 'show'])->middleware('can:reports.view_history')->whereNumber(['order', 'report']);
         Route::get('/laboratory-orders/{order}/reports/{report}/download', [ClinicalReportController::class, 'download'])->middleware('can:reports.download')->whereNumber(['order', 'report']);

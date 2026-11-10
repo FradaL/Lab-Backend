@@ -17,8 +17,6 @@ final class ReportDeliveryExceptionAuthorization extends Model
 
     protected $guarded = ['id'];
 
-    protected $dateFormat = 'Y-m-d H:i:s.u';
-
     public function exception(): BelongsTo
     {
         return $this->belongsTo(ReportDeliveryException::class, 'exception_id');

@@ -3,6 +3,7 @@
 namespace Tests\Feature\ReportDelivery;
 
 use App\ClinicalExams\ClinicalConflict;
+use App\ClinicalReports\ReportValidityService;
 use App\ReportDelivery\ReportDeliveryService;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
@@ -16,10 +17,15 @@ final class ReportDeliveryExceptionMigrationTest extends TestCase
         ReportDeliveryScenario::runDatabaseMigrations insteadof DatabaseMigrations;
     }
 
+    protected function releaseReport($lab, $actor, $order, $report): void
+    {
+        // This fixture deliberately starts before report validity controls exist.
+    }
+
     public function runDatabaseMigrations(): void
     {
         $paths = array_values(array_filter(glob(database_path('migrations/*.php')),
-            fn ($path) => basename($path) !== '2026_11_10_000001_bind_delivery_exceptions_to_preparations.php'));
+            fn ($path) => ! in_array(basename($path), ['2026_11_10_000001_bind_delivery_exceptions_to_preparations.php', '2026_11_10_000002_add_report_validity_controls.php'], true)));
         $this->artisan('migrate:fresh', ['--path' => $paths, '--realpath' => true])->assertSuccessful();
         Storage::fake('clinical_reports');
         $this->beforeApplicationDestroyed(fn () => RefreshDatabaseState::$migrated = false);
@@ -30,6 +36,9 @@ final class ReportDeliveryExceptionMigrationTest extends TestCase
         [$lab, $actor, $order, , $report] = $this->issued();
         $service = app(ReportDeliveryService::class);
         $exception = $service->requestException($lab, $actor, $order->id, $report->id, ['reason' => 'FICTICIO: excepción anterior a BE09.']);
+        // Reconstruct a pre-control row under the current schema without rewriting history.
+        DB::statement('ALTER TABLE report_delivery_preparations DROP CONSTRAINT delivery_preparation_fifteen_minutes');
+        DB::statement('ALTER TABLE report_delivery_preparations DISABLE TRIGGER USER');
         [$authorizationId, $preparationId] = DB::transaction(function () use ($lab, $actor, $order, $report, $exception) {
             $authorizationId = DB::table('report_delivery_exception_authorizations')->insertGetId([
                 'laboratory_id' => $lab->id, 'laboratory_order_id' => $order->id, 'report_id' => $report->id,
@@ -50,27 +59,30 @@ final class ReportDeliveryExceptionMigrationTest extends TestCase
 
             return [$authorizationId, $preparationId];
         });
+        DB::statement('ALTER TABLE report_delivery_preparations ENABLE TRIGGER USER');
         $authorizationBefore = (array) DB::table('report_delivery_exception_authorizations')->where('id', $authorizationId)->first();
         $preparationBefore = (array) DB::table('report_delivery_preparations')->where('id', $preparationId)->first();
         $exceptionBefore = (array) DB::table('report_delivery_exceptions')->where('id', $exception['id'])->first();
 
         $this->artisan('migrate', ['--force' => true])->assertSuccessful();
+        app(ReportValidityService::class)->change($lab, $actor, $order->id, $report->id,
+            ['state' => 'released', 'expected_revision' => 0, 'reason' => 'FICTICIO: liberación posterior a migración.'], 'release-legacy-report-001');
 
         $this->assertSame($authorizationBefore + ['expires_at' => null], (array) DB::table('report_delivery_exception_authorizations')->where('id', $authorizationId)->first());
-        $this->assertSame($preparationBefore, (array) DB::table('report_delivery_preparations')->where('id', $preparationId)->first());
+        $this->assertSame($preparationBefore + ['validity_revision' => null], (array) DB::table('report_delivery_preparations')->where('id', $preparationId)->first());
         $this->assertSame($exceptionBefore, (array) DB::table('report_delivery_exceptions')->where('id', $exception['id'])->first());
         $this->assertDatabaseCount('report_delivery_exception_bindings', 0);
         $this->assertFalse($service->eligibility($lab, $actor, $order->id, $report->id)['eligible']);
         foreach ([
-            fn () => $service->prepare($lab, $actor, $order->id, $report->id,
+            'report_delivery_exception_expired' => fn () => $service->prepare($lab, $actor, $order->id, $report->id,
                 $this->recipient(extra: ['exception_authorization_id' => $authorizationId]), 'exception-legacy-new-prep'),
-            fn () => $service->downloadPreparation($lab, $actor, $order->id, $report->id, $preparationId),
-        ] as $operation) {
+            'report_delivery_declaration_required' => fn () => $service->downloadPreparation($lab, $actor, $order->id, $report->id, $preparationId),
+        ] as $expected => $operation) {
             try {
                 $operation();
                 $this->fail('La historia sin plazo verificable no debe habilitar entrega.');
             } catch (ClinicalConflict $conflict) {
-                $this->assertSame('report_delivery_exception_expired', $conflict->errorCode);
+                $this->assertSame($expected, $conflict->errorCode);
             }
         }
         $this->assertDatabaseCount('report_deliveries', 0);
