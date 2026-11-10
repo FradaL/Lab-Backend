@@ -15,9 +15,11 @@ use App\Models\ReportDeliveryException;
 use App\Models\ReportDeliveryExceptionAuthorization;
 use App\Models\ReportDeliveryPreparation;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 final class ReportDeliveryService
 {
@@ -32,7 +34,7 @@ final class ReportDeliveryService
     ];
 
     public function __construct(private ReportAuthority $authority, private ReportDeliveryPolicyService $policies,
-        private ReportCommercialEvaluator $commercial, private PrivateReportStorage $storage, private AuditWriter $audit) {}
+        private ReportDeliveryBlockAudit $blocks, private ReportOperationalGuard $operational, private ReportCommercialEvaluator $commercial, private PrivateReportStorage $storage, private AuditWriter $audit) {}
 
     public function eligibility(Laboratory $lab, User $actor, int $orderId, int $reportId): array
     {
@@ -42,10 +44,12 @@ final class ReportDeliveryService
             $policy = $this->orderPolicy($order);
             $evaluation = $this->commercial->evaluate($lab, $order, $policy);
             $authorization = $this->activeAuthorization($lab, $orderId, $reportId, false, $policy, $evaluation);
+            $operational = $this->operational->assess($order, $report);
 
             return ['laboratory_order_id' => $order->id, 'report_id' => $report->id, 'report_number' => $report->number,
-                'policy' => $policy, 'evaluation' => $evaluation, 'eligible' => $evaluation['eligible'] || $authorization !== null,
-                'eligibility_source' => $evaluation['eligible'] ? 'commercial_policy' : ($authorization === null ? null : 'commercial_exception'),
+                'policy' => $policy, 'evaluation' => $evaluation, 'operational' => $operational, 'purpose' => 'external_delivery',
+                'eligible' => $operational['eligible'] && ($evaluation['eligible'] || $authorization !== null),
+                'eligibility_source' => ! $operational['eligible'] ? null : ($evaluation['eligible'] ? 'commercial_policy' : ($authorization === null ? null : 'commercial_exception')),
                 'exception_authorization_id' => $authorization?->id];
         });
     }
@@ -57,6 +61,7 @@ final class ReportDeliveryService
         return DB::transaction(function () use ($lab, $actor, $orderId, $reportId, $input) {
             [$order,$report] = $this->context($lab, $orderId, $reportId);
             $this->authority->check($lab, $actor, 'reports.delivery.prepare');
+            $this->operational->assertCurrent($order, $report);
             $policy = $this->orderPolicy($order);
             $evaluation = $this->commercial->evaluate($lab, $order, $policy);
             if ($evaluation['eligible']) {
@@ -80,8 +85,9 @@ final class ReportDeliveryService
         $this->revisionInput($input, 1);
 
         return DB::transaction(function () use ($lab, $actor, $orderId, $reportId, $exceptionId, $input) {
-            [$order] = $this->context($lab, $orderId, $reportId);
+            [$order, $report] = $this->context($lab, $orderId, $reportId);
             $this->authority->check($lab, $actor, 'reports.delivery_exceptions.authorize');
+            $this->operational->assertCurrent($order, $report);
             $exception = ReportDeliveryException::forLaboratory($lab)->where('laboratory_order_id', $orderId)->where('report_id', $reportId)->whereKey($exceptionId)->lockForUpdate()->firstOrFail();
             if ($exception->status !== 'pending' || $exception->revision !== $input['revision']) {
                 throw new ClinicalConflict('report_delivery_exception_revision_conflict', 'Reload the commercial exception.');
@@ -143,6 +149,11 @@ final class ReportDeliveryService
 
     public function prepare(Laboratory $lab, User $actor, int $orderId, int $reportId, array $input, string $key): ReportDeliveryPreparation
     {
+        return $this->operation($lab, $actor, $orderId, $reportId, 'prepare', fn () => $this->prepareAttempt($lab, $actor, $orderId, $reportId, $input, $key));
+    }
+
+    private function prepareAttempt(Laboratory $lab, User $actor, int $orderId, int $reportId, array $input, string $key): ReportDeliveryPreparation
+    {
         $this->validatePreparation($input, $key);
         $keyHash = hash('sha256', 'prepare-report-delivery:'.$key);
         $fingerprint = $this->fingerprint($orderId, $reportId, $input);
@@ -152,12 +163,19 @@ final class ReportDeliveryService
             $this->authority->check($lab, $actor, 'reports.delivery.prepare');
             $existing = ReportDeliveryPreparation::forLaboratory($lab)->where('idempotency_hash', $keyHash)->first();
             if ($existing !== null) {
-                if (! hash_equals($existing->request_hash, $fingerprint)) {
+                if (! hash_equals($existing->request_hash, $fingerprint) || $existing->prepared_by !== $actor->id) {
                     throw new ClinicalConflict('report_delivery_idempotency_conflict', 'This key identifies another delivery preparation.');
+                }
+
+                $this->assertPreparationActor($existing, $actor);
+                if (! ReportDelivery::forLaboratory($lab)->where('preparation_id', $existing->id)->exists()) {
+                    $this->operational->assertCurrent($order, $report);
+                    $this->assertPreparationCurrent($lab, $order, $existing, $existing->downloaded_at !== null);
                 }
 
                 return $existing;
             }
+            $this->operational->assertCurrent($order, $report);
             $policy = $this->orderPolicy($order);
             $evaluation = $this->commercial->evaluate($lab, $order, $policy);
             $authorization = $evaluation['eligible'] ? null : $this->requiredAuthorization($lab, $orderId, $reportId, $input['exception_authorization_id'] ?? null, $policy, $evaluation);
@@ -169,7 +187,7 @@ final class ReportDeliveryService
             $preparation = ReportDeliveryPreparation::create(['laboratory_id' => $lab->id, 'laboratory_order_id' => $orderId, 'report_id' => $reportId,
                 'idempotency_hash' => $keyHash, 'request_hash' => $fingerprint, 'channel' => $input['channel'], 'recipient_snapshot' => $recipient,
                 'policy_revision' => $policy['revision'], 'policy_mode' => $policy['mode'], 'evaluation_snapshot' => $evaluation['assessment'],
-                'exception_authorization_id' => $authorization?->id, 'prepared_by' => $actor->id, 'prepared_at' => $preparedAt, 'expires_at' => $preparedAt->copy()->addMinutes(15)]);
+                'exception_authorization_id' => $authorization?->id, 'prepared_by' => $actor->id, 'prepared_at' => $preparedAt, 'expires_at' => $authorization === null ? $preparedAt->copy()->addMinutes(15) : $authorization->authorized_at->addMinutes(15)]);
             $this->audit->record($lab, $actor, new AuditEvent('order_report.delivery_prepared', 'report_delivery_preparation', $preparation->id,
                 newValues: ['channel' => $preparation->channel, 'expires_at' => $preparation->expires_at], metadata: ['laboratory_order_id' => $orderId, 'report_id' => $reportId, 'policy_revision' => $policy['revision'], 'exception_authorization_id' => $authorization?->id]));
 
@@ -179,10 +197,18 @@ final class ReportDeliveryService
 
     public function downloadPreparation(Laboratory $lab, User $actor, int $orderId, int $reportId, int $preparationId): array
     {
+        return $this->operation($lab, $actor, $orderId, $reportId, 'downloadPreparation', fn () => $this->downloadPreparationAttempt($lab, $actor, $orderId, $reportId, $preparationId));
+    }
+
+    private function downloadPreparationAttempt(Laboratory $lab, User $actor, int $orderId, int $reportId, int $preparationId): array
+    {
         [$report,$preparation] = DB::transaction(function () use ($lab, $actor, $orderId, $reportId, $preparationId) {
             [$order,$report] = $this->context($lab, $orderId, $reportId);
             $this->authority->check($lab, $actor, 'reports.delivery.prepare');
+            $this->operational->assertCurrent($order, $report);
             $preparation = $this->preparation($lab, $order, $reportId, $preparationId);
+            $this->authority->check($lab, $actor, 'reports.download');
+            $this->assertPreparationActor($preparation, $actor);
             $this->assertPreparationCurrent($lab, $order, $preparation, false);
 
             return [$report, $preparation];
@@ -193,13 +219,16 @@ final class ReportDeliveryService
             throw new ClinicalConflict('report_storage_unavailable', 'The private document is unavailable or failed its integrity check.', status: 503);
         }
         $preparation = DB::transaction(function () use ($lab, $actor, $orderId, $reportId, $preparationId) {
-            [$order] = $this->context($lab, $orderId, $reportId);
+            [$order, $report] = $this->context($lab, $orderId, $reportId);
             $this->authority->check($lab, $actor, 'reports.delivery.prepare');
+            $this->operational->assertCurrent($order, $report);
             $preparation = $this->preparation($lab, $order, $reportId, $preparationId);
+            $this->authority->check($lab, $actor, 'reports.download');
+            $this->assertPreparationActor($preparation, $actor);
             $this->assertPreparationCurrent($lab, $order, $preparation, false);
             $preparation->update(['downloaded_by' => $actor->id, 'downloaded_at' => now()]);
             $this->audit->record($lab, $actor, new AuditEvent('order_report.delivery_copy_downloaded', 'report_delivery_preparation', $preparation->id,
-                newValues: ['downloaded_at' => $preparation->downloaded_at], metadata: ['laboratory_order_id' => $orderId, 'report_id' => $reportId, 'channel' => $preparation->channel]));
+                newValues: ['downloaded_at' => $preparation->downloaded_at], metadata: ['laboratory_order_id' => $orderId, 'report_id' => $reportId, 'channel' => $preparation->channel, 'purpose' => 'external_delivery']));
 
             return $preparation->fresh();
         });
@@ -209,22 +238,29 @@ final class ReportDeliveryService
 
     public function deliver(Laboratory $lab, User $actor, int $orderId, int $reportId, array $input, string $key): ReportDelivery
     {
+        return $this->operation($lab, $actor, $orderId, $reportId, 'deliver', fn () => $this->deliverAttempt($lab, $actor, $orderId, $reportId, $input, $key));
+    }
+
+    private function deliverAttempt(Laboratory $lab, User $actor, int $orderId, int $reportId, array $input, string $key): ReportDelivery
+    {
         $this->validateDelivery($input, $key);
         $keyHash = hash('sha256', 'confirm-report-delivery:'.$key);
         $fingerprint = $this->fingerprint($orderId, $reportId, $input);
 
         return DB::transaction(function () use ($lab, $actor, $orderId, $reportId, $input, $keyHash, $fingerprint) {
-            [$order] = $this->context($lab, $orderId, $reportId);
+            [$order, $report] = $this->context($lab, $orderId, $reportId);
             $this->authority->check($lab, $actor, 'reports.delivery.confirm');
             $existing = ReportDelivery::forLaboratory($lab)->where('idempotency_hash', $keyHash)->first();
             if ($existing !== null) {
-                if (! hash_equals($existing->request_hash, $fingerprint)) {
+                if (! hash_equals($existing->request_hash, $fingerprint) || $existing->delivered_by !== $actor->id) {
                     throw new ClinicalConflict('report_delivery_idempotency_conflict', 'This key identifies another confirmed delivery.');
                 }
 
                 return $existing;
             }
+            $this->operational->assertCurrent($order, $report);
             $preparation = $this->preparation($lab, $order, $reportId, $input['preparation_id']);
+            $this->assertPreparationActor($preparation, $actor);
             $this->assertPreparationCurrent($lab, $order, $preparation, true);
             $delivery = ReportDelivery::create(['laboratory_id' => $lab->id, 'laboratory_order_id' => $orderId, 'report_id' => $reportId,
                 'preparation_id' => $preparation->id, 'idempotency_hash' => $keyHash, 'request_hash' => $fingerprint,
@@ -257,7 +293,7 @@ final class ReportDeliveryService
     public function preparationData(ReportDeliveryPreparation $preparation): array
     {
         return ['id' => $preparation->id, 'laboratory_order_id' => $preparation->laboratory_order_id, 'report_id' => $preparation->report_id,
-            'channel' => $preparation->channel, 'recipient' => $preparation->recipient_snapshot, 'policy_revision' => $preparation->policy_revision,
+            'purpose' => 'external_delivery', 'channel' => $preparation->channel, 'recipient' => $preparation->recipient_snapshot, 'policy_revision' => $preparation->policy_revision,
             'policy_mode' => $preparation->policy_mode, 'evaluation' => $preparation->evaluation_snapshot,
             'exception_authorization_id' => $preparation->exception_authorization_id, 'prepared_by' => $preparation->prepared_by,
             'prepared_at' => $preparation->prepared_at->toISOString(), 'expires_at' => $preparation->expires_at->toISOString(),
@@ -267,7 +303,7 @@ final class ReportDeliveryService
     public function deliveryData(ReportDelivery $delivery): array
     {
         return ['id' => $delivery->id, 'laboratory_order_id' => $delivery->laboratory_order_id, 'report_id' => $delivery->report_id,
-            'preparation_id' => $delivery->preparation_id, 'channel' => $delivery->channel, 'recipient' => $delivery->recipient_snapshot,
+            'preparation_id' => $delivery->preparation_id, 'purpose' => 'external_delivery', 'channel' => $delivery->channel, 'recipient' => $delivery->recipient_snapshot,
             'policy_revision' => $delivery->policy_revision, 'policy_mode' => $delivery->policy_mode, 'evaluation' => $delivery->evaluation_snapshot,
             'exception_authorization_id' => $delivery->exception_authorization_id, 'notes' => $delivery->notes,
             'delivered_by' => $delivery->delivered_by, 'delivered_at' => $delivery->delivered_at->toISOString()];
@@ -289,6 +325,8 @@ final class ReportDeliveryService
             ->where('policy_revision', $policy['revision'])
             ->where('policy_mode', $policy['mode'])
             ->where('evaluation_snapshot->fingerprint', $evaluation['assessment']['fingerprint'])
+            ->where('authorized_at', '>', now()->subMinutes(15))
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('report_delivery_preparations as bound')->whereColumn('bound.exception_authorization_id', 'report_delivery_exception_authorizations.id'))
             ->whereHas('unusedAuthorizedException');
 
         return ($write ? $query->lockForUpdate() : $query->sharedLock())->first();
@@ -306,14 +344,15 @@ final class ReportDeliveryService
         return ['revision' => $snapshot['source_revision'], 'mode' => $snapshot['mode'], 'source' => 'order_snapshot'];
     }
 
-    private function requiredAuthorization(Laboratory $lab, int $orderId, int $reportId, mixed $authorizationId, array $policy, array $evaluation): ReportDeliveryExceptionAuthorization
+    private function requiredAuthorization(Laboratory $lab, int $orderId, int $reportId, mixed $authorizationId, array $policy, array $evaluation, ?int $preparationId = null): ReportDeliveryExceptionAuthorization
     {
         if (! is_int($authorizationId) || $authorizationId < 1) {
             throw new ClinicalConflict('report_delivery_not_eligible', 'Commercial policy is not satisfied and an exact authorized exception is required.');
         }
         $authorization = ReportDeliveryExceptionAuthorization::forLaboratory($lab)->where('laboratory_order_id', $orderId)->where('report_id', $reportId)->whereKey($authorizationId)->lockForUpdate()->firstOrFail();
         $exception = ReportDeliveryException::forLaboratory($lab)->whereKey($authorization->exception_id)->lockForUpdate()->firstOrFail();
-        if ($exception->status !== 'authorized' || $authorization->policy_revision !== $policy['revision'] || $authorization->policy_mode !== $policy['mode'] || $authorization->evaluation_snapshot['fingerprint'] !== $evaluation['assessment']['fingerprint']) {
+        $bound = ReportDeliveryPreparation::forLaboratory($lab)->where('exception_authorization_id', $authorization->id)->first();
+        if ($authorization->authorized_at->addMinutes(15)->lessThanOrEqualTo(now()) || ($bound !== null && $bound->id !== $preparationId) || $exception->status !== 'authorized' || $authorization->policy_revision !== $policy['revision'] || $authorization->policy_mode !== $policy['mode'] || $authorization->evaluation_snapshot['fingerprint'] !== $evaluation['assessment']['fingerprint']) {
             throw new ClinicalConflict('report_delivery_exception_unavailable', 'The commercial exception is obsolete, revoked or already consumed.');
         }
 
@@ -327,7 +366,7 @@ final class ReportDeliveryService
 
     private function assertPreparationCurrent(Laboratory $lab, LaboratoryOrder $order, ReportDeliveryPreparation $preparation, bool $requireDownloaded): void
     {
-        if ($preparation->expires_at->isPast()) {
+        if ($preparation->expires_at->lessThanOrEqualTo(now())) {
             throw new ClinicalConflict('report_delivery_preparation_expired', 'Create a new delivery preparation.');
         }
         if (($preparation->downloaded_at !== null) !== $requireDownloaded) {
@@ -342,7 +381,29 @@ final class ReportDeliveryService
             throw new ClinicalConflict('report_delivery_evidence_changed', 'Policy or commercial evidence changed after preparation.');
         }
         if (! $evaluation['eligible']) {
-            $this->requiredAuthorization($lab, $order->id, $preparation->report_id, $preparation->exception_authorization_id, $policy, $evaluation);
+            $this->requiredAuthorization($lab, $order->id, $preparation->report_id, $preparation->exception_authorization_id, $policy, $evaluation, $preparation->id);
+        }
+    }
+
+    private function assertPreparationActor(ReportDeliveryPreparation $preparation, User $actor): void
+    {
+        if ($preparation->prepared_by !== $actor->id || ($preparation->recipient_snapshot['verified_by'] ?? null) !== $actor->id || ($preparation->recipient_snapshot['authorization_confirmed'] ?? false) !== true) {
+            throw new ClinicalConflict('report_delivery_declaration_required', 'Create a preparation with your own explicit recipient verification.');
+        }
+    }
+
+    private function operation(Laboratory $lab, User $actor, int $orderId, int $reportId, string $operation, callable $attempt): mixed
+    {
+        try {
+            return $attempt();
+        } catch (ClinicalConflict|ValidationException|AuthorizationException|HttpExceptionInterface $error) {
+            if ($error instanceof HttpExceptionInterface && $error->getStatusCode() !== 403) {
+                throw $error;
+            }
+            // Record after the failed transaction, without copying input or clinical data.
+            $this->blocks->record($lab, $actor, $orderId, $reportId, $operation,
+                $error instanceof ClinicalConflict ? $error->errorCode : ($error instanceof ValidationException ? 'invalid_declaration_or_input' : 'permission_denied'));
+            throw $error;
         }
     }
 
@@ -363,7 +424,7 @@ final class ReportDeliveryService
         }
 
         return ['type' => $type, 'name' => $name, 'authorization_basis' => $input['authorization_basis'],
-            'authorization_evidence' => trim($input['authorization_evidence']), 'verified_by' => $actor->id, 'verified_at' => now()->toISOString()];
+            'authorization_evidence' => trim($input['authorization_evidence']), 'authorization_confirmed' => true, 'declaration' => 'Confirmo que verifiqué la identidad y legitimidad del destinatario conforme a los procedimientos del laboratorio', 'verified_by' => $actor->id, 'verified_at' => now()->toISOString()];
     }
 
     private function validatePreparation(array $input, string $key): void
@@ -438,7 +499,7 @@ final class ReportDeliveryService
     {
         return ['id' => $authorization->id, 'exception_id' => $authorization->exception_id, 'policy_revision' => $authorization->policy_revision,
             'policy_mode' => $authorization->policy_mode, 'evaluation' => $authorization->evaluation_snapshot,
-            'authorized_by' => $authorization->authorized_by, 'authorized_at' => $authorization->authorized_at->toISOString()];
+            'authorized_by' => $authorization->authorized_by, 'authorized_at' => $authorization->authorized_at->toISOString(), 'expires_at' => $authorization->authorized_at->addMinutes(15)->toISOString()];
     }
 
     private function page($page): array

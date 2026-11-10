@@ -1,5 +1,11 @@
 # Donqer Lab Backend
 
+## Integración de Caja y entrega — BE-D02-10, 2026-11-09
+
+**Estado de alcance:** avance integrado de BE-D02-09/10. El núcleo de la excepción está implementado, pero BE-D02-09 conserva pendiente su revisión y validación integral; este corte no acredita su cierre ni el cierre independiente de BE-D02-10.
+
+El circuito existente revalida evidencia clínica/documental y financiera, vincula la declaración al mismo empleado y operación, registra finalidad interna/externa y conserva descarga y confirmación separadas. La excepción queda reservada a una preparación y vence a los 15 minutos de autorizarse. Incluye controles SQL aditivos y auditoría de bloqueos del servicio. [Contrato, adopción y límites de integración](docs/sprint-2/BE-S2-09.2-politicas-entrega-informes.md#integración-be-d02-10--2026-11-09). Validación final del alcance: **49 pruebas / 210 aserciones satisfactorias**, Pint y OpenAPI correctos. La regresión ampliada detectó nueve problemas previos pendientes, contrastados con `c91dc31` limpio y documentados en el seguimiento. Migración sin aplicar a la base habitual; cambios locales sin commit.
+
 ## Integración de anulaciones y devoluciones — 2026-11-06
 
 Resolución de conflictos entre `f75c844` (BE11) y `0890873` (`develop`, BE12), conservando las dos rutas, validaciones, evidencia y auditoría. Se corrige también la incompatibilidad de las migraciones: soporte SQL compartido y migración correctiva `000004` para bases con las originales ejecutadas. Regresión final: 807 casos / 5.162 aserciones, 806 satisfactorios y 1 omisión previa, cero fallos/errores. [Cambios, pruebas y activación](docs/sprint-2/BE-D02-11-12-integracion-migraciones.md). Sin aplicación a la base habitual, commit, push ni despliegue. Los apartados inferiores conservan sus cortes anteriores.

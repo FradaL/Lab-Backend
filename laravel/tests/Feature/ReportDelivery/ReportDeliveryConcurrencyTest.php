@@ -31,7 +31,7 @@ final class ReportDeliveryConcurrencyTest extends TestCase
             $exception = $service->requestException($lab, $actor, $order->id, $report->id, ['reason' => 'FICTICIO: carrera autorizada.']);
             if ($race === 'exception_reuse') {
                 $authorized = $service->authorizeException($lab, $actor, $order->id, $report->id, $exception['id'], ['revision' => 1]);
-                foreach ([1, 2] as $index) {
+                foreach ([1] as $index) {
                     $preparations[$index] = $service->prepare($lab, $actor, $order->id, $report->id,
                         $this->recipient(extra: ['exception_authorization_id' => $authorized['authorization']['id']]), "race-exception-prep-$index");
                     $service->downloadPreparation($lab, $actor, $order->id, $report->id, $preparations[$index]->id);
@@ -58,7 +58,7 @@ final class ReportDeliveryConcurrencyTest extends TestCase
                 $childService = app(ReportDeliveryService::class);
                 match ($race) {
                     'two_authorizations' => $childService->authorizeException($lab, $actor, $order->id, $report->id, $exception['id'], ['revision' => 1]),
-                    'exception_reuse' => $childService->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[2]->id, 'delivery_confirmed' => true], 'race-second-exception-delivery'),
+                    'exception_reuse' => $childService->prepare($lab, $actor, $order->id, $report->id, $this->recipient(extra: ['exception_authorization_id' => $preparations[1]->exception_authorization_id]), 'race-second-exception-preparation'),
                     'same_idempotency_key' => $childService->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-shared-delivery-key'),
                     default => $childService->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-child-delivery-key'),
                 };

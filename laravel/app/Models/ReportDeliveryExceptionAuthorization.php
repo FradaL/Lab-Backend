@@ -13,6 +13,8 @@ final class ReportDeliveryExceptionAuthorization extends Model
 
     public $timestamps = false;
 
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     protected $guarded = ['id'];
 
     public function exception(): BelongsTo

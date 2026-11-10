@@ -12,6 +12,8 @@ final class ReportDeliveryPreparation extends Model
 
     public $timestamps = false;
 
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     protected $guarded = ['id'];
 
     protected $hidden = ['idempotency_hash', 'request_hash'];
