@@ -8,9 +8,8 @@ use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\ReportDelivery;
 use App\Models\Subscription;
-use App\ReportDelivery\CommercialAssessment;
 use App\ReportDelivery\CommercialComplianceProvider;
-use App\ReportDelivery\ReportCommercialEvaluator;
+use App\Cash\AuthorizeOrderCredit;
 use App\ReportDelivery\ReportDeliveryPolicyService;
 use App\ReportDelivery\ReportDeliveryService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -45,7 +44,7 @@ class ReportDeliveryTest extends TestCase
 
     public function test_policy_change_is_revisioned_audited_and_tenant_scoped(): void
     {
-        [$lab,$actor] = $this->issued();
+        [$lab] = $this->issued();
         $other = Laboratory::factory()->create();
         $changed = app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO: política de demostración.']);
 
@@ -92,12 +91,45 @@ class ReportDeliveryTest extends TestCase
 
     public function test_historical_order_returns_unavailable_financial_evidence(): void
     {
-        [$lab] = $this->issued();
+        [$lab,$actor] = $this->issued();
         $historical = \Tests\Support\HistoricalOrderFixture::create(fn () => LaboratoryOrder::factory()->for($lab)->create(['delivery_policy_snapshot' => null]));
         $assessment = app(CommercialComplianceProvider::class)->assess($lab, $historical);
 
         $this->assertSame('unavailable', $assessment->status);
         $this->assertSame('order_cash_v1', $assessment->provider);
+    }
+
+    public function test_full_payment_from_order_cash_enables_delivery(): void
+    {
+        [$lab,$actor,$order,, $report] = $this->issued();
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'delivery-full-payment-0001');
+
+        $eligibility = app(ReportDeliveryService::class)->eligibility($lab, $actor, $order->id, $report->id);
+
+        $this->assertTrue($eligibility['eligible']);
+        $this->assertSame('full_payment', $eligibility['evaluation']['assessment']['evidence_type']);
+        $this->assertSame('order_cash_v1', $eligibility['evaluation']['assessment']['provider']);
+        $this->assertSame((string) $order->id, $eligibility['evaluation']['assessment']['evidence_reference']);
+    }
+
+    public function test_authorized_credit_from_order_cash_enables_credit_policy_delivery(): void
+    {
+        [$lab,$actor,$order,, $report] = $this->issuedForPolicy('payment_or_credit');
+        $this->assignDirectLaboratoryPermission($actor, $lab, 'payments.credit.authorize');
+        $revision = (int) DB::table('laboratory_order_financial_states')
+            ->where(['laboratory_id' => $lab->id, 'laboratory_order_id' => $order->id])
+            ->value('revision');
+        app(AuthorizeOrderCredit::class)->authorize($lab, $actor, $order->id, [
+            'expected_revision' => $revision,
+            'amount' => $this->settlementAmount($order),
+            'reason' => 'FICTICIO: crédito suficiente para probar entrega.',
+        ], 'delivery-credit-authorization-0001');
+
+        $eligibility = app(ReportDeliveryService::class)->eligibility($lab, $actor, $order->id, $report->id);
+
+        $this->assertTrue($eligibility['eligible']);
+        $this->assertSame('authorized_credit', $eligibility['evaluation']['assessment']['evidence_type']);
+        $this->assertSame('order_cash_v1', $eligibility['evaluation']['assessment']['provider']);
     }
 
     public function test_exception_preparation_download_and_confirmed_delivery_are_separate_and_financially_inert(): void
@@ -311,18 +343,4 @@ class ReportDeliveryTest extends TestCase
         }
     }
 
-    private function provider(CommercialAssessment $assessment): void
-    {
-        $this->app->instance(CommercialComplianceProvider::class, new class($assessment) implements CommercialComplianceProvider
-        {
-            public function __construct(private CommercialAssessment $assessment) {}
-
-            public function assess(Laboratory $laboratory, LaboratoryOrder $order): CommercialAssessment
-            {
-                return $this->assessment;
-            }
-        });
-        $this->app->forgetInstance(ReportCommercialEvaluator::class);
-        $this->app->forgetInstance(ReportDeliveryService::class);
-    }
 }
