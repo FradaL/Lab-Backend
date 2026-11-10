@@ -43,6 +43,17 @@ Es compatible con BE-D02-05 porque recupera el snapshot inmutable del POST sin m
 
 Los límites residuales son los propios de recuperación distribuida: cierre definitivo de pestaña, otra pestaña/dispositivo, borrado de almacenamiento, expiración del marcador, pérdida de autorización, cambio de actor/laboratorio o POST en tránsito pueden impedir una confirmación local inmediata. Ninguno convierte `unknown` en fallo ni habilita una nueva identidad automáticamente.
 
-## Integración pendiente
+## Integración con `develop`
 
-Tras `git fetch origin --prune`, `HEAD...origin/develop = 0/11`. Los 11 commits entrantes incluyen crédito financiero, migraciones, lectores de Caja y modificaciones en `routes/api.php`; al aplicar su parche sobre este árbol local, Git rechaza el hunk de rutas. La integración requiere resolución consciente de contrato financiero y no se hace automáticamente. Hasta resolverla y repetir la suite aislada, este cambio no está listo para commit/PR desde esta rama.
+El 2026-11-10 se preservó esta implementación en el commit `024f2f1` y se integró `origin/develop` mediante el merge normal `c1c12c2`. Los 11 commits entrantes aportaron crédito financiero, migraciones, lectores de Caja y rutas. Aunque el análisis previo detectó solapamiento en `routes/api.php`, el merge `ort` combinó las adiciones sin marcadores: se conservan simultáneamente la recuperación `GET /payment-attempts/{idempotencyKey}`, las rutas de crédito (`GET/POST/revoke credit-authorizations`), sus controladores y middleware efectivos dentro del mismo grupo protegido.
+
+Después del merge, `HEAD...origin/develop = 2/0`: commit funcional y merge locales, sin commits remotos pendientes. La generación OpenAPI predeterminada volvió a declarar 3.1.0, mantiene el contrato de recuperación (200/202/400/401/403/404/422) y expone dos rutas de crédito. Pint focalizado de los cuatro archivos de recuperación pasó. El Pint global falla en archivos recibidos de `develop` —incluidos crédito, migraciones, delivery y `ClinicalReportRenderer`—; no se reformatearon en este cambio para no mezclar una corrección masiva ajena.
+
+La guarda aislada volvió a pasar (15/15). La prueba funcional `ReadPaymentAttemptTest` sigue bloqueada sólo en Codex antes de cualquier migración o escritura porque `postgres-testing` no puede resolverse fuera de la red Docker aislada. Para repetir la suite funcional y las regresiones BE-D02-05/06, crédito y Caja en un entorno autorizado:
+
+```bash
+sudo docker compose -p fe-d02-04-recovery-testing -f deploy/testing/compose.yaml run --rm tests php vendor/bin/phpunit --do-not-cache-result tests/Feature/Cash
+sudo docker compose -p fe-d02-04-recovery-testing -f deploy/testing/compose.yaml down
+```
+
+No existe todavía una prueba dedicada a la carrera POST/GET del endpoint de recuperación; las pruebas de concurrencia de Caja ya existentes no sustituyen esa cobertura.
