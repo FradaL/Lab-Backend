@@ -65,6 +65,11 @@ trait ReportDeliveryScenario
         return $total === '0.00' ? '0.01' : $total;
     }
 
+    protected function policyRevision($lab): int
+    {
+        return (int) DB::table('report_delivery_policies')->where('laboratory_id', $lab->id)->value('revision');
+    }
+
     protected function recipient(string $channel = 'printed_document', array $extra = []): array
     {
         return $extra + ['channel' => $channel, 'recipient_type' => 'patient', 'authorization_basis' => 'identity_verified',

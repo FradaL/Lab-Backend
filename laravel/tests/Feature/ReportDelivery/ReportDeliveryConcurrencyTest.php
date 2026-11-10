@@ -38,7 +38,7 @@ final class ReportDeliveryConcurrencyTest extends TestCase
                 }
             }
         } else {
-            app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO: carrera.']);
+            app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO: carrera.']);
         }
         if (in_array($race, ['same_idempotency_key', 'same_preparation', 'policy_change', 'commercial_evidence_change'], true)) {
             $preparations[1] = $service->prepare($lab, $actor, $order->id, $report->id, $this->recipient(), 'race-standard-preparation');
@@ -82,7 +82,7 @@ final class ReportDeliveryConcurrencyTest extends TestCase
                 'exception_reuse' => $service->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-first-exception-delivery'),
                 'same_idempotency_key' => $service->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-shared-delivery-key'),
                 'same_preparation' => $service->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-parent-delivery-key'),
-                'policy_change' => app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 1, 'mode' => 'payment_or_credit', 'reason' => 'FICTICIO: cambio concurrente.']),
+                'policy_change' => app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'payment_or_credit', 'reason' => 'FICTICIO: cambio concurrente.']),
                 'commercial_evidence_change' => $this->recordPayment($lab, $actor, $order, '0.01', 'race-evidence-change-01'),
             };
             touch($dir.'/go');

@@ -44,17 +44,17 @@ class ReportDeliveryTest extends TestCase
 
     public function test_policy_change_is_revisioned_audited_and_tenant_scoped(): void
     {
-        [$lab] = $this->issued();
+        [$lab,$actor] = $this->issued();
         $other = Laboratory::factory()->create();
-        $changed = app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO: política de demostración.']);
+        $changed = app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO: política de demostración.']);
 
-        $this->assertSame(1, $changed['revision']);
+        $this->assertSame(2, $changed['revision']);
         $this->assertSame('unrestricted', $changed['mode']);
-        $this->assertDatabaseHas('report_delivery_policy_changes', ['laboratory_id' => $lab->id, 'previous_revision' => 0, 'previous_mode' => 'full_payment_required', 'new_mode' => 'unrestricted']);
+        $this->assertDatabaseHas('report_delivery_policy_changes', ['laboratory_id' => $lab->id, 'previous_revision' => 1, 'previous_mode' => 'full_payment_required', 'new_mode' => 'unrestricted']);
         $this->assertDatabaseMissing('report_delivery_policies', ['laboratory_id' => $other->id]);
         $this->assertDatabaseHas('audit_logs', ['laboratory_id' => $lab->id, 'event' => 'order_report.delivery_policy_changed']);
         $this->expectException(ClinicalConflict::class);
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'payment_or_credit', 'reason' => 'Obsolete']);
+        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 1, 'mode' => 'payment_or_credit', 'reason' => 'Obsolete']);
     }
 
     public function test_default_mode_requires_and_records_an_explicit_initial_selection(): void
@@ -62,7 +62,7 @@ class ReportDeliveryTest extends TestCase
         [$lab,$actor] = $this->issued();
 
         $selected = app(ReportDeliveryPolicyService::class)->update($lab, $actor, [
-            'revision' => 0,
+            'revision' => $this->policyRevision($lab),
             'mode' => 'full_payment_required',
             'reason' => 'FICTICIO: selección inicial explícita.',
         ]);
@@ -160,7 +160,7 @@ class ReportDeliveryTest extends TestCase
     public function test_internal_download_and_prepared_copy_do_not_claim_delivery(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
         app(ClinicalReportService::class)->download($lab, $actor, $order->id, $report->id);
         $preparation = app(ReportDeliveryService::class)->prepare($lab, $actor, $order->id, $report->id, $this->recipient(), 'prepare-no-delivery-01');
         app(ReportDeliveryService::class)->downloadPreparation($lab, $actor, $order->id, $report->id, $preparation->id);
@@ -174,7 +174,7 @@ class ReportDeliveryTest extends TestCase
     public function test_manual_digital_and_multiple_legitimate_deliveries_are_independent_and_idempotent(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
         $service = app(ReportDeliveryService::class);
         foreach (['printed_document', 'manual_digital_file'] as $index => $channel) {
             $key = 'multi-preparation-000'.$index;
@@ -193,7 +193,7 @@ class ReportDeliveryTest extends TestCase
     public function test_recipient_authorization_must_be_explicit_and_compatible(array $change): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
         $this->expectException(ValidationException::class);
         app(ReportDeliveryService::class)->prepare($lab, $actor, $order->id, $report->id, array_replace($this->recipient(), $change), 'invalid-recipient-key-1');
     }
@@ -232,7 +232,7 @@ class ReportDeliveryTest extends TestCase
     public function test_expired_preparation_and_client_financial_flags_are_rejected(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
         $service = app(ReportDeliveryService::class);
         try {
             $service->prepare($lab, $actor, $order->id, $report->id, $this->recipient(extra: ['payment_satisfied' => true]), 'client-payment-flag');
@@ -269,7 +269,7 @@ class ReportDeliveryTest extends TestCase
     public function test_down_refuses_existing_commercial_history(): void
     {
         [$lab,$actor] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
         $migration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
         try {
             $migration->down();
@@ -309,7 +309,7 @@ class ReportDeliveryTest extends TestCase
     public function test_delivery_history_and_report_evidence_are_immutable_in_postgresql(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
         $service = app(ReportDeliveryService::class);
         $preparation = $service->prepare($lab, $actor, $order->id, $report->id, $this->recipient(), 'immutable-prep-key-1');
         $service->downloadPreparation($lab, $actor, $order->id, $report->id, $preparation->id);

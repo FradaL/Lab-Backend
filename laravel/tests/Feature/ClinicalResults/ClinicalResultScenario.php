@@ -50,7 +50,7 @@ trait ClinicalResultScenario
         $exam = LaboratoryExam::findOrFail($draft->laboratory_exam_id);
         $exam->update(['status' => 'active']);
         $prices = PriceList::factory()->for($lab)->create(['status' => 'active', 'currency' => 'GTQ']);
-        PriceListExam::factory()->for($lab)->create(['price_list_id' => $prices->id, 'laboratory_exam_id' => $exam->id, 'status' => 'active']);
+        PriceListExam::factory()->for($lab)->create(['price_list_id' => $prices->id, 'laboratory_exam_id' => $exam->id, 'price' => '40.00', 'status' => 'active']);
         $order = $this->makeScenarioOrder($lab, $prices);
         $line = app(AddExamToLaboratoryOrder::class)->execute($lab, $order->id, $exam->id, $actor);
         if ($start) {
