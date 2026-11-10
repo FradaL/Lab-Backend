@@ -1,10 +1,10 @@
 # Donqer Lab Backend
 
-## Integración de Caja y entrega — BE-D02-10, 2026-11-09
+## Excepción comercial exclusiva — BE-D02-09, 2026-11-10
 
-**Estado de alcance:** avance integrado de BE-D02-09/10. El núcleo de la excepción está implementado, pero BE-D02-09 conserva pendiente su revisión y validación integral; este corte no acredita su cierre ni el cierre independiente de BE-D02-10.
+[Contrato, migración, pruebas y límites](docs/sprint-2/BE-D02-09-excepcion-preparacion.md): autorización con vencimiento fijo máximo de 15 minutos, vínculo irreversible a una preparación y emisión exactas, revalidación en descarga/confirmación y consumo único. Cambios locales sobre `c91dc31`, sin commit; 57 pruebas de entrega / 240 aserciones satisfactorias en PostgreSQL desechable. La regresión ampliada conserva nueve incidencias reproducidas en el commit base, detalladas en el informe. Sin aplicación a la base habitual, frontend, Trello, push ni despliegue. Los cortes inferiores conservan su evidencia histórica.
 
-El circuito existente revalida evidencia clínica/documental y financiera, vincula la declaración al mismo empleado y operación, registra finalidad interna/externa y conserva descarga y confirmación separadas. La excepción queda reservada a una preparación y vence a los 15 minutos de autorizarse. Incluye controles SQL aditivos y auditoría de bloqueos del servicio. [Contrato, adopción y límites de integración](docs/sprint-2/BE-S2-09.2-politicas-entrega-informes.md#integración-be-d02-10--2026-11-09). Validación final del alcance: **49 pruebas / 210 aserciones satisfactorias**, Pint y OpenAPI correctos. La regresión ampliada detectó nueve problemas previos pendientes, contrastados con `c91dc31` limpio y documentados en el seguimiento. Migración sin aplicar a la base habitual; cambios locales sin commit.
+Historial: 2026-11-10, solicitud expresa del usuario; implementación y documentación por el agente. D02 1.2 y D12 1.1 conservan sus aprobaciones.
 
 ## Integración de anulaciones y devoluciones — 2026-11-06
 

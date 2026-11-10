@@ -18,6 +18,8 @@ final class ReportDeliveryPreparation extends Model
 
     protected $hidden = ['idempotency_hash', 'request_hash'];
 
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     public function report(): BelongsTo
     {
         return $this->belongsTo(LaboratoryReportIssuance::class, 'report_id');

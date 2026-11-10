@@ -260,7 +260,7 @@ class ReportDeliveryTest extends TestCase
             ]));
             $this->fail('A policy without immutable history must be rejected.');
         } catch (QueryException|\PDOException $exception) {
-            $this->assertContains($exception->errorInfo[0], ['23505', '23514']);
+            $this->assertSame('23514', $exception->errorInfo[0]);
         }
         $this->assertDatabaseCount('report_delivery_policies', 0);
     }
