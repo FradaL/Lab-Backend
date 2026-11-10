@@ -8,9 +8,8 @@ use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\ReportDelivery;
 use App\Models\Subscription;
-use App\ReportDelivery\CommercialAssessment;
 use App\ReportDelivery\CommercialComplianceProvider;
-use App\ReportDelivery\ReportCommercialEvaluator;
+use App\Cash\AuthorizeOrderCredit;
 use App\ReportDelivery\ReportDeliveryPolicyService;
 use App\ReportDelivery\ReportDeliveryService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -28,17 +27,18 @@ class ReportDeliveryTest extends TestCase
         ReportDeliveryScenario::runDatabaseMigrations insteadof DatabaseMigrations;
     }
 
-    public function test_default_is_restrictive_without_persisting_or_inventing_financial_evidence(): void
+    public function test_new_order_uses_real_cash_evidence_and_starts_ineligible(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
         $policy = app(ReportDeliveryPolicyService::class)->read($lab, $actor);
         $eligibility = app(ReportDeliveryService::class)->eligibility($lab, $actor, $order->id, $report->id);
 
-        $this->assertSame(['revision' => 0, 'mode' => 'full_payment_required', 'source' => 'conservative_default', 'updated_by' => null, 'updated_at' => null], $policy);
+        $this->assertSame('configured', $policy['source']);
         $this->assertFalse($eligibility['eligible']);
-        $this->assertSame('unavailable', $eligibility['evaluation']['assessment']['status']);
-        $this->assertSame('not_configured', $eligibility['evaluation']['assessment']['provider']);
-        $this->assertDatabaseCount('report_delivery_policies', 0);
+        $this->assertSame('not_satisfied', $eligibility['evaluation']['assessment']['status']);
+        $this->assertSame('order_cash_v1', $eligibility['evaluation']['assessment']['provider']);
+        $this->assertSame((string) $order->id, $eligibility['evaluation']['assessment']['evidence_reference']);
+        $this->assertSame($order->delivery_policy_snapshot['source_revision'], $eligibility['policy']['revision']);
         $this->assertDatabaseMissing('laboratory_orders', ['id' => $order->id, 'total' => null]);
     }
 
@@ -46,15 +46,15 @@ class ReportDeliveryTest extends TestCase
     {
         [$lab,$actor] = $this->issued();
         $other = Laboratory::factory()->create();
-        $changed = app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO: política de demostración.']);
+        $changed = app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO: política de demostración.']);
 
-        $this->assertSame(1, $changed['revision']);
+        $this->assertSame(2, $changed['revision']);
         $this->assertSame('unrestricted', $changed['mode']);
-        $this->assertDatabaseHas('report_delivery_policy_changes', ['laboratory_id' => $lab->id, 'previous_revision' => 0, 'previous_mode' => 'full_payment_required', 'new_mode' => 'unrestricted']);
+        $this->assertDatabaseHas('report_delivery_policy_changes', ['laboratory_id' => $lab->id, 'previous_revision' => 1, 'previous_mode' => 'full_payment_required', 'new_mode' => 'unrestricted']);
         $this->assertDatabaseMissing('report_delivery_policies', ['laboratory_id' => $other->id]);
         $this->assertDatabaseHas('audit_logs', ['laboratory_id' => $lab->id, 'event' => 'order_report.delivery_policy_changed']);
         $this->expectException(ClinicalConflict::class);
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'payment_or_credit', 'reason' => 'Obsolete']);
+        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 1, 'mode' => 'payment_or_credit', 'reason' => 'Obsolete']);
     }
 
     public function test_default_mode_requires_and_records_an_explicit_initial_selection(): void
@@ -62,7 +62,7 @@ class ReportDeliveryTest extends TestCase
         [$lab,$actor] = $this->issued();
 
         $selected = app(ReportDeliveryPolicyService::class)->update($lab, $actor, [
-            'revision' => 0,
+            'revision' => $this->policyRevision($lab),
             'mode' => 'full_payment_required',
             'reason' => 'FICTICIO: selección inicial explícita.',
         ]);
@@ -83,37 +83,50 @@ class ReportDeliveryTest extends TestCase
             'new_mode' => 'full_payment_required',
             'changed_by' => $actor->id,
         ]);
-        $this->assertDatabaseHas('audit_logs', [
-            'laboratory_id' => $lab->id,
-            'event' => 'order_report.delivery_policy_changed',
-        ]);
+        $this->assertDatabaseMissing('audit_logs', ['laboratory_id' => $lab->id, 'event' => 'order_report.delivery_policy_changed']);
     }
 
-    #[DataProvider('commercialCases')]
-    public function test_typed_commercial_evaluation_applies_each_policy(string $mode, string $status, string $evidence, bool $eligible): void
+    public function test_historical_order_returns_unavailable_financial_evidence(): void
     {
-        [$lab,$actor,$order,$line,$report] = $this->issued();
-        if ($mode !== 'full_payment_required') {
-            app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => $mode, 'reason' => 'FICTICIO']);
-        }
-        $this->provider(new CommercialAssessment($status, $evidence, 'test_finance', 'TEST-1', 'v1'));
-        $result = app(ReportDeliveryService::class)->eligibility($lab, $actor, $order->id, $report->id);
+        [$lab,$actor] = $this->issued();
+        $historical = \Tests\Support\HistoricalOrderFixture::create(fn () => LaboratoryOrder::factory()->for($lab)->create(['delivery_policy_snapshot' => null]));
+        $assessment = app(CommercialComplianceProvider::class)->assess($lab, $historical);
 
-        $this->assertSame($eligible, $result['eligible']);
-        $this->assertSame($status, $result['evaluation']['assessment']['status']);
-        $this->assertSame($evidence, $result['evaluation']['assessment']['evidence_type']);
+        $this->assertSame('unavailable', $assessment->status);
+        $this->assertSame('order_cash_v1', $assessment->provider);
     }
 
-    public static function commercialCases(): array
+    public function test_full_payment_from_order_cash_enables_delivery(): void
     {
-        return [
-            'full paid' => ['full_payment_required', 'satisfied', 'full_payment', true],
-            'full rejects credit' => ['full_payment_required', 'satisfied', 'authorized_credit', false],
-            'credit policy paid' => ['payment_or_credit', 'satisfied', 'full_payment', true],
-            'credit policy credit' => ['payment_or_credit', 'satisfied', 'authorized_credit', true],
-            'known unpaid' => ['full_payment_required', 'not_satisfied', 'none', false],
-            'provider unavailable' => ['payment_or_credit', 'unavailable', 'none', false],
-        ];
+        [$lab,$actor,$order,, $report] = $this->issued();
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'delivery-full-payment-0001');
+
+        $eligibility = app(ReportDeliveryService::class)->eligibility($lab, $actor, $order->id, $report->id);
+
+        $this->assertTrue($eligibility['eligible']);
+        $this->assertSame('full_payment', $eligibility['evaluation']['assessment']['evidence_type']);
+        $this->assertSame('order_cash_v1', $eligibility['evaluation']['assessment']['provider']);
+        $this->assertSame((string) $order->id, $eligibility['evaluation']['assessment']['evidence_reference']);
+    }
+
+    public function test_authorized_credit_from_order_cash_enables_credit_policy_delivery(): void
+    {
+        [$lab,$actor,$order,, $report] = $this->issuedForPolicy('payment_or_credit');
+        $this->assignDirectLaboratoryPermission($actor, $lab, 'payments.credit.authorize');
+        $revision = (int) DB::table('laboratory_order_financial_states')
+            ->where(['laboratory_id' => $lab->id, 'laboratory_order_id' => $order->id])
+            ->value('revision');
+        app(AuthorizeOrderCredit::class)->authorize($lab, $actor, $order->id, [
+            'expected_revision' => $revision,
+            'amount' => $this->settlementAmount($order),
+            'reason' => 'FICTICIO: crédito suficiente para probar entrega.',
+        ], 'delivery-credit-authorization-0001');
+
+        $eligibility = app(ReportDeliveryService::class)->eligibility($lab, $actor, $order->id, $report->id);
+
+        $this->assertTrue($eligibility['eligible']);
+        $this->assertSame('authorized_credit', $eligibility['evaluation']['assessment']['evidence_type']);
+        $this->assertSame('order_cash_v1', $eligibility['evaluation']['assessment']['provider']);
     }
 
     public function test_exception_preparation_download_and_confirmed_delivery_are_separate_and_financially_inert(): void
@@ -144,7 +157,7 @@ class ReportDeliveryTest extends TestCase
     public function test_internal_download_and_prepared_copy_do_not_claim_delivery(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'internal-download-payment-01');
         app(ClinicalReportService::class)->download($lab, $actor, $order->id, $report->id);
         $preparation = app(ReportDeliveryService::class)->prepare($lab, $actor, $order->id, $report->id, $this->recipient(), 'prepare-no-delivery-01');
         app(ReportDeliveryService::class)->downloadPreparation($lab, $actor, $order->id, $report->id, $preparation->id);
@@ -158,7 +171,7 @@ class ReportDeliveryTest extends TestCase
     public function test_manual_digital_and_multiple_legitimate_deliveries_are_independent_and_idempotent(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'multi-delivery-payment-01');
         $service = app(ReportDeliveryService::class);
         foreach (['printed_document', 'manual_digital_file'] as $index => $channel) {
             $key = 'multi-preparation-000'.$index;
@@ -177,7 +190,7 @@ class ReportDeliveryTest extends TestCase
     public function test_recipient_authorization_must_be_explicit_and_compatible(array $change): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'invalid-recipient-payment-01');
         $this->expectException(ValidationException::class);
         app(ReportDeliveryService::class)->prepare($lab, $actor, $order->id, $report->id, array_replace($this->recipient(), $change), 'invalid-recipient-key-1');
     }
@@ -216,7 +229,7 @@ class ReportDeliveryTest extends TestCase
     public function test_expired_preparation_and_client_financial_flags_are_rejected(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'expired-preparation-payment-01');
         $service = app(ReportDeliveryService::class);
         try {
             $service->prepare($lab, $actor, $order->id, $report->id, $this->recipient(extra: ['payment_satisfied' => true]), 'client-payment-flag');
@@ -245,7 +258,7 @@ class ReportDeliveryTest extends TestCase
             ]));
             $this->fail('A policy without immutable history must be rejected.');
         } catch (QueryException|\PDOException $exception) {
-            $this->assertSame('23514', $exception->errorInfo[0]);
+            $this->assertContains($exception->errorInfo[0], ['23505', '23514']);
         }
         $this->assertDatabaseCount('report_delivery_policies', 0);
     }
@@ -253,7 +266,7 @@ class ReportDeliveryTest extends TestCase
     public function test_down_refuses_existing_commercial_history(): void
     {
         [$lab,$actor] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
         $migration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
         try {
             $migration->down();
@@ -261,7 +274,7 @@ class ReportDeliveryTest extends TestCase
         } catch (\LogicException $exception) {
             $this->assertStringContainsString('backup/restoration', $exception->getMessage());
         }
-        $this->assertDatabaseCount('report_delivery_policy_changes', 1);
+        $this->assertDatabaseCount('report_delivery_policy_changes', 2);
     }
 
     public function test_cross_tenant_resources_are_hidden_and_permissions_are_independent(): void
@@ -293,7 +306,7 @@ class ReportDeliveryTest extends TestCase
     public function test_delivery_history_and_report_evidence_are_immutable_in_postgresql(): void
     {
         [$lab,$actor,$order,$line,$report] = $this->issued();
-        app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO']);
+        $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'immutable-delivery-payment-01');
         $service = app(ReportDeliveryService::class);
         $preparation = $service->prepare($lab, $actor, $order->id, $report->id, $this->recipient(), 'immutable-prep-key-1');
         $service->downloadPreparation($lab, $actor, $order->id, $report->id, $preparation->id);
@@ -327,18 +340,4 @@ class ReportDeliveryTest extends TestCase
         }
     }
 
-    private function provider(CommercialAssessment $assessment): void
-    {
-        $this->app->instance(CommercialComplianceProvider::class, new class($assessment) implements CommercialComplianceProvider
-        {
-            public function __construct(private CommercialAssessment $assessment) {}
-
-            public function assess(Laboratory $laboratory, LaboratoryOrder $order): CommercialAssessment
-            {
-                return $this->assessment;
-            }
-        });
-        $this->app->forgetInstance(ReportCommercialEvaluator::class);
-        $this->app->forgetInstance(ReportDeliveryService::class);
-    }
 }

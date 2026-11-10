@@ -39,7 +39,7 @@ final class ReportDeliveryService
         return DB::transaction(function () use ($lab, $actor, $orderId, $reportId) {
             [$order,$report] = $this->context($lab, $orderId, $reportId, false);
             $this->authority->check($lab, $actor, 'reports.delivery.evaluate');
-            $policy = $this->policies->snapshot($lab);
+            $policy = $this->orderPolicy($order);
             $evaluation = $this->commercial->evaluate($lab, $order, $policy);
             $authorization = $this->activeAuthorization($lab, $orderId, $reportId, false, $policy, $evaluation);
 
@@ -57,7 +57,7 @@ final class ReportDeliveryService
         return DB::transaction(function () use ($lab, $actor, $orderId, $reportId, $input) {
             [$order,$report] = $this->context($lab, $orderId, $reportId);
             $this->authority->check($lab, $actor, 'reports.delivery.prepare');
-            $policy = $this->policies->snapshot($lab);
+            $policy = $this->orderPolicy($order);
             $evaluation = $this->commercial->evaluate($lab, $order, $policy);
             if ($evaluation['eligible']) {
                 throw new ClinicalConflict('report_delivery_exception_not_required', 'The current policy and commercial evidence already allow delivery.');
@@ -86,7 +86,7 @@ final class ReportDeliveryService
             if ($exception->status !== 'pending' || $exception->revision !== $input['revision']) {
                 throw new ClinicalConflict('report_delivery_exception_revision_conflict', 'Reload the commercial exception.');
             }
-            $policy = $this->policies->snapshot($lab);
+            $policy = $this->orderPolicy($order);
             $evaluation = $this->commercial->evaluate($lab, $order, $policy);
             if ($evaluation['eligible']) {
                 throw new ClinicalConflict('report_delivery_exception_not_required', 'The current policy and commercial evidence now allow delivery.');
@@ -158,7 +158,7 @@ final class ReportDeliveryService
 
                 return $existing;
             }
-            $policy = $this->policies->snapshot($lab);
+            $policy = $this->orderPolicy($order);
             $evaluation = $this->commercial->evaluate($lab, $order, $policy);
             $authorization = $evaluation['eligible'] ? null : $this->requiredAuthorization($lab, $orderId, $reportId, $input['exception_authorization_id'] ?? null, $policy, $evaluation);
             if ($evaluation['eligible'] && array_key_exists('exception_authorization_id', $input)) {
@@ -294,6 +294,18 @@ final class ReportDeliveryService
         return ($write ? $query->lockForUpdate() : $query->sharedLock())->first();
     }
 
+    private function orderPolicy(LaboratoryOrder $order): array
+    {
+        $snapshot = $order->delivery_policy_snapshot;
+        if (! is_array($snapshot) || ! isset($snapshot['mode'], $snapshot['source_revision'])
+            || ! in_array($snapshot['mode'], ReportDeliveryPolicyService::MODES, true)
+            || ! is_int($snapshot['source_revision']) || $snapshot['source_revision'] < 1) {
+            throw new ClinicalConflict('commercial_evidence_unavailable', 'The order has no verifiable commercial policy.', status: 503);
+        }
+
+        return ['revision' => $snapshot['source_revision'], 'mode' => $snapshot['mode'], 'source' => 'order_snapshot'];
+    }
+
     private function requiredAuthorization(Laboratory $lab, int $orderId, int $reportId, mixed $authorizationId, array $policy, array $evaluation): ReportDeliveryExceptionAuthorization
     {
         if (! is_int($authorizationId) || $authorizationId < 1) {
@@ -324,7 +336,7 @@ final class ReportDeliveryService
         if (ReportDelivery::forLaboratory($lab)->where('preparation_id', $preparation->id)->exists()) {
             throw new ClinicalConflict('report_delivery_preparation_consumed', 'This preparation already belongs to a confirmed delivery.');
         }
-        $policy = $this->policies->snapshot($lab);
+        $policy = $this->orderPolicy($order);
         $evaluation = $this->commercial->evaluate($lab, $order, $policy);
         if ($policy['revision'] !== $preparation->policy_revision || $policy['mode'] !== $preparation->policy_mode || $evaluation['assessment']['fingerprint'] !== $preparation->evaluation_snapshot['fingerprint']) {
             throw new ClinicalConflict('report_delivery_evidence_changed', 'Policy or commercial evidence changed after preparation.');
