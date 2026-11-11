@@ -40,6 +40,7 @@ use App\Http\Controllers\Api\V1\SaasAccessController;
 use App\Http\Controllers\Api\V1\SampleTypeController;
 use App\Http\Controllers\Api\V1\ValidationSignatureController;
 use App\Http\Controllers\HealthCheckController;
+use App\Http\Middleware\AuditReportDeliveryPermission;
 use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 
@@ -126,6 +127,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/laboratory/report-settings/logo', [ClinicalReportController::class, 'readLogo'])->middleware('can:reports.settings.view');
         Route::post('/laboratory/report-settings/logo', [ClinicalReportController::class, 'logo'])->middleware('can:reports.settings.edit');
         Route::post('/laboratory-orders/{order}/reports', [ClinicalReportController::class, 'issue'])->middleware('can:reports.issue')->whereNumber('order');
+        Route::post('/laboratory-orders/{order}/reports/{report}/validity-events', [ClinicalReportController::class, 'changeValidity'])->middleware('can:reports.issue')->whereNumber(['order', 'report']);
+        Route::get('/laboratory-orders/{order}/reports/{report}/validity-events', [ClinicalReportController::class, 'validityHistory'])->middleware('can:reports.view_history')->whereNumber(['order', 'report']);
         Route::get('/laboratory-orders/{order}/reports', [ClinicalReportController::class, 'history'])->middleware('can:reports.view_history')->whereNumber('order');
         Route::get('/laboratory-orders/{order}/reports/{report}', [ClinicalReportController::class, 'show'])->middleware('can:reports.view_history')->whereNumber(['order', 'report']);
         Route::get('/laboratory-orders/{order}/reports/{report}/download', [ClinicalReportController::class, 'download'])->middleware('can:reports.download')->whereNumber(['order', 'report']);
@@ -146,9 +149,9 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/laboratory-orders/{order}/reports/{report}/delivery-exceptions', [ReportDeliveryController::class, 'exceptions'])->middleware('can:reports.delivery_exceptions.view')->whereNumber(['order', 'report']);
         Route::post('/laboratory-orders/{order}/reports/{report}/delivery-exceptions/{exception}/authorize', [ReportDeliveryController::class, 'authorizeException'])->middleware('can:reports.delivery_exceptions.authorize')->whereNumber(['order', 'report', 'exception']);
         Route::post('/laboratory-orders/{order}/reports/{report}/delivery-exceptions/{exception}/revoke', [ReportDeliveryController::class, 'revokeException'])->middleware('can:reports.delivery_exceptions.authorize')->whereNumber(['order', 'report', 'exception']);
-        Route::post('/laboratory-orders/{order}/reports/{report}/delivery-preparations', [ReportDeliveryController::class, 'prepare'])->middleware('can:reports.delivery.prepare')->whereNumber(['order', 'report']);
-        Route::get('/laboratory-orders/{order}/reports/{report}/delivery-preparations/{preparation}/download', [ReportDeliveryController::class, 'downloadPreparation'])->middleware('can:reports.delivery.prepare')->whereNumber(['order', 'report', 'preparation']);
-        Route::post('/laboratory-orders/{order}/reports/{report}/deliveries', [ReportDeliveryController::class, 'deliver'])->middleware('can:reports.delivery.confirm')->whereNumber(['order', 'report']);
+        Route::post('/laboratory-orders/{order}/reports/{report}/delivery-preparations', [ReportDeliveryController::class, 'prepare'])->middleware([AuditReportDeliveryPermission::class.':reports.delivery.prepare', 'can:reports.delivery.prepare'])->whereNumber(['order', 'report']);
+        Route::get('/laboratory-orders/{order}/reports/{report}/delivery-preparations/{preparation}/download', [ReportDeliveryController::class, 'downloadPreparation'])->middleware([AuditReportDeliveryPermission::class.':reports.delivery.prepare', 'can:reports.delivery.prepare'])->whereNumber(['order', 'report', 'preparation']);
+        Route::post('/laboratory-orders/{order}/reports/{report}/deliveries', [ReportDeliveryController::class, 'deliver'])->middleware([AuditReportDeliveryPermission::class.':reports.delivery.confirm', 'can:reports.delivery.confirm'])->whereNumber(['order', 'report']);
         Route::get('/laboratory-orders/{order}/reports/{report}/deliveries', [ReportDeliveryController::class, 'history'])->middleware('can:reports.delivery_history.view')->whereNumber(['order', 'report']);
 
         Route::get('/auth/authorization', CurrentAuthorizationController::class);

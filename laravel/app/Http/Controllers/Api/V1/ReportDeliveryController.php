@@ -61,7 +61,7 @@ final class ReportDeliveryController extends Controller
         [$issuance,$prepared,$bytes] = $this->deliveries->downloadPreparation($this->current->get(), $request->user(), $order, $report, $preparation);
 
         return response($bytes, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'attachment; filename="'.$issuance->number.'.pdf"',
-            'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff', 'X-Delivery-Preparation-ID' => (string) $prepared->id]);
+            'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff', 'X-Delivery-Preparation-ID' => (string) $prepared->id, 'X-Report-Purpose' => 'external_delivery']);
     }
 
     public function deliver(Request $request, int $order, int $report): JsonResponse

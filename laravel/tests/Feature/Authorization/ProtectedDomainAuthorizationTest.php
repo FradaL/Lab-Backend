@@ -47,9 +47,9 @@ final class ProtectedDomainAuthorizationTest extends TestCase
         ksort($expected);
 
         $this->assertSame($expected, $actual);
-        $this->assertCount(161, $actual);
+        $this->assertCount(178, $actual);
         $this->assertEmpty(array_diff(array_values($actual), RbacCatalog::PERMISSIONS));
-        $this->assertSame(54, collect(Route::getRoutes()->getRoutes())
+        $this->assertSame(65, collect(Route::getRoutes()->getRoutes())
             ->filter(fn (IlluminateRoute $route): bool => str_starts_with($route->uri(), 'api/v1/laboratory-orders'))
             ->filter(fn (IlluminateRoute $route): bool => collect($route->gatherMiddleware())
                 ->contains(fn (string $middleware): bool => str_starts_with($middleware, 'can:')))
@@ -419,6 +419,15 @@ final class ProtectedDomainAuthorizationTest extends TestCase
             'DELETE api/v1/laboratory-orders/{laboratoryOrder}/exams/{laboratoryOrderExam}' => 'orders.remove_exam',
             'PUT api/v1/laboratory-orders/{laboratoryOrder}/discount' => 'orders.manage_discount',
             'DELETE api/v1/laboratory-orders/{laboratoryOrder}/discount' => 'orders.manage_discount',
+            'GET api/v1/laboratory-orders/{order}/cash-movements' => 'payments.view',
+            'GET api/v1/laboratory-orders/{order}/cash-summary' => 'payments.view',
+            'GET api/v1/laboratory-orders/{order}/credit-authorizations' => 'payments.view',
+            'GET api/v1/laboratory-orders/{order}/payment-attempts/{idempotencyKey}' => 'payments.view',
+            'POST api/v1/laboratory-orders/{order}/credit-authorizations' => 'payments.credit.authorize',
+            'POST api/v1/laboratory-orders/{order}/credit-authorizations/{authorization}/revoke' => 'payments.credit.authorize',
+            'POST api/v1/laboratory-orders/{order}/payments' => 'payments.create',
+            'POST api/v1/laboratory-orders/{order}/payments/{payment}/void' => 'payments.void',
+            'POST api/v1/laboratory-orders/{order}/refunds' => 'payments.refund',
             'PATCH api/v1/laboratory-orders/{laboratoryOrder}/status' => 'orders.change_status',
             'GET api/v1/laboratory-orders/{order}/exams/{line}/results' => 'results.view',
             'PUT api/v1/laboratory-orders/{order}/exams/{line}/results' => 'results.capture',
@@ -434,6 +443,8 @@ final class ProtectedDomainAuthorizationTest extends TestCase
             'GET api/v1/laboratory-orders/{order}/reports/{report}' => 'reports.view_history',
             'GET api/v1/laboratory-orders/{order}/reports' => 'reports.view_history',
             'POST api/v1/laboratory-orders/{order}/reports' => 'reports.issue',
+            'POST api/v1/laboratory-orders/{order}/reports/{report}/validity-events' => 'reports.issue',
+            'GET api/v1/laboratory-orders/{order}/reports/{report}/validity-events' => 'reports.view_history',
             'GET api/v1/laboratory-orders/{order}/reports/{report}/delivery-eligibility' => 'reports.delivery.evaluate',
             'POST api/v1/laboratory-orders/{order}/reports/{report}/delivery-exceptions' => 'reports.delivery.prepare',
             'GET api/v1/laboratory-orders/{order}/reports/{report}/delivery-exceptions' => 'reports.delivery_exceptions.view',
@@ -444,14 +455,20 @@ final class ProtectedDomainAuthorizationTest extends TestCase
             'POST api/v1/laboratory-orders/{order}/reports/{report}/deliveries' => 'reports.delivery.confirm',
             'GET api/v1/laboratory-orders/{order}/reports/{report}/deliveries' => 'reports.delivery_history.view',
             'POST api/v1/laboratory/report-settings/logo' => 'reports.settings.edit',
+            'POST api/v1/laboratory/report-settings/publish' => 'reports.settings.edit',
             'PUT api/v1/laboratory/report-settings' => 'reports.settings.edit',
             'GET api/v1/laboratory/report-settings/logo' => 'reports.settings.view',
+            'GET api/v1/laboratory/report-settings/preview' => 'reports.settings.view',
+            'GET api/v1/laboratory/report-settings/publications' => 'reports.settings.view',
             'GET api/v1/laboratory/report-settings' => 'reports.settings.view',
             'GET api/v1/laboratory/report-delivery-policy' => 'reports.delivery_policy.view',
             'PUT api/v1/laboratory/report-delivery-policy' => 'reports.delivery_policy.manage',
             'GET api/v1/laboratory/validation-policy' => 'results.validation_policy.manage',
             'PUT api/v1/laboratory/validation-policy' => 'results.validation_policy.manage',
             'GET api/v1/laboratory/validation-professionals' => 'results.professionals.manage',
+            'GET api/v1/laboratory/validation-signature' => 'results.validate',
+            'POST api/v1/laboratory/validation-signature' => 'results.validate',
+            'DELETE api/v1/laboratory/validation-signature' => 'results.validate',
             'POST api/v1/laboratory/validation-professionals' => 'results.professionals.manage',
             'POST api/v1/laboratory/validation-professionals/{professional}/authorize' => 'results.professionals.manage',
             'POST api/v1/laboratory/validation-professionals/{professional}/revoke' => 'results.professionals.manage',

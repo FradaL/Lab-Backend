@@ -90,10 +90,8 @@ final class ReportDeliveryExceptionTest extends TestCase
         $this->assertConflict('report_delivery_preparation_expired', fn () => $service->downloadPreparation($lab, $actor, $order->id, $report->id, $preparation->id));
         $this->assertConflict('report_delivery_preparation_expired', fn () => $service->deliver($lab, $actor, $order->id, $report->id,
             ['preparation_id' => $preparation->id, 'delivery_confirmed' => true], 'exception-expired-delivery'));
-        // Un reintento recupera el registro original; no renueva ni permite usarlo.
-        $retry = $service->prepare($lab, $actor, $order->id, $report->id, $input, 'exception-expiration-prep');
-        $this->assertSame($preparation->id, $retry->id);
-        $this->assertTrue($preparation->expires_at->equalTo($retry->expires_at));
+        // Un reintento de preparación no confirmada se revalida y no renueva el plazo.
+        $this->assertConflict('report_delivery_preparation_expired', fn () => $service->prepare($lab, $actor, $order->id, $report->id, $input, 'exception-expiration-prep'));
         $this->assertDatabaseCount('report_deliveries', 0);
     }
 
@@ -207,6 +205,7 @@ final class ReportDeliveryExceptionTest extends TestCase
         [$lab, $actor, $order, $line, $report] = $this->issued();
         $authorized = $this->exceptionAuthorization($lab, $actor, $order, $report);
         $otherReport = app(ClinicalReportService::class)->issue($lab, $actor, $order->id, $this->body($order, $line), 'exception-other-exact-report');
+        $this->releaseReport($lab, $actor, $order, $otherReport);
         $url = "/api/v1/laboratory-orders/$order->id/reports/$otherReport->id/delivery-preparations";
         $input = $this->recipient(extra: ['exception_authorization_id' => $authorized['authorization']['id']]);
         $this->withHeader('Idempotency-Key', 'exception-wrong-report-key')->postJson($url, $input)->assertNotFound();
@@ -297,7 +296,7 @@ final class ReportDeliveryExceptionTest extends TestCase
                     'report_id' => $row['report_id'], 'authorization_id' => $row['exception_authorization_id'], 'preparation_id' => $id,
                 ]);
             }
-        }), $case === 'duplicate_binding' ? '23505' : '23514');
+        }), in_array($case, ['missing_binding', 'duplicate_binding'], true) ? '23505' : '23514');
         $this->assertDatabaseCount('report_delivery_preparations', 1);
         $this->assertDatabaseCount('report_delivery_exception_bindings', 1);
     }

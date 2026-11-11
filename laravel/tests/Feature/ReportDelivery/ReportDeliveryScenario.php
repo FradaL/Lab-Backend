@@ -2,8 +2,9 @@
 
 namespace Tests\Feature\ReportDelivery;
 
-use App\ClinicalReports\ClinicalReportService;
 use App\Cash\RecordOrderPayment;
+use App\ClinicalReports\ClinicalReportService;
+use App\ClinicalReports\ReportValidityService;
 use App\Models\LaboratoryOrder;
 use App\Models\ReportDeliveryPolicy;
 use App\ReportDelivery\ReportDeliveryService;
@@ -31,8 +32,15 @@ trait ReportDeliveryScenario
     {
         [$lab,$actor,$order,$line] = $this->resolved();
         $report = app(ClinicalReportService::class)->issue($lab, $actor, $order->id, $this->body($order, $line), 'delivery-scenario-report-key');
+        $this->releaseReport($lab, $actor, $order, $report);
 
         return [$lab, $actor, $order, $line, $report];
+    }
+
+    protected function releaseReport($lab, $actor, $order, $report): void
+    {
+        app(ReportValidityService::class)->change($lab, $actor, $order->id, $report->id,
+            ['state' => 'released', 'expected_revision' => 0, 'reason' => 'FICTICIO: liberación autorizada del informe.'], 'release-report-test-'.$report->id);
     }
 
     protected function issuedForPolicy(string $mode): array
