@@ -173,7 +173,7 @@ final class LaboratoryValidationService
                 'observations.*.text' => ['required', 'string', 'max:2000', 'regex:/\S/u'],
                 'reference_context' => ['required', 'array:reference_date,sex,conditions,confirm_birth_date'],
                 'reference_context.reference_date' => ['required', 'date_format:Y-m-d'],
-                'reference_context.sex' => ['sometimes', 'nullable', 'string', 'max:60'],
+                'reference_context.sex' => ['sometimes', 'nullable', 'string', 'in:Masculino,Femenino'],
                 'reference_context.confirm_birth_date' => ['sometimes', 'boolean'],
                 'reference_context.conditions' => ['sometimes', 'array', 'max:30'],
                 'reference_context.conditions.*' => ['nullable', 'string', 'max:150']];

@@ -90,11 +90,11 @@ class ValidationSecurityTest extends TestCase
 
     public function test_missing_reference_context_and_historical_snapshot(): void
     {
-        [$lab,$actor,$order,$line,$url] = $this->filled(['N' => ['references' => [['key' => 'DEMO-AGE', 'priority' => 1, 'age_min_days' => 0, 'sex' => 'CLINICAL-DEMO', 'conditions' => ['demo' => 'yes'], 'min' => 0]]]]);
+        [$lab,$actor,$order,$line,$url] = $this->filled(['N' => ['references' => [['key' => 'DEMO-AGE', 'priority' => 1, 'age_min_days' => 0, 'sex' => 'Masculino', 'conditions' => ['demo' => 'yes'], 'min' => 0]]]]);
         $patient = Patient::findOrFail($order->patient_id);
         $patient->update(['birth_date' => '2000-01-01', 'gender' => 'CLINICAL-DEMO']);
         $this->postJson($url.'/validate', ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11']])->assertConflict()->assertJsonPath('code', 'result_reference_unresolved');
-        $this->postJson($url.'/validate', ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11', 'sex' => 'CLINICAL-DEMO', 'conditions' => ['demo' => 'yes'], 'confirm_birth_date' => true]])->assertOk();
+        $this->postJson($url.'/validate', ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11', 'sex' => 'Masculino', 'conditions' => ['demo' => 'yes'], 'confirm_birth_date' => true]])->assertOk();
         $evidence = LaboratoryResultValidation::sole();
         $this->assertSame('patient.birth_date', $evidence->context_snapshot['sources']['age_days']['source']);
         $this->assertSame($actor->id, $evidence->context_snapshot['sources']['age_days']['confirmed_by']);
@@ -159,14 +159,24 @@ class ValidationSecurityTest extends TestCase
         $this->getJson($url.'/validations')->assertForbidden();
     }
 
+    public function test_clinical_sex_rejects_free_text_before_validation(): void
+    {
+        [$lab, $actor, $order, $line, $url] = $this->filled();
+        foreach (['M', 'F', 'Hombre', 'Mujer', 'male', 'female', 'masculino', ' Femenino ', 'Otro'] as $sex) {
+            $this->postJson($url.'/validate', ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11', 'sex' => $sex]])
+                ->assertUnprocessable()->assertJsonValidationErrors('reference_context.sex');
+        }
+        $this->assertDatabaseCount('laboratory_result_validations', 0);
+    }
+
     public function test_context_literals_are_preserved_and_unrelated_data_is_not_required(): void
     {
-        [$lab, $actor, $order, $line, $url] = $this->filled(['N' => ['references' => [['key' => 'literal', 'priority' => 1, 'sex' => ' DEMO ', 'conditions' => ['demo' => ' exact '], 'min' => 0]]]]);
+        [$lab, $actor, $order, $line, $url] = $this->filled(['N' => ['references' => [['key' => 'literal', 'priority' => 1, 'sex' => 'Femenino', 'conditions' => ['demo' => ' exact '], 'min' => 0]]]]);
         Patient::findOrFail($order->patient_id)->update(['birth_date' => null]);
-        $this->postJson($url.'/validate', ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11', 'sex' => ' DEMO ', 'conditions' => ['demo' => ' exact ']]])
+        $this->postJson($url.'/validate', ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11', 'sex' => 'Femenino', 'conditions' => ['demo' => ' exact ']]])
             ->assertOk();
         $evidence = LaboratoryResultValidation::sole();
-        $this->assertSame(' DEMO ', $evidence->context_snapshot['sex']);
+        $this->assertSame('Femenino', $evidence->context_snapshot['sex']);
         $this->assertSame(' exact ', $evidence->context_snapshot['conditions']['demo']);
         $this->assertNull($evidence->context_snapshot['age_days']);
         $this->assertSame('resolved', $evidence->reference_snapshot[0]['status']);

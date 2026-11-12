@@ -38,7 +38,7 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'priority', type: 'integer', minimum: 0, maximum: 1000000),
         new OA\Property(property: 'age_min_days', description: 'Inclusive completed days; null means unbounded.', type: ['integer', 'null'], minimum: 0),
         new OA\Property(property: 'age_max_days', description: 'Inclusive completed days; null means unbounded.', type: ['integer', 'null'], minimum: 0),
-        new OA\Property(property: 'sex', description: 'Configured exact code; null is wildcard.', type: ['string', 'null']),
+        new OA\Property(property: 'sex', description: 'Standard clinical sex; null is wildcard.', type: ['string', 'null'], enum: ['Masculino', 'Femenino', null]),
         new OA\Property(property: 'conditions', description: 'Named conditions matched by exact strings using AND.', type: 'object', additionalProperties: new OA\AdditionalProperties(type: 'string')),
         new OA\Property(property: 'min', type: ['number', 'null']),
         new OA\Property(property: 'max', type: ['number', 'null']),

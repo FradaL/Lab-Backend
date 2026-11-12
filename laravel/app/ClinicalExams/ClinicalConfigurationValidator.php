@@ -49,7 +49,7 @@ final class ClinicalConfigurationValidator
             'parameters.*.references.*.priority' => ['required', 'integer', 'min:0', 'max:1000000'],
             'parameters.*.references.*.age_min_days' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'parameters.*.references.*.age_max_days' => ['sometimes', 'nullable', 'integer', 'min:0'],
-            'parameters.*.references.*.sex' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'parameters.*.references.*.sex' => ['sometimes', 'nullable', 'string', 'in:Masculino,Femenino'],
             'parameters.*.references.*.conditions' => ['sometimes', 'array', 'max:30'],
             'parameters.*.references.*.conditions.*' => ['string', 'max:150'],
             'parameters.*.references.*.min' => ['sometimes', 'nullable', 'numeric'],

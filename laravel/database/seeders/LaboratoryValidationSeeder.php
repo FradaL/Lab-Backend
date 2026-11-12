@@ -64,7 +64,7 @@ final class LaboratoryValidationSeeder extends Seeder
                             $clinical = app(ClinicalExamService::class);
                             $draft = $clinical->create($lab, $admin, ['code' => 'DEMO-VALIDATION', 'name' => 'FICTICIO validación BE07', 'laboratory_area_id' => $area->id, 'sample_type_id' => null,
                                 'configuration' => ['sample_mode' => 'none', 'description' => DemoDataset::DISCLAIMER, 'parameters' => [
-                                    ['code' => 'NUM', 'name' => 'FICTICIO número', 'type' => 'numeric', 'unit_required' => false, 'references' => [['key' => 'DEMO', 'priority' => 1, 'min' => '0', 'sex' => 'DEMO-S']]],
+                                    ['code' => 'NUM', 'name' => 'FICTICIO número', 'type' => 'numeric', 'unit_required' => false, 'references' => [['key' => 'DEMO', 'priority' => 1, 'min' => '0', 'sex' => 'Masculino']]],
                                     ['code' => 'TXT', 'name' => 'FICTICIO texto', 'type' => 'text'],
                                     ['code' => 'QUAL', 'name' => 'FICTICIO cualitativo', 'type' => 'qualitative', 'options' => [['code' => 'DEMO', 'label' => 'FICTICIO']]],
                                     ['code' => 'OPT', 'name' => 'FICTICIO opción', 'type' => 'predefined_options', 'options' => [['code' => 'DEMO', 'label' => 'FICTICIO']]],
@@ -86,7 +86,7 @@ final class LaboratoryValidationSeeder extends Seeder
                                 continue;
                             }
                             $validation = app(LaboratoryValidationService::class);
-                            $context = ['reference_date' => now()->format('Y-m-d'), 'sex' => 'DEMO-S'];
+                            $context = ['reference_date' => now()->format('Y-m-d'), 'sex' => 'Masculino'];
                             $validation->validate($lab, $validator, $order->id, $line->id, ['revision' => 1, 'reference_context' => $context]);
                             if ($index === 0 && $position >= 2) {
                                 $validation->rectify($lab, $validator, $order->id, $line->id, ['revision' => 2, 'reason' => DemoDataset::DISCLAIMER]);
