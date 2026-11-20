@@ -13,6 +13,8 @@ final class ReportDeliveryExceptionAuthorization extends Model
 
     public $timestamps = false;
 
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     protected $guarded = ['id'];
 
     public function exception(): BelongsTo
@@ -27,6 +29,6 @@ final class ReportDeliveryExceptionAuthorization extends Model
 
     protected function casts(): array
     {
-        return ['policy_revision' => 'integer', 'evaluation_snapshot' => 'array', 'authorized_at' => 'immutable_datetime'];
+        return ['policy_revision' => 'integer', 'evaluation_snapshot' => 'array', 'authorized_at' => 'immutable_datetime', 'expires_at' => 'immutable_datetime'];
     }
 }

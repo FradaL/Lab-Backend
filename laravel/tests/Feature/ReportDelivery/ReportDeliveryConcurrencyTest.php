@@ -3,10 +3,7 @@
 namespace Tests\Feature\ReportDelivery;
 
 use App\ClinicalExams\ClinicalConflict;
-use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
-use App\ReportDelivery\CommercialAssessment;
-use App\ReportDelivery\CommercialComplianceProvider;
 use App\ReportDelivery\ReportDeliveryPolicyService;
 use App\ReportDelivery\ReportDeliveryService;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -29,21 +26,20 @@ final class ReportDeliveryConcurrencyTest extends TestCase
         $preparations = [];
         $exception = null;
         if ($race === 'commercial_evidence_change') {
-            $order->update(['notes' => 'evidence-v1']);
-            $this->databaseBackedProvider();
-            $service = app(ReportDeliveryService::class);
-        } elseif (in_array($race, ['exception_reuse', 'two_authorizations'], true)) {
+            $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'race-full-payment-0001');
+        } elseif (in_array($race, ['exception_reuse', 'two_authorizations', 'exception_binding', 'exception_revocation'], true)) {
             $exception = $service->requestException($lab, $actor, $order->id, $report->id, ['reason' => 'FICTICIO: carrera autorizada.']);
-            if ($race === 'exception_reuse') {
+            if ($race !== 'two_authorizations') {
                 $authorized = $service->authorizeException($lab, $actor, $order->id, $report->id, $exception['id'], ['revision' => 1]);
-                foreach ([1, 2] as $index) {
+                if ($race !== 'exception_binding') {
+                    $index = 1;
                     $preparations[$index] = $service->prepare($lab, $actor, $order->id, $report->id,
                         $this->recipient(extra: ['exception_authorization_id' => $authorized['authorization']['id']]), "race-exception-prep-$index");
                     $service->downloadPreparation($lab, $actor, $order->id, $report->id, $preparations[$index]->id);
                 }
             }
         } else {
-            app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 0, 'mode' => 'unrestricted', 'reason' => 'FICTICIO: carrera.']);
+            $this->recordPayment($lab, $actor, $order, $this->settlementAmount($order), 'race-standard-payment-01');
         }
         if (in_array($race, ['same_idempotency_key', 'same_preparation', 'policy_change', 'commercial_evidence_change'], true)) {
             $preparations[1] = $service->prepare($lab, $actor, $order->id, $report->id, $this->recipient(), 'race-standard-preparation');
@@ -63,7 +59,9 @@ final class ReportDeliveryConcurrencyTest extends TestCase
                 $childService = app(ReportDeliveryService::class);
                 match ($race) {
                     'two_authorizations' => $childService->authorizeException($lab, $actor, $order->id, $report->id, $exception['id'], ['revision' => 1]),
-                    'exception_reuse' => $childService->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[2]->id, 'delivery_confirmed' => true], 'race-second-exception-delivery'),
+                    'exception_reuse', 'exception_revocation' => $childService->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-second-exception-delivery'),
+                    'exception_binding' => $childService->prepare($lab, $actor, $order->id, $report->id,
+                        $this->recipient(extra: ['exception_authorization_id' => $authorized['authorization']['id']]), 'race-child-exception-prep'),
                     'same_idempotency_key' => $childService->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-shared-delivery-key'),
                     default => $childService->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-child-delivery-key'),
                 };
@@ -85,10 +83,13 @@ final class ReportDeliveryConcurrencyTest extends TestCase
             match ($race) {
                 'two_authorizations' => $service->authorizeException($lab, $actor, $order->id, $report->id, $exception['id'], ['revision' => 1]),
                 'exception_reuse' => $service->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-first-exception-delivery'),
+                'exception_binding' => $service->prepare($lab, $actor, $order->id, $report->id,
+                    $this->recipient(extra: ['exception_authorization_id' => $authorized['authorization']['id']]), 'race-parent-exception-prep'),
+                'exception_revocation' => $service->revokeException($lab, $actor, $order->id, $report->id, $exception['id'], ['revision' => 2, 'reason' => 'FICTICIO: revocación concurrente.']),
                 'same_idempotency_key' => $service->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-shared-delivery-key'),
                 'same_preparation' => $service->deliver($lab, $actor, $order->id, $report->id, ['preparation_id' => $preparations[1]->id, 'delivery_confirmed' => true], 'race-parent-delivery-key'),
-                'policy_change' => app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => 1, 'mode' => 'payment_or_credit', 'reason' => 'FICTICIO: cambio concurrente.']),
-                'commercial_evidence_change' => DB::table('laboratory_orders')->where('id', $order->id)->update(['notes' => 'evidence-v2']),
+                'policy_change' => app(ReportDeliveryPolicyService::class)->update($lab, $actor, ['revision' => $this->policyRevision($lab), 'mode' => 'payment_or_credit', 'reason' => 'FICTICIO: cambio concurrente.']),
+                'commercial_evidence_change' => $this->recordPayment($lab, $actor, $order, '0.01', 'race-evidence-change-01'),
             };
             touch($dir.'/go');
             $this->assertTrue($this->awaitBlocked($dir));
@@ -97,7 +98,11 @@ final class ReportDeliveryConcurrencyTest extends TestCase
             $this->assertSame(0, pcntl_wexitstatus($exit));
             $result = json_decode(file_get_contents($dir.'/result'), true, flags: JSON_THROW_ON_ERROR);
             $this->assertSame($expected, $result['status'], $result['message'] ?? '');
-            $this->assertSame(in_array($race, ['exception_reuse', 'same_idempotency_key', 'same_preparation'], true) ? 1 : 0, DB::table('report_deliveries')->count());
+            $this->assertSame(in_array($race, ['exception_reuse', 'same_idempotency_key', 'same_preparation', 'policy_change'], true) ? 1 : 0, DB::table('report_deliveries')->count());
+            if ($race === 'exception_binding') {
+                $this->assertDatabaseCount('report_delivery_preparations', 1);
+                $this->assertDatabaseCount('report_delivery_exception_bindings', 1);
+            }
         } finally {
             while (DB::transactionLevel() > 0) {
                 DB::rollBack();
@@ -115,26 +120,14 @@ final class ReportDeliveryConcurrencyTest extends TestCase
     {
         return [
             'two exception authorizations' => ['two_authorizations', 'report_delivery_exception_revision_conflict'],
-            'one exception cannot back two deliveries' => ['exception_reuse', 'report_delivery_exception_unavailable'],
+            'one exception cannot back two deliveries' => ['exception_reuse', 'report_delivery_preparation_consumed'],
+            'one exception cannot back two preparations' => ['exception_binding', 'report_delivery_exception_bound'],
+            'revocation blocks concurrent delivery' => ['exception_revocation', 'report_delivery_exception_unavailable'],
             'same delivery retry is idempotent' => ['same_idempotency_key', 'ok'],
             'one preparation cannot back two deliveries' => ['same_preparation', 'report_delivery_preparation_consumed'],
-            'policy change invalidates preparation' => ['policy_change', 'report_delivery_evidence_changed'],
+            'policy change preserves order snapshot preparation' => ['policy_change', 'ok'],
             'commercial evidence change invalidates preparation' => ['commercial_evidence_change', 'report_delivery_evidence_changed'],
         ];
-    }
-
-    private function databaseBackedProvider(): void
-    {
-        $this->app->instance(CommercialComplianceProvider::class, new class implements CommercialComplianceProvider
-        {
-            public function assess(Laboratory $laboratory, LaboratoryOrder $order): CommercialAssessment
-            {
-                $revision = (string) LaboratoryOrder::forLaboratory($laboratory)->whereKey($order->id)->value('notes');
-
-                return new CommercialAssessment('satisfied', 'full_payment', 'test_database_provider', 'TEST-EVIDENCE', $revision);
-            }
-        });
-        $this->app->forgetInstance(ReportDeliveryService::class);
     }
 
     private function awaitBlocked(string $dir): bool

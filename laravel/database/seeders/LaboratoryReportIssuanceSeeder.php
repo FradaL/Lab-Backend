@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\ClinicalReports\ClinicalReportService;
+use App\ClinicalReports\ReportValidityService;
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\User;
@@ -31,7 +32,9 @@ final class LaboratoryReportIssuanceSeeder extends Seeder
                 if ($kind === 'partial') {
                     $input['line_ids'] = $order->orderExams()->whereHas('clinicalResolution')->orderBy('id')->pluck('id')->all();
                 }
-                app(ClinicalReportService::class)->issue($lab, $actor, $order->id, $input, 'demo-be091-emission-'.$kind.'-v1');
+                $report = app(ClinicalReportService::class)->issue($lab, $actor, $order->id, $input, 'demo-be091-emission-'.$kind.'-v1');
+                app(ReportValidityService::class)->change($lab, $actor, $order->id, $report->id,
+                    ['state' => 'released', 'expected_revision' => 0, 'reason' => 'FICTICIO: liberación demostrativa.'], 'demo-be091-release-'.$kind.'-v1');
             }
         } finally {
             setPermissionsTeamId($team);

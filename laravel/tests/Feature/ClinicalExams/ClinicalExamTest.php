@@ -332,6 +332,17 @@ class ClinicalExamTest extends TestCase
         $this->assertNull($service->state($this->lab, $draft->laboratory_exam_id)->current_version_id);
     }
 
+    public function test_reference_sex_rejects_free_text_on_api_writes(): void
+    {
+        foreach (['M', 'F', 'Hombre', 'Mujer', 'male', 'female', 'masculino', 'Otro'] as $sex) {
+            $configuration = $this->configuration();
+            $configuration['parameters'][0]['references'] = [['key' => 'standard', 'priority' => 0, 'min' => 0, 'sex' => $sex]];
+            $this->postJson('/api/v1/laboratory-exams/drafts', $this->payload($configuration))
+                ->assertUnprocessable()->assertJsonValidationErrors('parameters.0.references.0.sex');
+        }
+        $this->assertDatabaseCount('laboratory_exam_versions', 0);
+    }
+
     public function test_reference_priority_overlap_age_sex_conditions_and_type_consistency(): void
     {
         $validator = app(ClinicalConfigurationValidator::class);
@@ -346,8 +357,8 @@ class ClinicalExamTest extends TestCase
         $this->assertSame([], $validator->errors($config, $this->lab, true));
         $config['parameters'][0]['references'][1]['age_min_days'] = 10;
         $this->assertNotSame([], $validator->errors($config, $this->lab, true));
-        $config['parameters'][0]['references'][0]['sex'] = 'fixture-a';
-        $config['parameters'][0]['references'][1]['sex'] = 'fixture-b';
+        $config['parameters'][0]['references'][0]['sex'] = 'Masculino';
+        $config['parameters'][0]['references'][1]['sex'] = 'Femenino';
         $this->assertSame([], $validator->errors($config, $this->lab, true));
         unset($config['parameters'][0]['references'][0]['sex'], $config['parameters'][0]['references'][1]['sex']);
         $config['parameters'][0]['references'][0]['conditions'] = ['fixture_context' => 'no'];

@@ -2,29 +2,80 @@
 
 namespace Tests\Feature\ReportDelivery;
 
+use App\Cash\RecordOrderPayment;
 use App\ClinicalReports\ClinicalReportService;
+use App\ClinicalReports\ReportValidityService;
 use App\Models\LaboratoryOrder;
+use App\Models\ReportDeliveryPolicy;
 use App\ReportDelivery\ReportDeliveryService;
+use Illuminate\Support\Facades\DB;
 use Tests\Feature\ClinicalReports\ClinicalReportScenario;
-use Tests\Support\HistoricalOrderFixture;
 
 trait ReportDeliveryScenario
 {
     use ClinicalReportScenario;
 
+    private ?string $deliveryPolicyMode = null;
+
     protected function makeScenarioOrder($lab, $prices): LaboratoryOrder
     {
-        return HistoricalOrderFixture::create(fn () => LaboratoryOrder::factory()->for($lab)->create([
-            'price_list_id' => $prices->id, 'currency' => 'GTQ', 'status' => 'pending', 'delivery_policy_snapshot' => null,
-        ]));
+        if ($this->deliveryPolicyMode !== null) {
+            ReportDeliveryPolicy::factory()->for($lab)->create(['mode' => $this->deliveryPolicyMode]);
+        }
+
+        return LaboratoryOrder::factory()->for($lab)->create([
+            'price_list_id' => $prices->id, 'currency' => 'GTQ', 'status' => 'pending',
+        ]);
     }
 
     protected function issued(): array
     {
         [$lab,$actor,$order,$line] = $this->resolved();
         $report = app(ClinicalReportService::class)->issue($lab, $actor, $order->id, $this->body($order, $line), 'delivery-scenario-report-key');
+        $this->releaseReport($lab, $actor, $order, $report);
 
         return [$lab, $actor, $order, $line, $report];
+    }
+
+    protected function releaseReport($lab, $actor, $order, $report): void
+    {
+        app(ReportValidityService::class)->change($lab, $actor, $order->id, $report->id,
+            ['state' => 'released', 'expected_revision' => 0, 'reason' => 'FICTICIO: liberación autorizada del informe.'], 'release-report-test-'.$report->id);
+    }
+
+    protected function issuedForPolicy(string $mode): array
+    {
+        $this->deliveryPolicyMode = $mode;
+        try {
+            return $this->issued();
+        } finally {
+            $this->deliveryPolicyMode = null;
+        }
+    }
+
+    protected function recordPayment($lab, $actor, LaboratoryOrder $order, string $amount, string $key): array
+    {
+        $revision = (int) DB::table('laboratory_order_financial_states')
+            ->where(['laboratory_id' => $lab->id, 'laboratory_order_id' => $order->id])
+            ->value('revision');
+
+        return app(RecordOrderPayment::class)->execute($lab, $actor, $order->id, [
+            'expected_revision' => $revision,
+            'amount' => $amount,
+            'method' => 'cash',
+        ], $key);
+    }
+
+    protected function settlementAmount(LaboratoryOrder $order): string
+    {
+        $total = $order->fresh()->total;
+
+        return $total === '0.00' ? '0.01' : $total;
+    }
+
+    protected function policyRevision($lab): int
+    {
+        return (int) DB::table('report_delivery_policies')->where('laboratory_id', $lab->id)->value('revision');
     }
 
     protected function recipient(string $channel = 'printed_document', array $extra = []): array

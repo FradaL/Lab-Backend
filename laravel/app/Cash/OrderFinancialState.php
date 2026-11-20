@@ -43,12 +43,12 @@ final class OrderFinancialState
         return $current + 1;
     }
 
-    public function revision(LaboratoryOrder $order, int $revision, ?int $previous, string $cause, ?int $actor, string $time, ?int $movement = null): void
+    public function revision(LaboratoryOrder $order, int $revision, ?int $previous, string $cause, ?int $actor, string $time, ?int $resource = null, string $resourceType = 'cash_movement'): void
     {
         DB::table('laboratory_order_financial_revisions')->insert([
             'laboratory_id' => $order->laboratory_id, 'laboratory_order_id' => $order->id,
             'revision' => $revision, 'previous_revision' => $previous, 'cause' => $cause,
-            'resource_type' => $movement === null ? null : 'cash_movement', 'resource_id' => $movement,
+            'resource_type' => $resource === null ? null : $resourceType, 'resource_id' => $resource,
             'created_by' => $actor, 'recorded_at' => $time, 'total_snapshot' => $order->total,
         ]);
     }

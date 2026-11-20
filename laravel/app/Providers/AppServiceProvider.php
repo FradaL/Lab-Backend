@@ -3,7 +3,7 @@
 namespace App\Providers;
 
 use App\ReportDelivery\CommercialComplianceProvider;
-use App\ReportDelivery\UnavailableCommercialComplianceProvider;
+use App\ReportDelivery\OrderCashCommercialComplianceProvider;
 use App\Tenancy\CurrentLaboratory;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -24,7 +24,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(CurrentLaboratory::class);
-        $this->app->bind(CommercialComplianceProvider::class, UnavailableCommercialComplianceProvider::class);
+        $this->app->bind(CommercialComplianceProvider::class, OrderCashCommercialComplianceProvider::class);
 
         $testingRequested = $this->app->environment('testing')
             || Env::get('APP_ENV') === 'testing';

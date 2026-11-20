@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\ClinicalReports\ClinicalReportService;
+use App\ClinicalReports\ReportValidityService;
 use App\Models\Laboratory;
 use App\Models\LaboratoryOrder;
 use App\Models\ReportDeliveryException;
@@ -46,6 +47,11 @@ final class LaboratoryReportDeliverySeeder extends Seeder
                 ['type' => 'complete', 'clinical_revision' => $strictOrder->clinical_revision], 'demo-be092-restrictive-delivered-report');
             $authorizedReport = $strictService->issue($strictLab, $strictActor, $strictOrder->id,
                 ['type' => 'complete', 'clinical_revision' => $strictOrder->clinical_revision], 'demo-be092-restrictive-authorized-report');
+            $validity = app(ReportValidityService::class);
+            foreach ([$deliveredReport, $authorizedReport] as $report) {
+                $validity->change($strictLab, $strictActor, $strictOrder->id, $report->id,
+                    ['state' => 'released', 'expected_revision' => 0, 'reason' => DemoDataset::DISCLAIMER], 'demo-be092-release-'.$report->id);
+            }
             $strictDelivery = app(ReportDeliveryService::class);
             $usedAuthorization = $this->authorization($strictLab, $strictActor, $strictOrder, $deliveredReport, 'used');
             $preparation = $strictDelivery->prepare($strictLab, $strictActor, $strictOrder->id, $deliveredReport->id,

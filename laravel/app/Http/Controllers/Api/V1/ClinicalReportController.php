@@ -6,6 +6,7 @@ use App\ClinicalReports\ClinicalReportRenderer;
 use App\ClinicalReports\ClinicalReportService;
 use App\ClinicalReports\ReportPreviewDocument;
 use App\ClinicalReports\ReportSettingsService;
+use App\ClinicalReports\ReportValidityService;
 use App\Http\Controllers\Controller;
 use App\Models\LaboratoryReportIssuance;
 use App\Tenancy\CurrentLaboratory;
@@ -97,6 +98,16 @@ final class ClinicalReportController extends Controller
         return response()->json($this->service->history($this->current->get(), $r->user(), $order));
     }
 
+    public function changeValidity(Request $r, int $order, int $report, ReportValidityService $validity)
+    {
+        return response()->json(['data' => $validity->change($this->current->get(), $r->user(), $order, $report, $r->all(), (string) $r->header('Idempotency-Key'))], 201);
+    }
+
+    public function validityHistory(Request $r, int $order, int $report, ReportValidityService $validity)
+    {
+        return response()->json($validity->history($this->current->get(), $r->user(), $order, $report));
+    }
+
     public function show(Request $r, int $order, int $report)
     {
         return response()->json(['data' => $this->service->metadata($this->service->lookup($this->current->get(), $r->user(), $order, $report))]);
@@ -106,7 +117,7 @@ final class ClinicalReportController extends Controller
     {
         [$issuance,$bytes] = $this->service->download($this->current->get(), $r->user(), $order, $report);
 
-        return response($bytes)->header('Content-Type', 'application/pdf')->header('Content-Disposition', 'attachment; filename="'.$issuance->number.'.pdf"')
+        return response($bytes)->header('Content-Type', 'application/pdf')->header('Content-Disposition', 'attachment; filename="'.$issuance->number.'.pdf"')->header('X-Report-Purpose', 'internal_use')
             ->header('Cache-Control', 'private, no-store')->header('X-Content-Type-Options', 'nosniff');
     }
 

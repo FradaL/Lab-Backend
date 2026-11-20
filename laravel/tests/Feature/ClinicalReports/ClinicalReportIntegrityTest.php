@@ -52,8 +52,6 @@ class ClinicalReportIntegrityTest extends TestCase
     {
         [$lab,$actor,$order,$line] = $this->resolved();
         app(ClinicalReportService::class)->issue($lab, $actor, $order->id, $this->body($order, $line), 'sql-down-test-key-01');
-        $deliveryMigration = require database_path('migrations/2026_10_11_000005_create_report_delivery_controls.php');
-        $deliveryMigration->down();
         $migration = require database_path('migrations/2026_10_11_000004_create_clinical_report_issuances.php');
         try {
             $migration->down();

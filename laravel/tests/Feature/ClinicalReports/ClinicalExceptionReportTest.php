@@ -327,7 +327,8 @@ class ClinicalExceptionReportTest extends TestCase
         $delivery = app(ReportDeliveryService::class);
         $eligibility = $delivery->eligibility($s['lab'], $s['actor'], $s['order']->id, $report->id);
         $this->assertFalse($eligibility['eligible']);
-        $this->assertSame('unavailable', $eligibility['evaluation']['assessment']['status']);
+        $this->assertSame('not_satisfied', $eligibility['evaluation']['assessment']['status']);
+        $this->assertSame('order_cash_v1', $eligibility['evaluation']['assessment']['provider']);
         try {
             $delivery->prepare($s['lab'], $s['actor'], $s['order']->id, $report->id, ['channel' => 'printed_document', 'recipient_type' => 'patient', 'authorization_basis' => 'identity_verified', 'authorization_evidence' => 'FICTICIO: identidad verificada', 'authorization_confirmed' => true], 'exc05-delivery-blocked');
             $this->fail('A clinical exception must not bypass commercial release.');

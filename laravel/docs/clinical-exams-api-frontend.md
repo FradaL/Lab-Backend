@@ -214,7 +214,7 @@ Cada elemento de references admite:
 | priority | integer | Requerido; entre 0 y 1,000,000 |
 | age_min_days | integer o null | Mínimo 0; límite inclusivo; null o ausencia significa sin límite inferior |
 | age_max_days | integer o null | Mínimo 0; límite inclusivo; debe ser mayor o igual a age_min_days |
-| sex | string o null | Máximo 60; coincidencia exacta; null o ausencia funciona como comodín |
+| sex | string o null | Solo `Masculino` o `Femenino`; coincidencia exacta; null o ausencia funciona como comodín |
 | conditions | objeto string a string | Máximo 30; se comparan todas con AND y valores exactos. Las claves empiezan con letra y continúan con letras, números o guion bajo, máximo 60 |
 | min | number o null | Solo para referencias numeric |
 | max | number o null | Solo para referencias numeric |
@@ -306,7 +306,7 @@ Reglas al publicar:
           "key": "adult_female",
           "priority": 20,
           "age_min_days": 6570,
-          "sex": "female",
+          "sex": "Femenino",
           "min": 12,
           "max": 16
         },
@@ -314,7 +314,7 @@ Reglas al publicar:
           "key": "adult_male",
           "priority": 20,
           "age_min_days": 6570,
-          "sex": "male",
+          "sex": "Masculino",
           "min": 13,
           "max": 17
         }

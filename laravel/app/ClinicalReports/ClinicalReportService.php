@@ -12,6 +12,7 @@ use App\Models\LaboratoryOrderExam;
 use App\Models\LaboratoryReportIssuance;
 use App\Models\Patient;
 use App\Models\User;
+use App\ReportDelivery\ReportOperationalGuard;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,7 @@ final class ClinicalReportService
     }
 
     public function __construct(private ReportAuthority $authority, private ReportSettingsService $settings,
-        private ClinicalReportRenderer $renderer, private PrivateReportStorage $storage, private AuditWriter $audit) {}
+        private ReportOperationalGuard $operational, private ClinicalReportRenderer $renderer, private PrivateReportStorage $storage, private AuditWriter $audit) {}
 
     public function issue(Laboratory $lab, User $actor, int $orderId, array $input, string $key): LaboratoryReportIssuance
     {
@@ -195,15 +196,24 @@ final class ClinicalReportService
 
     public function download(Laboratory $lab, User $actor, int $orderId, int $reportId): array
     {
-        $report = $this->lookup($lab, $actor, $orderId, $reportId, true);
+        $report = DB::transaction(function () use ($lab, $actor, $orderId, $reportId) {
+            $order = $this->order($lab, $orderId, false);
+            $this->authority->check($lab, $actor, 'reports.download');
+            $report = LaboratoryReportIssuance::forLaboratory($lab)->where('laboratory_order_id', $orderId)->whereKey($reportId)->sharedLock()->firstOrFail();
+            $this->operational->assertCurrent($order, $report);
+
+            return $report;
+        });
         try {
             $bytes = $this->storage->read($report->private_path, $report->pdf_hash);
         } catch (\Throwable) {
             throw new ClinicalConflict('report_storage_unavailable', 'The private document is unavailable or failed its integrity check.', status: 503);
         }
         DB::transaction(function () use ($lab, $actor, $report) {
+            $order = $this->order($lab, $report->laboratory_order_id, false);
+            $this->operational->assertCurrent($order, $report);
             $this->authority->check($lab, $actor, 'reports.download');
-            $this->audit->record($lab, $actor, new AuditEvent('order_report.downloaded', 'laboratory_report_issuance', $report->id, metadata: ['laboratory_order_id' => $report->laboratory_order_id, 'pdf_hash' => $report->pdf_hash]));
+            $this->audit->record($lab, $actor, new AuditEvent('order_report.downloaded', 'laboratory_report_issuance', $report->id, metadata: ['laboratory_order_id' => $report->laboratory_order_id, 'pdf_hash' => $report->pdf_hash, 'purpose' => 'internal_use']));
         });
 
         return [$report, $bytes];

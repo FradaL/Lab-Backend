@@ -10,6 +10,7 @@ use App\ClinicalReports\ClinicalReportRenderer;
 use App\ClinicalReports\ClinicalReportService;
 use App\ClinicalReports\PrivateReportStorage;
 use App\ClinicalReports\ReportSettingsService;
+use App\ClinicalReports\ReportValidityService;
 use App\Models\AuditLog;
 use App\Models\Laboratory;
 use App\Models\LaboratoryReportIssuance;
@@ -42,6 +43,8 @@ class ClinicalReportTest extends TestCase
         $this->assertSame('12345678901234567890.123456789', $report->clinical_snapshot[0]['validation']['results_snapshot'][0]['value']);
         $this->assertSame($line->report_area_snapshot, $report->clinical_snapshot[0]['area']);
         $url = "/api/v1/laboratory-orders/$order->id/reports/$report->id";
+        app(ReportValidityService::class)->change($lab, $actor, $order->id, $report->id,
+            ['state' => 'released', 'expected_revision' => 0, 'reason' => 'FICTICIO: liberación clínica.'], 'clinical-test-release-001');
         $this->getJson($url)->assertOk()->assertJsonMissingPath('data.private_path')->assertJsonMissingPath('data.clinical_snapshot');
         $this->get($url.'/download')->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->assertDatabaseHas('audit_logs', ['event' => 'order_report.downloaded']);
@@ -364,6 +367,8 @@ class ClinicalReportTest extends TestCase
     {
         [$lab,$actor,$order,$line] = $this->resolved();
         $report = app(ClinicalReportService::class)->issue($lab, $actor, $order->id, $this->body($order, $line), 'corrupt-report-integrity-key');
+        app(ReportValidityService::class)->change($lab, $actor, $order->id, $report->id,
+            ['state' => 'released', 'expected_revision' => 0, 'reason' => 'FICTICIO: liberación clínica.'], 'clinical-integrity-release-001');
         Storage::disk('clinical_reports')->put($report->private_path, 'corrupt');
         try {
             app(ClinicalReportService::class)->download($lab, $actor, $order->id, $report->id);
