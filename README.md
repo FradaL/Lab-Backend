@@ -151,6 +151,66 @@ Los seeders crean dos usuarios exclusivamente para desarrollo local:
 
 La contraseña se almacena hasheada. Los roles y sus permisos se asignan dentro del laboratorio demo.
 
+### Permisos de Caja del administrador demo — 2026-11-20
+
+Por solicitud expresa de Daniel Lara, `DemoPermissionSeeder` asigna `payments.view`,
+`payments.create`, `payments.void`, `payments.refund` y
+`payments.credit.authorize` al rol `administrator` de Laboratorio Demo Donqer.
+Por solicitud posterior del mismo día, incluye también
+`reports.delivery_policy.view` y `reports.delivery_policy.manage` para consultar
+y modificar la política de cobro en Configuración, sin cambiar la política
+persistida ni asignar permisos de entrega adicionales.
+Asignación aplicada y verificada en local y servidor: rol `administrator` del
+laboratorio demo en revisión 3; siete permisos efectivos (cinco de Caja y dos de
+política). Verificación: 33 pruebas / 233 aserciones satisfactorias en PostgreSQL
+17 efímero; Pint, sintaxis PHP y comprobaciones de Git satisfactorios. Sin cambio
+de política, commit ni despliegue del código del seeder.
+
+Todos los usuarios con ese rol en ese laboratorio heredan Caja; la matriz del rol
+muestra los permisos. No cambia las plantillas generales de roles de otros
+laboratorios ni el rol de recepción.
+
+El seeder verifica procedencia demo, autoridad, membresía y suscripción; conserva
+los permisos existentes del rol, incrementa su revisión y audita los agregados.
+Retira mediante `CashPermissionManager` únicamente las cinco concesiones directas
+anteriores del administrador demo, conservando otros permisos directos. La
+solicitud posterior «al rol de admin, no al usuario» sustituye el enfoque inicial
+de concesiones directas de esta misma fecha.
+
+Forma parte de la carga básica: ejecutar `UserSeeder`, `SaasFoundationSeeder` y
+después `DemoPermissionSeeder`; no requiere otro seeder. Con las dependencias ya
+cargadas, basta repetir:
+
+```bash
+docker exec -it donqer-lab-workspace-1 php artisan db:seed --class=DemoPermissionSeeder
+```
+
+Repetirlo conserva la matriz sin duplicar auditoría y repone con auditoría
+un permiso de Caja retirado al rol administrador demo. Sigue limitado
+a entornos `local` o `testing`; no cambia la configuración de producción ni
+ejecuta seeders automáticamente durante un despliegue.
+
+Validación del ajuste al rol: 36 pruebas / 255 aserciones satisfactorias en
+PostgreSQL 17 efímero; PHP, Pint y `git diff --check` satisfactorios. Se verifican
+matriz visible, herencia para otro administrador, pérdida de Caja al retirar el
+rol, aislamiento por laboratorio, migración de concesiones directas e idempotencia.
+Se aplicó la asignación al rol en local y en el servidor por solicitud del usuario:
+cinco permisos en `administrator` de Laboratorio Demo Donqer, revisión 2, cero
+permisos de Caja directos en la cuenta demo y cinco efectivos por herencia.
+El código del seeder sigue pendiente de commit/despliegue; la operación del
+servidor se ejecutó con el seeder actualizado de forma temporal, sin reemplazar
+la imagen desplegada ni cambiar su entorno permanente.
+
+Corte previo, antes de pasar las concesiones al rol: verificación local en
+PostgreSQL 17 efímero, 36 pruebas / 244 aserciones
+satisfactorias (`DemoPermissionSeederTest`, `AdminDemoPermissionSeederTest`,
+`RolePermissionSeederTest`, `CashAuthorizationTest`), sintaxis PHP y Pint
+satisfactorios. Regresión ampliada: 48 de 49 casos satisfactorios; el caso
+`LaboratoryOrderSeederTest::test_foreign_orders_prices_defaults_roles_and_legacy_history_are_untouched`
+falla al retirar el ledger por una FK de crédito, antes de ejecutar el seeder.
+Se reprodujo el mismo error con el seeder original de `d650a5c`; queda pendiente
+corregir ese fixture histórico en otra tarea. Cambio local, sin commit ni despliegue.
+
 Ejecutar los seeders desde `laradock/`:
 
 ```bash

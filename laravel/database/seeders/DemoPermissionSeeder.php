@@ -2,10 +2,16 @@
 
 namespace Database\Seeders;
 
+use App\Audit\AuditEvent;
+use App\Audit\AuditWriter;
 use App\Authorization\RbacCatalog;
+use App\Cash\CashAuthority;
+use App\Cash\CashPermissionManager;
+use App\ClinicalValidation\ValidationAuthority;
 use App\Models\Laboratory;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -40,6 +46,37 @@ final class DemoPermissionSeeder extends Seeder
 
                     return $lab;
                 });
+
+                // Apply the approved demo role matrix even on an existing dataset.
+                $admin = DemoDataset::owned(User::class, ['email' => 'admin@donqerlab.test']);
+                Laboratory::whereKey($lab->id)->lockForUpdate()->firstOrFail();
+                app(ValidationAuthority::class)->access($lab, $admin, 'roles.permissions.manage');
+                $role = DemoDataset::owned(Role::class, [
+                    'laboratory_id' => $lab->id, 'name' => 'administrator', 'guard_name' => RbacCatalog::GUARD,
+                ]);
+                $before = $role->permissions()->orderBy('name')->pluck('name')->all();
+                $rolePermissions = [...CashAuthority::PERMISSIONS, 'reports.delivery_policy.view', 'reports.delivery_policy.manage'];
+                $added = array_values(array_diff($rolePermissions, $before));
+                $reason = 'Daniel Lara solicita asignar Caja y política de cobro al rol administrador demo, 2026-11-20.';
+                if ($added !== []) {
+                    $revision = (int) $role->permissions_revision;
+                    $ids = Permission::where('guard_name', RbacCatalog::GUARD)->whereIn('name', $added)->pluck('id')->all();
+                    $role->permissions()->syncWithoutDetaching($ids);
+                    DB::table('roles')->where('id', $role->id)->update(['permissions_revision' => $revision + 1, 'updated_at' => now()]);
+                    $after = $role->permissions()->orderBy('name')->pluck('name')->all();
+                    app(AuditWriter::class)->record($lab, $admin, new AuditEvent(
+                        'role.permissions_replaced', 'role', $role->id,
+                        oldValues: ['revision' => $revision, 'permissions' => $before],
+                        newValues: ['revision' => $revision + 1, 'permissions' => $after],
+                        metadata: ['role_name' => $role->name, 'reason' => $reason, 'added' => $added, 'removed' => [], 'source' => self::class],
+                    ));
+                }
+                // Remove only the superseded direct cash grants of this demo user.
+                foreach (CashAuthority::PERMISSIONS as $permission) {
+                    app(CashPermissionManager::class)->set(
+                        $lab, $admin, $admin, $permission, false, $reason,
+                    );
+                }
             });
         } finally {
             setPermissionsTeamId($previousTeam);
