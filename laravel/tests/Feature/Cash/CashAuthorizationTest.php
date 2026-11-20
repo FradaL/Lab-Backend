@@ -9,13 +9,13 @@ use App\Cash\CashPermissionManager;
 use App\Models\AuditLog;
 use App\Models\Laboratory;
 use App\Models\Subscription;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 
 class CashAuthorizationTest extends TestCase
@@ -26,7 +26,7 @@ class CashAuthorizationTest extends TestCase
     {
         $lab = Laboratory::factory()->create();
         Subscription::factory()->for($lab)->create();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $user = $this->createLaboratoryMember($lab);
         $this->assignLaboratoryRole($user, $lab, $role);
 
@@ -42,7 +42,7 @@ class CashAuthorizationTest extends TestCase
     public function test_no_role_receives_financial_permissions_automatically_even_after_reseeding(string $role): void
     {
         [$lab, $actor] = $this->context($role);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         setPermissionsTeamId($lab->id);
         foreach (CashAuthority::PERMISSIONS as $permission) {
             $this->assertDenied(fn () => app(CashAuthority::class)->run($lab, $actor, $permission, fn () => $this->fail('Unauthorized callback')));

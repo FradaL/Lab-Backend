@@ -12,7 +12,6 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Tenancy\CurrentLaboratory;
 use App\UserAdministration\SaasAccessManager;
-use Database\Seeders\SaasAccessBootstrapSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
@@ -33,7 +32,7 @@ class SaasAccessTest extends TestCase
     {
         $user ??= User::factory()->create();
         config(['saas.bootstrap.enabled' => true, 'saas.bootstrap.user_id' => $user->id]);
-        $this->seed(SaasAccessBootstrapSeeder::class);
+        app(SaasAccessManager::class)->bootstrap();
 
         return $user;
     }
@@ -74,7 +73,7 @@ class SaasAccessTest extends TestCase
     {
         $user = $this->bootstrapUser();
         $before = DB::table('users')->where('id', $user->id)->first();
-        $this->seed(SaasAccessBootstrapSeeder::class);
+        app(SaasAccessManager::class)->bootstrap();
         $this->assertDatabaseCount('saas_capability_assignments', 1);
         $this->assertDatabaseCount('saas_audit_logs', 1);
         $this->assertDatabaseCount('laboratory_user', 0);
@@ -109,7 +108,7 @@ class SaasAccessTest extends TestCase
             app()->detectEnvironment(fn () => 'production');
         }
         try {
-            (new SaasAccessBootstrapSeeder)->run();
+            app(SaasAccessManager::class)->bootstrap();
             $this->fail('Bootstrap must reject this configuration.');
         } catch (\RuntimeException) {
             $this->assertDatabaseCount('saas_capability_assignments', 0);
@@ -177,7 +176,7 @@ class SaasAccessTest extends TestCase
         $this->getJson(self::BASE.'/users')->assertForbidden();
         config(['saas.bootstrap.user_id' => $second->id]);
         $this->expectException(\RuntimeException::class);
-        (new SaasAccessBootstrapSeeder)->run();
+        app(SaasAccessManager::class)->bootstrap();
     }
 
     public function test_tenant_context_is_ignored_and_never_granted_by_saas_access(): void
@@ -270,7 +269,7 @@ class SaasAccessTest extends TestCase
         $this->grant($first, $second);
         $grant = SaasCapabilityAssignment::where('user_id', $first->id)->sole();
         app(SaasAccessManager::class)->revoke($second, $first->id, $grant->id, ['revision' => 1, 'reason' => 'FICTICIO']);
-        $this->seed(SaasAccessBootstrapSeeder::class);
+        app(SaasAccessManager::class)->bootstrap();
         $this->assertNotNull($grant->fresh()->revoked_at);
         $this->assertDatabaseCount('saas_capability_assignments', 2);
         $this->assertDatabaseCount('saas_audit_logs', 3);

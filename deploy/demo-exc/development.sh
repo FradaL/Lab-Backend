@@ -14,5 +14,5 @@ export DONQER_EXC_DEMO_OWNER_PASSWORD
 trap 'unset DONQER_EXC_DEMO_OWNER_PASSWORD' EXIT
 docker compose -p donqer-exc-demo -f deploy/demo-exc/compose.yaml up -d
 docker compose -p donqer-exc-demo -f deploy/demo-exc/compose.yaml exec -T api php artisan migrate --no-interaction
-docker compose -p donqer-exc-demo -f deploy/demo-exc/compose.yaml exec -T api php artisan db:seed --class=DemoDevelopmentSeeder --no-interaction
-printf 'DEMO disponible en http://localhost:8086. Credenciales: el secreto introducido y los correos de docs/sprint-2/DEMO-development-seeders.md.\n'
+docker compose -p donqer-exc-demo -f deploy/demo-exc/compose.yaml exec -T api php artisan demo:clinical-reasons --confirm-database=donqer_exc_demo --yes --no-interaction
+printf 'DEMO disponible en http://localhost:8086. Acceso al laboratorio: exc-demo-owner@donqerlab.test y el secreto introducido. Las identidades SaaS son internas.\n'

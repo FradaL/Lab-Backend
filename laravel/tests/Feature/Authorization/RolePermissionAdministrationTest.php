@@ -8,9 +8,9 @@ use App\Models\AuditLog;
 use App\Models\Laboratory;
 use App\Models\Subscription;
 use App\Models\User;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 
 class RolePermissionAdministrationTest extends TestCase
@@ -21,7 +21,7 @@ class RolePermissionAdministrationTest extends TestCase
     {
         $lab = Laboratory::factory()->create();
         Subscription::factory()->create(['laboratory_id' => $lab->id]);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $owner = $this->createLaboratoryMember($lab);
         $this->assignLaboratoryRole($owner, $lab, 'owner');
         $this->actingAs($owner)->withHeader('X-Laboratory-ID', (string) $lab->id);

@@ -7,11 +7,11 @@ use App\Cash\CashPermissionManager;
 use App\Models\Laboratory;
 use App\Models\Subscription;
 use App\UserAdministration\UserAdministrationConflict;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 use Throwable;
 
@@ -29,7 +29,7 @@ class CashAuthorizationConcurrencyTest extends TestCase
     {
         $lab = Laboratory::factory()->create();
         Subscription::factory()->for($lab)->create();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $owner = $this->createLaboratoryMember($lab);
         $target = $this->createLaboratoryMember($lab);
         $this->assignLaboratoryRole($owner, $lab, 'owner');

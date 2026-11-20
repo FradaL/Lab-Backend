@@ -15,7 +15,9 @@ chmod 600 .env
 SEED_DEMO_DATA=1 ./deploy.sh
 ```
 
-The demo seed is opt-in because it recreates some demo relationships. It uses a
+The seed remains opt-in and DatabaseSeeder now loads only the seven basic
+seeders (users, laboratory foundation, permissions, doctors, patients, areas,
+and sample types), without orders, results, or reports. It uses a
 separate, non-running tools image containing Faker and the other development
 dependencies required by the factories. The web app image remains free of
 development dependencies. Normal deployments should run `./deploy.sh` without

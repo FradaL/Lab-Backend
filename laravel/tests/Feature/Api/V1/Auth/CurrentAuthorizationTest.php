@@ -10,7 +10,6 @@ use App\Models\PriceList;
 use App\Models\ReportDeliveryPolicy;
 use App\Models\Subscription;
 use App\Models\User;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route as IlluminateRoute;
@@ -19,6 +18,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Role;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 
 final class CurrentAuthorizationTest extends TestCase
@@ -64,7 +64,7 @@ final class CurrentAuthorizationTest extends TestCase
     public function test_each_seeded_role_reports_its_exact_effective_catalog_matrix(string $role): void
     {
         [$user, $laboratory] = $this->activeTenant();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, $role);
 
         $response = $this->request($user, $laboratory)->assertOk();
@@ -93,7 +93,7 @@ final class CurrentAuthorizationTest extends TestCase
     public function test_multiple_roles_and_direct_permissions_are_sorted_deduplicated_and_deterministic(): void
     {
         [$user, $laboratory] = $this->activeTenant();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, 'viewer');
         $this->assignLaboratoryRole($user, $laboratory, 'cashier');
         $this->assignDirectLaboratoryPermission($user, $laboratory, 'patients.view');
@@ -119,7 +119,7 @@ final class CurrentAuthorizationTest extends TestCase
     {
         [$user, $laboratoryA] = $this->activeTenant();
         [, $laboratoryB] = $this->activeTenant($user);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratoryA, 'administrator');
         $this->assignLaboratoryRole($user, $laboratoryB, 'viewer');
         $this->assignDirectLaboratoryPermission($user, $laboratoryA, 'patients.create');
@@ -149,7 +149,7 @@ final class CurrentAuthorizationTest extends TestCase
     public function test_middleware_cleans_team_and_loaded_relations_after_response(): void
     {
         [$user, $laboratory] = $this->activeTenant();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, 'viewer');
 
         $this->request($user, $laboratory)->assertOk();
@@ -202,7 +202,7 @@ final class CurrentAuthorizationTest extends TestCase
     public function test_request_is_read_only_and_creates_no_audit_log(): void
     {
         [$user, $laboratory] = $this->activeTenant();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, 'receptionist');
         $tables = [
             'laboratories', 'laboratory_user', 'roles', 'permissions',
@@ -234,7 +234,7 @@ final class CurrentAuthorizationTest extends TestCase
     public function test_receptionist_report_matches_representative_order_enforcement(): void
     {
         [$user, $laboratory] = $this->activeTenant();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, 'receptionist');
         $branch = Branch::factory()->for($laboratory)->create();
         $patient = Patient::factory()->for($laboratory)->create();
@@ -267,7 +267,7 @@ final class CurrentAuthorizationTest extends TestCase
     {
         [$cashier, $laboratory] = $this->activeTenant();
         $technician = $this->createLaboratoryMember($laboratory);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($cashier, $laboratory, 'cashier');
         $this->assignLaboratoryRole($technician, $laboratory, 'laboratory_technician');
 
@@ -289,7 +289,7 @@ final class CurrentAuthorizationTest extends TestCase
             $user->laboratories()->attach($laboratory, ['is_active' => true]);
         }
         $this->createSubscription($laboratory);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $allPermissions = RbacCatalog::rolePermissions()['administrator'];
         $receptionPermissions = array_values(array_unique(array_merge(
             RbacCatalog::rolePermissions()['receptionist'],
@@ -310,7 +310,7 @@ final class CurrentAuthorizationTest extends TestCase
     {
         [$viewer, $laboratory] = $this->activeTenant();
         $owner = $this->createLaboratoryMember($laboratory);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($viewer, $laboratory, 'viewer');
         $this->assignLaboratoryRole($owner, $laboratory, 'owner');
         $queries = [];
@@ -338,7 +338,7 @@ final class CurrentAuthorizationTest extends TestCase
     public function test_role_assignment_change_is_fresh_for_report_and_gate(): void
     {
         [$user, $laboratory] = $this->activeTenant();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, 'viewer');
 
         $this->assertNotContains('patients.create', $this->request($user, $laboratory)->json('data.permissions'));
@@ -356,7 +356,7 @@ final class CurrentAuthorizationTest extends TestCase
     public function test_role_removal_is_fresh_on_the_next_request(): void
     {
         [$user, $laboratory] = $this->activeTenant();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $role = $this->assignLaboratoryRole($user, $laboratory, 'viewer');
 
         $this->request($user, $laboratory)

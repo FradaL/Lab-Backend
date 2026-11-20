@@ -7,9 +7,9 @@ use App\Models\LaboratoryUserInvitation;
 use App\Models\User;
 use App\UserAdministration\LaboratoryUserManager;
 use App\UserAdministration\UserAdministrationConflict;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 use Throwable;
 
@@ -24,7 +24,7 @@ class LaboratoryUserInvitationConcurrencyTest extends TestCase
 
         $laboratory = Laboratory::factory()->create();
         $inviter = User::factory()->create();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $token = str_repeat('A', 64);
         LaboratoryUserInvitation::query()->create([
             'laboratory_id' => $laboratory->id,

@@ -11,13 +11,13 @@ use App\Models\Patient;
 use App\Models\PriceList;
 use App\Models\Subscription;
 use App\Models\User;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route as IlluminateRoute;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 
 final class ProtectedDomainAuthorizationTest extends TestCase
@@ -131,7 +131,7 @@ final class ProtectedDomainAuthorizationTest extends TestCase
     public function test_seeded_role_matrix_is_enforced_by_real_requests(string $role, bool $allowed): void
     {
         [$user, $laboratory] = $this->activeTenant();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, $role);
 
         $response = $this->patientCreateRequest($user, $laboratory, 'Role', $role);
@@ -156,7 +156,7 @@ final class ProtectedDomainAuthorizationTest extends TestCase
         [$user, $laboratory] = $this->activeTenant();
         $priceList = PriceList::factory()->for($laboratory)->create();
         $commercialClient = CommercialClient::factory()->for($laboratory)->create();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, $role);
 
         $reads = [
@@ -263,7 +263,7 @@ final class ProtectedDomainAuthorizationTest extends TestCase
         $admin->laboratories()->attach($laboratory, ['is_active' => true]);
         $receptionist->laboratories()->attach($laboratory, ['is_active' => true]);
         $this->createSubscription($laboratory);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
 
         $this->patientCreateRequest($admin, $laboratory, 'Demo', 'Admin')->assertCreated();
         $this->patientCreateRequest($receptionist, $laboratory, 'Demo', 'Reception')->assertCreated();

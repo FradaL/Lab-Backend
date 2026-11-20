@@ -10,7 +10,7 @@ use App\Models\Laboratory;
 use App\Models\Subscription;
 use App\Models\User;
 use App\UserAdministration\SaasAccessManager;
-use Database\Seeders\RolePermissionSeeder;
+use Tests\Support\RolePermissionFixture;
 
 trait ClinicalReasonAdoptionScenario
 {
@@ -51,7 +51,7 @@ trait ClinicalReasonAdoptionScenario
         if (! $user->laboratories()->whereKey($lab->id)->exists()) {
             $user->laboratories()->attach($lab);
         }
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $lab, $role);
 
         return [$lab, $user];

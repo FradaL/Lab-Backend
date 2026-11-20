@@ -1,6 +1,6 @@
 <?php
 
-namespace Database\Seeders;
+namespace Tests\Support;
 
 use App\Authorization\LaboratoryRoleProvisioner;
 use App\Authorization\RbacCatalog;
@@ -11,7 +11,7 @@ use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
-class RolePermissionSeeder extends Seeder
+class RolePermissionFixture extends Seeder
 {
     /**
      * Run the database seeds.

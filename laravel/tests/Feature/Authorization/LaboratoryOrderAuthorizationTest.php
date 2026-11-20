@@ -13,11 +13,11 @@ use App\Models\PriceList;
 use App\Models\PriceListExam;
 use App\Models\Subscription;
 use App\Models\User;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 
 final class LaboratoryOrderAuthorizationTest extends TestCase
@@ -37,7 +37,7 @@ final class LaboratoryOrderAuthorizationTest extends TestCase
     ): void {
         [$user, $laboratory] = $this->activeTenant();
         $context = $this->orderContext($user, $laboratory);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, $role);
 
         foreach ($this->routeCases($context) as $capability => [$method, $uri, $payload]) {
@@ -70,7 +70,7 @@ final class LaboratoryOrderAuthorizationTest extends TestCase
     {
         [$user, $laboratory] = $this->activeTenant();
         $context = $this->orderContext($user, $laboratory, false);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratory, 'receptionist');
         $this->assignLaboratoryRole($user, $laboratory, 'cashier');
 
@@ -219,7 +219,7 @@ final class LaboratoryOrderAuthorizationTest extends TestCase
         [, $laboratoryB] = $this->activeTenant($user);
         $contextA = $this->orderContext($user, $laboratoryA, false);
         $contextB = $this->orderContext($user, $laboratoryB, false);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratoryA, 'receptionist');
         $this->assignLaboratoryRole($user, $laboratoryB, 'viewer');
 
@@ -329,7 +329,7 @@ final class LaboratoryOrderAuthorizationTest extends TestCase
         }
         $this->createSubscription($laboratory);
         $context = $this->orderContext($admin, $laboratory);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
 
         $this->request($admin, $laboratory, 'PUT', "/api/v1/laboratory-orders/{$context['order']->id}/discount", [])
             ->assertUnprocessable();

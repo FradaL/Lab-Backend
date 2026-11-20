@@ -1,6 +1,6 @@
 <?php
 
-namespace Database\Seeders;
+namespace App\Console\Support;
 
 use App\Authorization\ClinicalReasonTenantAuthority as Tenant;
 use App\Authorization\RbacCatalog;
@@ -14,6 +14,7 @@ use App\Models\SaasCapabilityAssignment;
 use App\Models\Subscription;
 use App\Models\User;
 use App\UserAdministration\SaasAccessManager;
+use Database\Seeders\DemoDataset;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;

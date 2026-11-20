@@ -51,7 +51,7 @@ php artisan cash:permission LAB_ID ACTOR_ID USER_ID payments.view --revoke --rea
 
 El comando modifica un solo permiso directo y audita `cash.permission_granted`/`cash.permission_revoked` de forma atómica. Repetir el mismo estado no duplica auditorías. Revocar una asignación directa conserva cualquier permiso heredado de roles: esas concesiones se retiran desde su matriz. Crédito puede concederse a cualquier miembro activo por rol o permiso directo. Retirar una concesión de rol bloquea el crédito si no queda otra concesión efectiva; un permiso directo vigente continúa habilitándolo. No se ejecutó este comando sobre usuarios reales.
 
-Para registrar el catálogo en una instalación se utiliza el aprovisionamiento existente (`RolePermissionSeeder`/`LaboratoryRoleProvisioner`), sin concesiones financieras automáticas. No se ejecutaron seeders ni migraciones sobre bases compartidas. Las rutas financieras de EB-001 todavía corresponden a BE-D02-05/06/07/11/12 y deberán integrar este autorizador; no se publica aquí una API de cobros ni se habilita entrega.
+Para registrar el catálogo en una instalación se utiliza el aprovisionamiento existente (`LaboratoryRoleProvisioner`), sin concesiones financieras automáticas. No se ejecutaron seeders ni migraciones sobre bases compartidas. Las rutas financieras de EB-001 todavía corresponden a BE-D02-05/06/07/11/12 y deberán integrar este autorizador; no se publica aquí una API de cobros ni se habilita entrega.
 
 Validación anterior a la revisión de crédito por permiso efectivo: 71 pruebas / 792 aserciones satisfactorias de Caja, catálogo, administración, concurrencia, despliegue de matrices y autorización/OpenAPI; después, un caso adicional de concesión/revocación de crédito a administrador pasó con 1 prueba / 2 aserciones. PostgreSQL 17 temporal y PHP 8.4.25, proyecto Compose `donqer-be-d02-04`, sin bases compartidas. Pint y `git diff --check` satisfactorios. Se ajustaron las expectativas del owner al excluir Caja y un contador desactualizado de rutas protegidas (160 → 167, sin añadir rutas). Cambios locales sobre backend `423ae6b`, sin commit ni despliegue.
 
@@ -116,29 +116,54 @@ docker compose exec workspace php artisan db:seed
 docker compose exec workspace php artisan test
 ```
 
-## Motivos para excepciones del dataset de Laboratorio
+## Carga básica de datos — 2026-11-20
 
-El dataset general de Laboratorio (`DatabaseSeeder`) se puede preparar desde una base vacía con las migraciones aplicadas y `php artisan db:seed`, en entorno `local` o `testing`. Con `SAAS_DEMO_CLINICAL_REASON_ID` vacío, crea un motivo **local FICTICIO** de clase `terminal_candidate` en cada laboratorio sintético que necesita excepciones. Utiliza el servicio de motivos locales, mantiene versiones, auditoría y procedencia DEMO, y se puede repetir sin duplicar datos. No requiere catálogo global ni crea cuentas o facultades SaaS. Las solicitudes conservan referencia estructurada y justificación separada.
+Por solicitud de Daniel Lara se retiran los datasets adicionales de desarrollo.
+`DatabaseSeeder` ejecuta únicamente, en este orden:
 
-Para probar expresamente el origen global, se conserva la opción `SAAS_DEMO_CLINICAL_REASON_ID`: un operador SaaS autorizado debe preparar previamente el motivo global **FICTICIO**, activo, `terminal_candidate` y con impacto clasificado que permita su uso. Los escenarios lo seleccionan mediante el servicio de adopción. Un ID explícito inválido rechaza y revierte el dataset; no cambia silenciosamente al origen local. Tras reconstruir la base, dejar la variable vacía para el flujo local o configurar el nuevo ID efectivo para el global. Si había configuración cacheada, ejecutar `php artisan config:clear`.
+1. `UserSeeder`.
+2. `SaasFoundationSeeder`.
+3. `DemoPermissionSeeder`.
+4. `DoctorSeeder`.
+5. `PatientSeeder`.
+6. `LaboratoryAreaSeeder`.
+7. `SampleTypeSeeder`.
 
-Las solicitudes anteriores conservan su texto e historia, sin inferir motivos por nombre. Ver el [contrato global e histórico](docs/sprint-2/BE-EXC-02.3-I-integracion-clinica.md) y la [administración e integración local](docs/sprint-2/BE-EXC-02.4-motivos-locales.md), con versión original y revisión explícita.
-
-Para integrar **FE-EXC-01 / CA-20**, está disponible un [procedimiento de catálogo DEMO aislado](docs/sprint-2/FE-EXC-01-datos-demo.md): crea 51 motivos y 56 versiones mediante dos identidades SaaS sintéticas autorizadas, en la base desechable `donqer_exc_demo`. Incluye un owner sintético para consumo frontend en `http://localhost:8086`, confirmación explícita, auditoría e idempotencia. Su Compose y el comando `demo:clinical-reasons` se ejecutan expresamente siguiendo esa guía.
-
-## Entorno DEMO para frontend
-
-Para preparar FE-EXC-01, los ocho perfiles de FE-SaaS-02 y el perfil adicional
-de clasificación de impacto para Cristian, además de `demo-superadmin` para pruebas
-funcionales de SaaS y laboratorio, mediante seeders:
+Con las migraciones aplicadas, el comando local completo es:
 
 ```bash
-./deploy/demo-exc/development.sh
+docker exec -it donqer-lab-workspace-1 php artisan db:seed
 ```
 
-Pide el secreto DEMO con entrada oculta y prepara la base desechable dedicada.
-Incluye dos laboratorios, 51 motivos y 56 versiones; no se ejecuta sobre la BD
-habitual de Laradock. Ver [cuentas, matriz de capacidades, ejecución y pruebas](docs/sprint-2/DEMO-development-seeders.md).
+Prepara dos usuarios, un laboratorio con dos sucursales, plan y suscripción,
+roles/permisos, 20 doctores, 20 pacientes, ocho áreas y cuatro tipos de muestra.
+No crea exámenes, listas de precios, clientes comerciales, órdenes, muestras de
+órdenes, resultados, informes, movimientos de Caja ni identidades/capacidades SaaS.
+Conserva los permisos de Caja y de política de cobro del rol administrador demo.
+Puede repetirse conservando registros y cambios manuales existentes y se limita
+a `local`/`testing`. No borra datos ya cargados ni ejecuta migraciones.
+
+`DemoDataset` permanece como soporte interno de procedencia y transacciones; no
+es un seeder ejecutable. La provisión genérica de roles que necesitan las pruebas
+está en `Tests\Support\RolePermissionFixture`, fuera del autoload de producción.
+Las pruebas de bootstrap SaaS invocan directamente su servicio autorizado.
+
+El CLI opcional `demo:clinical-reasons` se conserva separado de la carga básica;
+su helper se trasladó a `App\Console\Support`. `deploy/demo-exc/development.sh`
+invoca ese CLI para preparar exclusivamente el catálogo aislado de motivos y sus
+tres identidades sintéticas. Ya no existen los seeders de perfiles DEMO ampliados.
+Los informes históricos de esos datasets conservan su corte anterior.
+
+Validación de la limpieza: 124 casos / 1150 aserciones en PostgreSQL 17 efímero,
+123 satisfactorios y un fallo previo de inventario de rutas (178 actuales frente
+a 172 esperadas). La carga básica, su repetición, la conservación de cambios
+manuales/clínicos, los permisos de Caja/política, el bootstrap SaaS y el CLI de
+motivos pasan. El fallo de inventario se reprodujo con los archivos originales de
+`a82475f`. Una regresión ampliada también encontró fixtures anteriores que crean
+órdenes sin política configurada y un teardown que intenta revertir la migración
+protegida de vigencia; se reprodujeron con archivos originales. No se atribuye una
+regresión global satisfactoria. Sintaxis PHP, Pint de archivos nuevos/reubicados,
+`bash -n` y `git diff --check` satisfactorios. Sin cambios de datos ni despliegue.
 
 ## Usuarios demo
 

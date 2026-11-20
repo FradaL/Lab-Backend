@@ -6,14 +6,12 @@ use App\ClinicalResults\LaboratoryResultService;
 use App\ClinicalValidation\LaboratoryValidationService;
 use App\ClinicalValidation\ValidationAdministrationService;
 use App\Models\Laboratory;
-use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\ClinicalResults\ClinicalResultScenario;
-use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
 class ValidationPersistenceTest extends TestCase
@@ -65,10 +63,14 @@ class ValidationPersistenceTest extends TestCase
         $this->getJson('/api/v1/laboratory/validation-professionals')->assertOk();
     }
 
-    public function test_demo_second_execution_preserves_validation_rectification_and_manual_policy_changes(): void
+    public function test_basic_reseeding_preserves_validation_rectification_and_manual_policy_changes(): void
     {
-        StructuredClinicalReasonFixture::prepareDemoCatalog();
         $this->seed(DatabaseSeeder::class);
+        [$lab, $actor, $order, $line] = $this->scenario();
+        app(ValidationAdministrationService::class)->setPolicy($lab, $actor, ['validation_policy' => 'permission_based']);
+        app(LaboratoryResultService::class)->save($lab, $actor, $order->id, $line->id, ['revision' => 0, 'results' => [['parameter_code' => 'N', 'value' => '1'], ['parameter_code' => 'T', 'value' => 'DEMO'], ['parameter_code' => 'Q', 'value' => 'YES'], ['parameter_code' => 'O', 'value' => 'A']]]);
+        app(LaboratoryValidationService::class)->validate($lab, $actor, $order->id, $line->id, ['revision' => 1, 'reference_context' => ['reference_date' => '2026-10-11']]);
+        app(LaboratoryValidationService::class)->rectify($lab, $actor, $order->id, $line->id, ['revision' => 2, 'reason' => 'FICTICIO: corrección manual conservada al cargar datos básicos.']);
         $tables = DB::select("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename");
         $snapshot = function () use ($tables) {
             $data = [];
@@ -83,14 +85,9 @@ class ValidationPersistenceTest extends TestCase
         $first = $snapshot();
         $this->seed(DatabaseSeeder::class);
         $this->assertSame($first, $snapshot());
-        $this->assertDatabaseCount('laboratory_result_validations', 14);
-        $this->assertSame(5, DB::table('laboratory_result_validations')->whereIn('laboratory_id', Laboratory::where('nit', 'like', 'DEMO-BE07-%')->select('id'))->count());
-        $this->assertDatabaseCount('laboratory_result_rectifications', 2);
-        $this->assertDatabaseCount('validation_professionals', 5);
-        $lab = Laboratory::where('nit', 'DEMO-BE07-1')->sole();
-        $admin = User::where('email', 'be07-admin-0@donqerlab.test')->sole();
-        setPermissionsTeamId($lab->id);
-        app(ValidationAdministrationService::class)->setPolicy($lab, $admin, ['validation_policy' => 'permission_based']);
+        $this->assertDatabaseCount('laboratory_result_validations', 1);
+        $this->assertDatabaseCount('laboratory_result_rectifications', 1);
+        $this->assertSame('permission_based', $lab->fresh()->validation_policy);
         $changed = $snapshot();
         $this->seed(DatabaseSeeder::class);
         $this->assertSame($changed, $snapshot());

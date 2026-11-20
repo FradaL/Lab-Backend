@@ -11,7 +11,6 @@ use App\Models\AuditLog;
 use App\Models\ClinicalExceptionLocalReasonReference;
 use App\Models\LaboratoryClinicalReasonVersion;
 use App\Models\LocalClinicalReasonReview;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +18,7 @@ use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Feature\ClinicalResults\ClinicalResultScenario;
+use Tests\Support\RolePermissionFixture;
 use Tests\Support\StructuredClinicalReasonFixture;
 use Tests\TestCase;
 
@@ -191,7 +191,7 @@ class LocalClinicalReasonTest extends TestCase
         $this->assignDirectLaboratoryPermissions($admin, $lab, [Authority::LOCAL_CREATE, Authority::LOCAL_PUBLISH, Authority::LOCAL_MANAGE]);
         $this->actingAs($admin)->postJson(self::BASE, ['code' => 'denied', 'definition' => $this->definition()])->assertForbidden();
         $this->postJson(self::BASE.'/'.$data['reason']->id.'/versions', ['expected_number' => 1, 'definition' => $this->definition()])->assertForbidden();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $ordinaryOwner = $this->createLaboratoryMember($lab);
         $this->assignLaboratoryRole($ordinaryOwner, $lab, 'owner');
         $this->actingAs($ordinaryOwner)->postJson($this->clinicalUrl($order, $line), $this->body($order, $data))->assertForbidden();

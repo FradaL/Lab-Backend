@@ -8,11 +8,11 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\UserAdministration\LaboratoryUserManager;
 use App\UserAdministration\UserAdministrationConflict;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 use Throwable;
 
@@ -24,7 +24,7 @@ class RolePermissionConcurrencyTest extends TestCase
     {
         $lab = Laboratory::factory()->create();
         Subscription::factory()->create(['laboratory_id' => $lab->id]);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $a = $this->createLaboratoryMember($lab);
         $b = $this->createLaboratoryMember($lab);
         $this->assignLaboratoryRole($a, $lab, 'owner');

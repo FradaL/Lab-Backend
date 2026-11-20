@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use Database\Seeders\DemoClinicalReasonProvisioner;
+use App\Console\Support\DemoClinicalReasonProvisioner;
 use Illuminate\Console\Command;
 use RuntimeException;
 use Throwable;

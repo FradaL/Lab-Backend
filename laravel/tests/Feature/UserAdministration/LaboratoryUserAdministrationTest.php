@@ -8,12 +8,12 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Models\ValidationProfessional;
 use App\Notifications\LaboratoryUserInvitationNotification;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 
 class LaboratoryUserAdministrationTest extends TestCase
@@ -192,7 +192,7 @@ class LaboratoryUserAdministrationTest extends TestCase
         $laboratory = $this->activeLaboratory();
         $administrator = $this->createLaboratoryMember($laboratory);
         $target = $this->createLaboratoryMember($laboratory);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($administrator, $laboratory, 'administrator');
         $this->assignLaboratoryRole($target, $laboratory, 'viewer');
 
@@ -222,7 +222,7 @@ class LaboratoryUserAdministrationTest extends TestCase
         $laboratoryB = $this->activeLaboratory();
         $user = $this->createLaboratoryMember($laboratoryA);
         $user->laboratories()->attach($laboratoryB, ['is_active' => true]);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($user, $laboratoryA, 'viewer');
         $this->assignLaboratoryRole($user, $laboratoryB, 'cashier');
         $this->assertSame(['viewer'], DB::table('model_has_roles')
@@ -399,7 +399,7 @@ SQL);
     {
         $laboratory = $this->activeLaboratory();
         $owner = $this->createLaboratoryMember($laboratory);
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $this->assignLaboratoryRole($owner, $laboratory, 'owner');
 
         return [$laboratory, $owner];

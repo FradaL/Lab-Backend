@@ -1,5 +1,13 @@
 # FE-EXC-01 — Catálogo sintético autorizado
 
+> Actualización 2026-11-20: por solicitud de Daniel Lara se retiraron los seeders
+> de datasets adicionales. Este documento conserva evidencia histórica, no una
+> guía vigente para ejecutar esos seeders. La carga activa usa únicamente los
+> siete seeders básicos descritos en [README](../../README.md#carga-básica-de-datos--2026-11-20).
+> El CLI aislado de motivos continúa disponible; su helper está ahora en
+> `app/Console/Support/DemoClinicalReasonProvisioner.php`. El script de desarrollo
+> usa ese CLI y ya no prepara los perfiles ampliados de `DemoDevelopmentSeeder`.
+
 ## Viabilidad de autorización
 
 El flujo está permitido por `SaasAccessManager` y por el trigger PostgreSQL

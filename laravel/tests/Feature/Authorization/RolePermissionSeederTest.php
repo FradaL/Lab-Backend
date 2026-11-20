@@ -5,12 +5,12 @@ namespace Tests\Feature\Authorization;
 use App\Authorization\RbacCatalog;
 use App\Models\Laboratory;
 use App\Models\User;
-use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\SaasFoundationSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
+use Tests\Support\RolePermissionFixture;
 use Tests\TestCase;
 
 class RolePermissionSeederTest extends TestCase
@@ -39,11 +39,11 @@ class RolePermissionSeederTest extends TestCase
         $this->seed(SaasFoundationSeeder::class);
         Laboratory::factory()->create();
 
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         $firstMappings = DB::table('role_has_permissions')
             ->orderBy('role_id')->orderBy('permission_id')
             ->get()->map(fn (object $mapping): array => (array) $mapping)->all();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
 
         $this->assertDatabaseCount('permissions', count(RbacCatalog::PERMISSIONS));
         $this->assertDatabaseCount('roles', 12);
@@ -75,7 +75,7 @@ class RolePermissionSeederTest extends TestCase
     public function test_seeded_permission_matrix_matches_ratified_capabilities(): void
     {
         $laboratory = Laboratory::factory()->create();
-        $this->seed(RolePermissionSeeder::class);
+        $this->seed(RolePermissionFixture::class);
         setPermissionsTeamId($laboratory->id);
 
         $owner = Role::findByName('owner', 'web');

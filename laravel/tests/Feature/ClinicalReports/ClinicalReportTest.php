@@ -16,8 +16,6 @@ use App\Models\Laboratory;
 use App\Models\LaboratoryReportIssuance;
 use App\Models\Subscription;
 use Com\Tecnick\Pdf\Parser\Parser;
-use Database\Seeders\DatabaseSeeder;
-use Database\Seeders\LaboratoryReportIssuanceSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\UploadedFile;
@@ -378,31 +376,6 @@ class ClinicalReportTest extends TestCase
             $this->assertSame('report_storage_unavailable', $e->errorCode);
         }
         $this->assertDatabaseMissing('audit_logs', ['event' => 'order_report.downloaded']);
-    }
-
-    public function test_default_dataset_prepares_evidence_and_explicit_pdf_seeder_is_idempotent(): void
-    {
-        config(['saas.demo_clinical_reason_id' => '']);
-        $this->seed(DatabaseSeeder::class);
-        $this->assertDatabaseCount('laboratory_report_issuances', 0);
-        $this->seed(LaboratoryReportIssuanceSeeder::class);
-        $this->assertDatabaseCount('laboratory_report_issuances', 2);
-        $reports = LaboratoryReportIssuance::orderBy('id')->get();
-        $before = DB::table('laboratory_report_issuances')->orderBy('id')->get()->toJson();
-        $files = Storage::disk('clinical_reports')->allFiles();
-        $this->seed(DatabaseSeeder::class);
-        $this->seed(LaboratoryReportIssuanceSeeder::class);
-        $this->assertSame($before, DB::table('laboratory_report_issuances')->orderBy('id')->get()->toJson());
-        $this->assertSame($files, Storage::disk('clinical_reports')->allFiles());
-        foreach ($reports as $report) {
-            $this->assertSame($report->pdf_hash, hash('sha256', Storage::disk('clinical_reports')->get($report->private_path)));
-            $this->assertCount(2, array_unique(array_column(array_column($report->clinical_snapshot, 'area'), 'name')));
-            $professionals = array_filter(array_column(array_column($report->clinical_snapshot, 'validation'), 'professional_snapshot'));
-            $this->assertCount(2, array_unique(array_column($professionals, 'professional_name')));
-            if (is_dir('/tmp/be091-artifacts')) {
-                file_put_contents('/tmp/be091-artifacts/demo-'.$report->type.'.pdf', Storage::disk('clinical_reports')->get($report->private_path));
-            }
-        }
     }
 
     public function test_later_publication_never_changes_applied_historical_references(): void
