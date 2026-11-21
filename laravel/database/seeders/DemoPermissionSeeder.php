@@ -55,9 +55,15 @@ final class DemoPermissionSeeder extends Seeder
                     'laboratory_id' => $lab->id, 'name' => 'administrator', 'guard_name' => RbacCatalog::GUARD,
                 ]);
                 $before = $role->permissions()->orderBy('name')->pluck('name')->all();
-                $rolePermissions = [...CashAuthority::PERMISSIONS, 'reports.delivery_policy.view', 'reports.delivery_policy.manage'];
+                $rolePermissions = [
+                    ...CashAuthority::PERMISSIONS,
+                    'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'results.validate',
+                    'orders.clinical_finalization.view', 'orders.exams.clinical_finalize', 'orders.clinical_finalize',
+                    'reports.issue', 'reports.view_history', 'reports.download',
+                    'reports.delivery.evaluate', 'reports.delivery.prepare', 'reports.delivery.confirm',
+                ];
                 $added = array_values(array_diff($rolePermissions, $before));
-                $reason = 'Daniel Lara solicita asignar Caja y política de cobro al rol administrador demo, 2026-11-20.';
+                $reason = 'Daniel Lara solicita completar Caja, política de cobro, validación, cierre técnico, informes y entrega al rol administrador demo, 2026-11-20.';
                 if ($added !== []) {
                     $revision = (int) $role->permissions_revision;
                     $ids = Permission::where('guard_name', RbacCatalog::GUARD)->whereIn('name', $added)->pluck('id')->all();

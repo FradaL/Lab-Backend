@@ -11,9 +11,43 @@ use Tests\TestCase;
 
 class ClinicalReportTableTest extends TestCase
 {
+    public static function signaturePageCases(): array
+    {
+        return ['hematology-sized exam' => [15, 1], 'signatures fit near the bottom' => [17, 1], 'handwriting space needs another page' => [20, 2], 'signatures need another page' => [22, 2]];
+    }
+
+    #[DataProvider('signaturePageCases')]
+    public function test_signatures_use_the_available_space_without_forcing_an_extra_page(int $count, int $expectedPages): void
+    {
+        $document = ReportPreviewDocument::make(['trade_name' => 'LABORATORIO SINTÉTICO', 'address' => 'Dirección ficticia', 'phone' => '0000', 'header' => '', 'footer' => 'DATOS FICTICIOS', 'logo' => null]);
+        $document['preview'] = false;
+        $validation = &$document['lines'][0]['validation'];
+        unset($validation['professional_snapshot']);
+        $validation['context_snapshot']['validator_identity'] = ['name' => 'Administrador sintético'];
+        $result = $validation['results_snapshot'][0];
+        $reference = $validation['reference_snapshot'][0];
+        $validation['results_snapshot'] = [];
+        $validation['reference_snapshot'] = [];
+        for ($i = 1; $i <= $count; $i++) {
+            $result['parameter_code'] = 'P'.$i;
+            $result['parameter_snapshot']['name'] = 'Parámetro sintético '.$i;
+            $reference['parameter_code'] = 'P'.$i;
+            $validation['results_snapshot'][] = $result;
+            $validation['reference_snapshot'][] = $reference;
+        }
+        $before = serialize($document);
+        $pdf = app(ClinicalReportRenderer::class)->render($document, 'https://example.invalid/signature-fit');
+
+        $this->assertSame($before, serialize($document));
+        $this->assertSame($expectedPages, preg_match_all('/\/Type\s*\/Page\b/', $pdf));
+        if (is_dir('/tmp/df011-artifacts')) {
+            file_put_contents('/tmp/df011-artifacts/signature-fit-'.$count.'.pdf', $pdf);
+        }
+    }
+
     public static function examples(): array
     {
-        return array_map(fn ($name) => [$name], ['short', 'mixed', 'long-text', 'long-identity', 'long-table', 'areas', 'same-area', 'observations', 'partial', 'styled', 'blue', 'burgundy', 'responsibles', 'no-professional', 'legacy-exception']);
+        return array_map(fn ($name) => [$name], ['short', 'mixed', 'result-style', 'long-text', 'long-identity', 'long-table', 'areas', 'same-area', 'observations', 'partial', 'styled', 'blue', 'burgundy', 'responsibles', 'no-professional', 'legacy-exception']);
     }
 
     #[DataProvider('examples')]
@@ -31,7 +65,7 @@ class ClinicalReportTableTest extends TestCase
         }
     }
 
-    public function test_parameter_cell_uses_only_the_snapshot_name_without_mutating_its_technical_code(): void
+    public function test_parameter_and_reference_cells_hide_technical_keys_without_mutating_the_snapshots(): void
     {
         $result = [
             'parameter_snapshot' => ['name' => 'Hemoglobina'],
@@ -40,15 +74,48 @@ class ClinicalReportTableTest extends TestCase
             'option_label' => null,
             'unit' => 'g/dL',
         ];
-        $reference = ['status' => 'not_configured', 'reference' => null, 'reference_key' => null];
+        $reference = ['status' => 'resolved', 'reference' => ['min' => '11', 'max' => '18'], 'reference_key' => 'imagen_ejemplo_pendiente_revision'];
         $validation = ['context_snapshot' => ['classifications' => []]];
-        $before = serialize($result);
+        $before = serialize([$result, $reference]);
         $method = new \ReflectionMethod(ClinicalReportRenderer::class, 'resultCells');
 
         $cells = $method->invoke(app(ClinicalReportRenderer::class), $result, $reference, $validation);
 
         $this->assertSame('Hemoglobina', $cells[0]);
-        $this->assertSame($before, serialize($result));
+        $this->assertSame('Mínimo 11 | Máximo 18', $cells[3]);
+        $this->assertStringNotContainsString('imagen_ejemplo_pendiente_revision', implode(' ', $cells));
+        $this->assertSame($before, serialize([$result, $reference]));
+    }
+
+    public static function resultClassifications(): array
+    {
+        return [
+            'normal' => ['normal', '15', false],
+            'low' => ['low', '15 *', true],
+            'high' => ['high', '15 *', true],
+            'critical' => ['critical', '15 *', true],
+            'outside reference' => ['outside_reference', '15 *', true],
+            'unclassified' => ['not_classified', '15', false],
+            'missing classification' => [null, '15', false],
+        ];
+    }
+
+    #[DataProvider('resultClassifications')]
+    public function test_result_marker_uses_the_saved_classification_without_reinterpreting_the_value(?string $status, string $expected, bool $abnormal): void
+    {
+        $result = ['parameter_snapshot' => ['name' => 'Hemoglobina'], 'parameter_code' => 'HGB', 'value' => '15', 'option_label' => null, 'unit' => 'g/dL'];
+        $reference = ['status' => 'resolved', 'reference' => ['min' => '11', 'max' => '18'], 'reference_key' => 'snapshot'];
+        $validation = ['context_snapshot' => ['classifications' => [
+            ['parameter_code' => 'OTHER', 'status' => 'high'],
+            ['parameter_code' => 'HGB', 'status' => $status],
+        ]]];
+        $before = serialize([$result, $reference, $validation]);
+        $renderer = app(ClinicalReportRenderer::class);
+        $cells = (new \ReflectionMethod($renderer, 'resultCells'))->invoke($renderer, $result, $reference, $validation);
+
+        $this->assertSame($expected, $cells[1]);
+        $this->assertSame($abnormal, (new \ReflectionMethod($renderer, 'isAbnormalResult'))->invoke($renderer, $result, $validation));
+        $this->assertSame($before, serialize([$result, $reference, $validation]));
     }
 
     private function example(string $example): array
@@ -101,6 +168,19 @@ class ClinicalReportTableTest extends TestCase
                 $name = str_repeat('Determinación extensa ', 6);
                 $unit = 'µmol/L · 10⁹/L';
                 $reference = ['text' => str_repeat('Referencia sintética extensa. ', 45).' FIN_REFERENCIA'];
+            }
+            if ($example === 'result-style') {
+                [$name, $value, $unit, $classification, $bounds] = [
+                    ['Hemoglobina', '15', 'g/dL', 'normal', ['11', '18']],
+                    ['Hematocrito', '25', '%', 'low', ['35', '60']],
+                    ['Glóbulos blancos', '12000', '/mm³', 'high', ['5000', '10000']],
+                    ['Plaquetas', '20000', '/mm³', 'critical', ['150000', '450000']],
+                    ['Neutrófilos segmentados', '20', '%', 'not_classified', null],
+                    ['Linfocitos', '15', '%', null, null],
+                ][$index - 1];
+                $option = null;
+                $reference = $bounds === null ? null : ['min' => $bounds[0], 'max' => $bounds[1]];
+                $status = $reference === null ? 'not_configured' : 'resolved';
             }
             $line['validation']['results_snapshot'][] = ['parameter_code' => $code, 'parameter_snapshot' => ['name' => $name], 'value' => $value, 'unit' => $unit, 'option_label' => $option];
             $line['validation']['reference_snapshot'][] = ['parameter_code' => $code, 'status' => $status, 'reference_key' => $reference === null ? null : $code, 'reference' => $reference];

@@ -9,7 +9,7 @@ final class ReportPreviewDocument
     {
         return ['preview' => true, 'number' => 'VISTA-PREVIA-FICTICIA', 'sequence' => 1, 'type' => 'complete',
             'issued_at' => '2026-01-01T12:00:00Z', 'order_code' => 'ORD-FICTICIA', 'presentation' => $presentation,
-            'identity' => ['source' => 'order_creation', 'patient' => ['first_names' => 'Paciente', 'last_names' => 'Ficticio', 'affiliation_number' => 'EJEMPLO'],
+            'identity' => ['source' => 'order_creation', 'patient' => ['first_names' => 'Paciente', 'last_names' => 'Ficticio', 'birth_date' => '1990-01-01', 'affiliation_number' => 'EJEMPLO'],
                 'branch' => ['name' => 'Sucursal ficticia', 'code' => 'DEMO']],
             'format_version' => 'donqer-clinical-2', 'pending_lines' => [], 'lines' => [[
                 'line_id' => 1, 'area' => ['id' => 1, 'name' => 'Área de ejemplo'], 'exam_code' => 'DEMO', 'exam_name' => 'Examen ficticio',

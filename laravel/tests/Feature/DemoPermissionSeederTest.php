@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Authorization\RolePermissionManager;
 use App\Cash\CashAuthority;
 use App\Cash\CashPermissionManager;
+use App\ClinicalValidation\ValidationAuthority;
 use App\Models\AuditLog;
 use App\Models\Laboratory;
 use App\Models\User;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use LogicException;
 use RuntimeException;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Tests\TestCase;
 
 class DemoPermissionSeederTest extends TestCase
@@ -40,7 +42,13 @@ class DemoPermissionSeederTest extends TestCase
 
     public function test_basic_seed_grants_cash_to_demo_administrator_role_and_repeats_without_duplicate_audits(): void
     {
-        $rolePermissions = [...CashAuthority::PERMISSIONS, 'reports.delivery_policy.view', 'reports.delivery_policy.manage'];
+        $rolePermissions = [
+            ...CashAuthority::PERMISSIONS,
+            'reports.delivery_policy.view', 'reports.delivery_policy.manage', 'results.validate',
+            'orders.clinical_finalization.view', 'orders.exams.clinical_finalize', 'orders.clinical_finalize',
+            'reports.issue', 'reports.view_history', 'reports.download',
+            'reports.delivery.evaluate', 'reports.delivery.prepare', 'reports.delivery.confirm',
+        ];
         [$lab, $admin] = $this->demo();
         $otherLab = Laboratory::factory()->create();
         $admin->laboratories()->attach($otherLab, ['is_active' => true]);
@@ -97,6 +105,29 @@ class DemoPermissionSeederTest extends TestCase
         $this->assertSame(['reports.issue'], $admin->fresh()->getDirectPermissions()->pluck('name')->all());
         $this->assertSame(2, AuditLog::where('event', 'role.permissions_replaced')->count());
         $this->assertSame(5, AuditLog::where('event', 'cash.permission_revoked')->count());
+    }
+
+    public function test_validation_permission_preserves_the_professional_requirement_and_does_not_grant_rectification(): void
+    {
+        [$lab, $admin] = $this->demo();
+        $this->seed(DemoPermissionSeeder::class);
+        setPermissionsTeamId($lab->id);
+        $this->assertTrue($admin->fresh()->can('results.validate'));
+        $this->assertFalse($admin->fresh()->can('results.rectify'));
+        $this->assertSame('professional_required', $lab->fresh()->validation_policy);
+        try {
+            app(ValidationAuthority::class)->clinical($lab, $admin, 'results.validate');
+            $this->fail('The permission must not replace professional authorization.');
+        } catch (HttpExceptionInterface $error) {
+            $this->assertSame(403, $error->getStatusCode());
+            $this->assertStringContainsString('authorized professional', $error->getMessage());
+        }
+        $this->assertDatabaseCount('validation_professionals', 0);
+
+        $lab->update(['validation_policy' => 'permission_based']);
+        $identity = app(ValidationAuthority::class)->clinical($lab, $admin, 'results.validate');
+        $this->assertSame('permission_based', $identity['validation_policy']);
+        $this->assertNull($identity['professional_id']);
     }
 
     public function test_audit_failure_rolls_back_demo_roles_and_cash_grants(): void

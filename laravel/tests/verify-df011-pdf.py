@@ -168,9 +168,12 @@ for example in ("short", "mixed", "long-text", "long-table", "areas", "same-area
     for line in document["lines"]:
         if line["validation"] is None:
             continue
+        classifications = {item["parameter_code"]: item.get("status") for item in line["validation"]["context_snapshot"].get("classifications", [])}
         for result in line["validation"]["results_snapshot"]:
             assert compact(result["parameter_snapshot"]["name"]) in columns[0], (example, "parameter lost")
             assert compact(result["value"]) in columns[1], (example, result["parameter_code"], "exact value lost")
+            if classifications.get(result["parameter_code"]) in ("low", "high", "critical", "outside_reference"):
+                assert compact(result["value"] + " *") in columns[1], (example, result["parameter_code"], "abnormal marker lost")
             if result["option_label"]:
                 assert compact(result["option_label"]) in columns[1]
             assert compact(result["unit"] or "—") in columns[2]
@@ -188,7 +191,7 @@ for example in ("short", "mixed", "long-text", "long-table", "areas", "same-area
         assert len(pages) == 1
     if example in ("mixed", "areas", "same-area", "observations", "partial", "styled", "blue", "burgundy", "responsibles", "no-professional", "legacy-exception"):
         for label in ("ALTO", "BAJO", "CRÍTICO", "FUERA DE REFERENCIA", "SIN CLASIFICACIÓN APLICABLE", "SIN CLASIFICACIÓN HISTÓRICA"):
-            assert compact(label) in columns[1], (example, label)
+            assert compact(label) not in columns[1], (example, "classification label should not be printed", label)
         assert compact("No configurada") in columns[3]
         assert compact("Sin referencia aplicable en la evidencia aprobada") in columns[3]
         assert compact("Referencia textual exclusivamente ficticia") in columns[3]
@@ -228,7 +231,7 @@ for name in ("issued-partial", "issued-complete"):
     text, _, columns, _ = inspect(path)
     assert "12345678901234567890.123456789" in columns[1]
     for value in ("FICTICIO", "YES — Fictitious YES", "A — Fictitious A"):
-        assert compact(value) in columns[1], (name, "clinical result type or option label lost", value)
+        assert compact(value) in columns[1].replace("*", ""), (name, "clinical result type or option label lost", value)
     assert "DEMO-U" in columns[2]
     assert ("INFORME PARCIAL" if name.endswith("partial") else "INFORME COMPLETO") in text
     print(f"PASS {path.name}: service-issued PDF retains exact numeric result in its own column")
@@ -239,7 +242,8 @@ for name in ("critical-observations", "digital-signature"):
     path = pdf.parent / f"{name}.pdf"
     text, _, _, _ = inspect(path)
     if name == "critical-observations":
-        for label in ("CRÍTICO", "Observación ficticia de parámetro", "Observación ficticia de examen", "Observación ficticia de área", "Observación ficticia general", "Autor:"):
+        assert "*" in text, (name, "critical result marker lost")
+        for label in ("Observación ficticia de parámetro", "Observación ficticia de examen", "Observación ficticia de área", "Observación ficticia general", "Autor:"):
             assert compact(label) in compact(text), (name, label)
     else:
         assert compact("Firma digitalizada autorizada de Profesional sintético") in compact(text)
